@@ -1,0 +1,152 @@
+package org.shee33.act0.arcade.arena;
+
+import org.shee33.act0.arcade.round.RespawnPolicy;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.Random;
+
+/**
+ * 竞技场：一张地图上各参战方的出生点、个人乱斗的随机复活候选点，以及离场返回点。MC-free 纯数据。
+ *
+ * <p>设计为"方索引 → 出生点"，与 {@link org.shee33.act0.arcade.mode.MatchSettings#sideCount()} 对应：
+ * <ul>
+ *   <li>决斗/团队：每方一个固定出生点（{@code sideSpawns.get(sideIndex)}）。</li>
+ *   <li>个人乱斗：使用 {@link #randomSpawns} 候选池随机取点。</li>
+ * </ul>
+ */
+public final class ArcadeArena {
+
+    private final String arenaId;
+    private final List<SpawnPoint> sideSpawns;
+    private final List<SpawnPoint> randomSpawns;
+    private final SpawnPoint returnSpawn;
+
+    public ArcadeArena(String arenaId,
+                       List<SpawnPoint> sideSpawns,
+                       List<SpawnPoint> randomSpawns,
+                       SpawnPoint returnSpawn) {
+        this.arenaId = Objects.requireNonNull(arenaId, "arenaId");
+        this.sideSpawns = List.copyOf(Objects.requireNonNull(sideSpawns, "sideSpawns"));
+        this.randomSpawns = randomSpawns == null ? List.of() : List.copyOf(randomSpawns);
+        this.returnSpawn = Objects.requireNonNull(returnSpawn, "returnSpawn");
+    }
+
+    public String arenaId() {
+        return arenaId;
+    }
+
+    /** 某一方的固定出生点；索引越界时回退到第 0 个。 */
+    public SpawnPoint sideSpawn(int sideIndex) {
+        if (sideSpawns.isEmpty()) {
+            return returnSpawn;
+        }
+        int i = Math.floorMod(sideIndex, sideSpawns.size());
+        return sideSpawns.get(i);
+    }
+
+    public List<SpawnPoint> sideSpawns() {
+        return Collections.unmodifiableList(sideSpawns);
+    }
+
+    /** 随机复活点（个人乱斗）；若未配置随机池则回退到任一方出生点。 */
+    public SpawnPoint randomSpawn(Random random) {
+        List<SpawnPoint> pool = randomSpawns.isEmpty() ? sideSpawns : randomSpawns;
+        if (pool.isEmpty()) {
+            return returnSpawn;
+        }
+        return pool.get(random.nextInt(pool.size()));
+    }
+
+    public List<SpawnPoint> randomSpawns() {
+        return Collections.unmodifiableList(randomSpawns);
+    }
+
+    /** 离场返回点（大厅/出生岛）。 */
+    public SpawnPoint returnSpawn() {
+        return returnSpawn;
+    }
+
+    /**
+     * 校验该竞技场是否满足某复活策略所需的出生点数量。
+     *
+     * @param policy    复活策略
+     * @param sideCount 参战方数
+     * @return 校验结果（含失败原因）
+     */
+    public Validation validateFor(RespawnPolicy policy, int sideCount) {
+        if (policy == RespawnPolicy.RANDOM) {
+            int pool = randomSpawns.isEmpty() ? sideSpawns.size() : randomSpawns.size();
+            if (pool < 1) {
+                return Validation.fail("个人乱斗需要至少 1 个随机复活点");
+            }
+            return Validation.ok();
+        }
+        if (sideSpawns.size() < sideCount) {
+            return Validation.fail("需要 " + sideCount + " 个出生点，当前仅 " + sideSpawns.size() + " 个");
+        }
+        return Validation.ok();
+    }
+
+    /** 简单的校验结果。 */
+    public static final class Validation {
+        private final boolean valid;
+        private final String reason;
+
+        private Validation(boolean valid, String reason) {
+            this.valid = valid;
+            this.reason = reason;
+        }
+
+        public static Validation ok() {
+            return new Validation(true, null);
+        }
+
+        public static Validation fail(String reason) {
+            return new Validation(false, reason);
+        }
+
+        public boolean isValid() {
+            return valid;
+        }
+
+        public String reason() {
+            return reason;
+        }
+    }
+
+    /** 便捷构造器。 */
+    public static final class Builder {
+        private final String arenaId;
+        private final List<SpawnPoint> sideSpawns = new ArrayList<>();
+        private final List<SpawnPoint> randomSpawns = new ArrayList<>();
+        private SpawnPoint returnSpawn;
+
+        public Builder(String arenaId) {
+            this.arenaId = arenaId;
+        }
+
+        public Builder addSideSpawn(SpawnPoint spawn) {
+            this.sideSpawns.add(spawn);
+            return this;
+        }
+
+        public Builder addRandomSpawn(SpawnPoint spawn) {
+            this.randomSpawns.add(spawn);
+            return this;
+        }
+
+        public Builder returnSpawn(SpawnPoint spawn) {
+            this.returnSpawn = spawn;
+            return this;
+        }
+
+        public ArcadeArena build() {
+            return new ArcadeArena(arenaId, sideSpawns, randomSpawns,
+                    returnSpawn != null ? returnSpawn
+                            : (sideSpawns.isEmpty() ? null : sideSpawns.get(0)));
+        }
+    }
+}
