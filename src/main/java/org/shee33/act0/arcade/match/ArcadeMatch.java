@@ -11,6 +11,13 @@ import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.BossEvent;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.phys.Vec3;
 import org.shee33.act0.arcade.arena.ArcadeArena;
 import org.shee33.act0.arcade.arena.SpawnPoint;
 import org.shee33.act0.arcade.loadout.Loadout;
@@ -84,6 +91,15 @@ public final class ArcadeMatch {
     private final Set<UUID> disconnected = new LinkedHashSet<>();
     /** 个人乱斗实时计分用：玩家 → 击杀数。 */
     private final Map<UUID, Integer> kills = new HashMap<>();
+    /** 死亡进入观察者前记录的原始游戏模式，复活时还原。 */
+    private final Map<UUID, GameType> originalGameMode = new HashMap<>();
+    /** 复活倒计时上次播报的整秒，用于逐秒 title + 音符盒去重（按玩家）。 */
+    private final Map<UUID, Integer> respawnLastSecond = new HashMap<>();
+    /** 开局倒计时期间锁定的位置（防乱跑）。 */
+    private final Map<UUID, Vec3> countdownLock = new HashMap<>();
+
+    /** 死亡补给箱标记 NBT 键：拾取后补满虚拟弹药。 */
+    public static final String AMMO_CRATE_KEY = "Act0AmmoCrate";
 
     private MatchPhase phase = MatchPhase.WAITING;
     private int winnerSide = -1;
@@ -169,6 +185,8 @@ public final class ArcadeMatch {
     private void startRound() {
         alive.clear();
         respawnTimers.clear();
+        respawnLastSecond.clear();
+        countdownLock.clear();
         for (UUID id : sideOf.keySet()) {
             if (disconnected.contains(id)) {
                 continue; // 掉线者保留坐位但不参与本回合，重连后归位
@@ -178,9 +196,11 @@ public final class ArcadeMatch {
             if (player == null) {
                 continue;
             }
+            exitSpectator(player);
             spawnAtSide(player, sideOf.get(id));
             equip(player);
             player.setHealth(player.getMaxHealth());
+            applyCountdownLock(player);
         }
         phase = MatchPhase.COUNTDOWN;
         phaseTotalTicks = Math.max(1, settings.countdownSeconds() * 20);
@@ -196,6 +216,7 @@ public final class ArcadeMatch {
     public void tick() {
         switch (phase) {
             case COUNTDOWN -> {
+                enforceCountdownLock();
                 int secs = timer.remainingSeconds();
                 if (secs != lastCountdownSecond) {
                     lastCountdownSecond = secs;
@@ -206,6 +227,7 @@ public final class ArcadeMatch {
                 }
                 if (timer.tick()) {
                     phase = MatchPhase.COMBAT;
+                    releaseCountdownLock();
                     showTitle("§a§l战斗开始！", "", 2, 20, 8);
                     playToAll(SoundEvents.PLAYER_LEVELUP, 1.0f);
                     broadcast("§a战斗开始！");
@@ -220,6 +242,14 @@ public final class ArcadeMatch {
                 updateBossBar();
             }
             case ROUND_RESULT -> {
+                int secs = timer.remainingSeconds();
+                if (secs != lastCountdownSecond) {
+                    lastCountdownSecond = secs;
+                    if (secs > 0 && secs <= 3) {
+                        showTitle("§e§l新回合 " + secs, "", 0, 14, 6);
+                        playToAll(SoundEvents.NOTE_BLOCK_PLING.value(), 1.0f + (3 - secs) * 0.2f);
+                    }
+                }
                 if (timer.tick()) {
                     startRound();
                 }
@@ -240,20 +270,40 @@ public final class ArcadeMatch {
         }
         List<UUID> ready = new ArrayList<>();
         for (Map.Entry<UUID, PhaseTimer> e : respawnTimers.entrySet()) {
-            if (e.getValue().tick()) {
-                ready.add(e.getKey());
+            UUID id = e.getKey();
+            PhaseTimer t = e.getValue();
+            int secs = t.remainingSeconds();
+            Integer last = respawnLastSecond.get(id);
+            if (last == null || last != secs) {
+                respawnLastSecond.put(id, secs);
+                if (secs > 0) {
+                    showRespawnCountdown(id, secs);
+                }
+            }
+            if (t.tick()) {
+                ready.add(id);
             }
         }
         for (UUID id : ready) {
             respawnTimers.remove(id);
+            respawnLastSecond.remove(id);
             ServerPlayer player = player(id);
             if (player == null) {
                 continue;
             }
+            exitSpectator(player);
             respawn(player, sideOf.getOrDefault(id, 0));
             equip(player);
             player.setHealth(player.getMaxHealth());
+            showTitleTo(id, "§a§l重生", "", 0, 12, 6);
+            playTo(id, SoundEvents.PLAYER_LEVELUP, 1.2f);
         }
+    }
+
+    /** 死亡观战期间逐秒倒计时 title + 音符盒音效（向单个玩家）。 */
+    private void showRespawnCountdown(UUID id, int secs) {
+        showTitleTo(id, "§c§l" + secs, "§7阵亡 · 即将重生", 0, 22, 6);
+        playTo(id, SoundEvents.NOTE_BLOCK_BASS.value(), 0.7f + (3 - Math.min(3, secs)) * 0.2f);
     }
 
     /**
@@ -324,8 +374,12 @@ public final class ArcadeMatch {
         if (phase == MatchPhase.ENDED || !sideOf.containsKey(victimId)) {
             return false;
         }
-        // 立即复活以阻止原版死亡：保持同一 ServerPlayer 实例，血条/计分引用始终有效。
         ServerPlayer victim = player(victimId);
+        // 仅对局战斗阶段：在死亡点掉落补给箱（拾取恢复弹药），且必须在传送前掉落。
+        if (victim != null && phase == MatchPhase.COMBAT) {
+            dropAmmoCrate(victim);
+        }
+        // 立即复活以阻止原版死亡：保持同一 ServerPlayer 实例，血条/计分引用始终有效。
         if (victim != null) {
             victim.setHealth(victim.getMaxHealth());
             victim.removeAllEffects();
@@ -342,6 +396,20 @@ public final class ArcadeMatch {
             handleRoundElimination(victimId);
         }
         return true;
+    }
+
+    /** 在玩家死亡点掉落一个补给箱（箱子物品 + 标记 NBT），拾取后补满虚拟弹药。 */
+    private void dropAmmoCrate(ServerPlayer victim) {
+        ItemStack crate = new ItemStack(Items.CHEST);
+        crate.getOrCreateTag().putBoolean(AMMO_CRATE_KEY, true);
+        crate.setHoverName(Component.literal("§b补给箱 §7(拾取恢复弹药)"));
+        ItemEntity entity = new ItemEntity(victim.serverLevel(),
+                victim.getX(), victim.getY() + 0.3, victim.getZ(), crate);
+        entity.setDeltaMovement(0.0, 0.08, 0.0);
+        entity.setGlowingTag(true);
+        entity.setUnlimitedLifetime();
+        entity.setDefaultPickUpDelay();
+        victim.serverLevel().addFreshEntity(entity);
     }
 
     private void handleKillScoring(UUID victimId, UUID killerId) {
@@ -361,23 +429,25 @@ public final class ArcadeMatch {
                 return;
             }
         }
-        // 击倒：立即清空背包并传送到复活点等待，避免在保护期内继续交火；保护期满后再发配装。
+        // 击倒：进入观察者视角等待重生，倒计时结束后再发配装满血回到战场。
         ServerPlayer victim = player(victimId);
         if (victim != null) {
             victim.getInventory().clearContent();
-            respawn(victim, sideOf.getOrDefault(victimId, 0));
+            enterSpectator(victim);
         }
         PhaseTimer t = new PhaseTimer();
         t.startSeconds(settings.reEquipProtectionSeconds());
         respawnTimers.put(victimId, t);
-        actionBar(victimId, "§c阵亡 · §7" + settings.reEquipProtectionSeconds() + " 秒后重生");
+        respawnLastSecond.put(victimId, -1);
     }
 
     private void handleRoundElimination(UUID victimId) {
         alive.remove(victimId);
         ServerPlayer victim = player(victimId);
         if (victim != null) {
-            TeleportHelper.teleport(victim, arena.returnSpawn());
+            victim.getInventory().clearContent();
+            enterSpectator(victim);
+            actionBar(victimId, "§c阵亡 · 等待本回合结束");
         }
         evaluateRoundElimination();
     }
@@ -411,6 +481,7 @@ public final class ArcadeMatch {
         }
         phase = MatchPhase.ROUND_RESULT;
         phaseTotalTicks = 3 * 20;
+        lastCountdownSecond = -1;
         timer.startSeconds(3);
     }
 
@@ -445,9 +516,13 @@ public final class ArcadeMatch {
     }
 
     private void finish() {
+        releaseCountdownLock();
+        respawnTimers.clear();
+        respawnLastSecond.clear();
         for (UUID id : sideOf.keySet()) {
             ServerPlayer player = player(id);
             if (player != null) {
+                exitSpectator(player);
                 TeleportHelper.teleport(player, arena.returnSpawn());
                 player.getInventory().clearContent();
                 sidebar.hideFrom(player);
@@ -479,9 +554,12 @@ public final class ArcadeMatch {
         }
         disconnected.add(playerId);
         respawnTimers.remove(playerId);
+        respawnLastSecond.remove(playerId);
+        countdownLock.remove(playerId);
         boolean wasAlive = alive.remove(playerId);
         ServerPlayer p = player(playerId);
         if (p != null) {
+            exitSpectator(p);
             bossBar.removePlayer(p);
             sidebar.hideFrom(p);
         }
@@ -507,10 +585,14 @@ public final class ArcadeMatch {
         sidebar.showTo(player);
         int side = sideOf.getOrDefault(id, 0);
         if (phase == MatchPhase.COMBAT || phase == MatchPhase.COUNTDOWN) {
+            exitSpectator(player);
             spawnAtSide(player, side);
             equip(player);
             player.setHealth(player.getMaxHealth());
             alive.add(id);
+            if (phase == MatchPhase.COUNTDOWN) {
+                applyCountdownLock(player);
+            }
         } else {
             TeleportHelper.teleport(player, arena.returnSpawn());
         }
@@ -651,6 +733,77 @@ public final class ArcadeMatch {
             }
         }
         return null;
+    }
+
+    // ---- 观察者 / 开局移动锁 ----
+
+    /** 进入观察者视角（死亡等待时），记录原始游戏模式以便复活时还原。 */
+    private void enterSpectator(ServerPlayer player) {
+        GameType current = player.gameMode.getGameModeForPlayer();
+        if (current != GameType.SPECTATOR) {
+            originalGameMode.put(player.getUUID(), current);
+        }
+        player.setGameMode(GameType.SPECTATOR);
+    }
+
+    /** 退出观察者视角，还原至记录的原始游戏模式（默认生存）。 */
+    private void exitSpectator(ServerPlayer player) {
+        if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
+            return;
+        }
+        GameType original = originalGameMode.getOrDefault(player.getUUID(), GameType.SURVIVAL);
+        player.setGameMode(original);
+    }
+
+    /** 开局倒计时锁定：记录当前位置并施加隐藏减速，防止玩家在准备阶段乱跑。 */
+    private void applyCountdownLock(ServerPlayer player) {
+        countdownLock.put(player.getUUID(), player.position());
+        int dur = Math.max(1, settings.countdownSeconds()) * 20 + 10;
+        player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, dur, 250, false, false, false));
+    }
+
+    /** 每刻校正：被锁定玩家若水平移动则拉回锁定点（保留视角自由）。 */
+    private void enforceCountdownLock() {
+        if (countdownLock.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<UUID, Vec3> e : countdownLock.entrySet()) {
+            ServerPlayer p = player(e.getKey());
+            if (p == null) {
+                continue;
+            }
+            Vec3 lock = e.getValue();
+            double dx = p.getX() - lock.x;
+            double dz = p.getZ() - lock.z;
+            if (dx * dx + dz * dz > 0.0036) {
+                p.connection.teleport(lock.x, lock.y, lock.z, p.getYRot(), p.getXRot());
+                p.setDeltaMovement(0.0, 0.0, 0.0);
+            }
+        }
+    }
+
+    /** 解除开局移动锁（进入战斗阶段时）。 */
+    private void releaseCountdownLock() {
+        for (UUID id : countdownLock.keySet()) {
+            ServerPlayer p = player(id);
+            if (p != null) {
+                p.removeEffect(MobEffects.MOVEMENT_SLOWDOWN);
+            }
+        }
+        countdownLock.clear();
+    }
+
+    /** 向单个玩家显示标题/副标题。 */
+    private void showTitleTo(UUID id, String title, String sub, int fadeIn, int stay, int fadeOut) {
+        ServerPlayer p = player(id);
+        if (p == null) {
+            return;
+        }
+        p.connection.send(new ClientboundSetTitlesAnimationPacket(fadeIn, stay, fadeOut));
+        p.connection.send(new ClientboundSetTitleTextPacket(Component.literal(title)));
+        if (sub != null && !sub.isEmpty()) {
+            p.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal(sub)));
+        }
     }
 
     private void equip(ServerPlayer player) {

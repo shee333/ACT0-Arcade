@@ -2,11 +2,8 @@ package org.shee33.act0.arcade.loadout.mc;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.TagParser;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.registries.ForgeRegistries;
 import org.shee33.act0.arcade.loadout.Loadout;
 import org.shee33.act0.arcade.loadout.LoadoutItem;
 import org.shee33.act0.arcade.loadout.LoadoutRegistry;
@@ -31,8 +28,12 @@ import java.util.Set;
  */
 public final class LoadoutApplier {
 
-    /** 元子弹（弹药盒）物品 id：发放枪械时按 {@link LoadoutItem#initialAmmo()} 配套给予。 */
-    private static final ResourceLocation META_AMMO_ID = new ResourceLocation("tacz", "ammo_box");
+    /** TaCZ 虚拟弹药 NBT 键：换弹时消耗此值而非弹药物品。见 tacwiki dummy_ammo。 */
+    public static final String DUMMY_AMMO_KEY = "DummyAmmo";
+    /** ACT0 自定义键：记录该枪初始虚拟备弹容量，供补给箱补满时还原。 */
+    public static final String AMMO_CAP_KEY = "Act0AmmoCap";
+    /** TaCZ 枪械 NBT 标识键（用于判断一个 ItemStack 是否为 TaCZ 枪）。 */
+    private static final String TACZ_GUN_ID_KEY = "GunId";
 
     private final LoadoutRegistry registry;
     private final GunModService gunMod;
@@ -65,7 +66,6 @@ public final class LoadoutApplier {
         if (clearFirst) {
             player.getInventory().clearContent();
         }
-        int totalAmmo = 0;
         for (Map.Entry<LoadoutSlot, LoadoutResolution.SlotResolution> entry : resolution.bySlot().entrySet()) {
             LoadoutSlot slot = entry.getKey();
             LoadoutResolution.SlotResolution slotResolution = entry.getValue();
@@ -83,35 +83,63 @@ public final class LoadoutApplier {
             if (gunMod != null) {
                 gunMod.installPlayerSelections(player, item.key(), stack);
             }
+            // TaCZ 枪械：用虚拟弹药（DummyAmmo），换弹直接消耗该值，无需携带弹药盒物品。
+            if (item.initialAmmo() > 0) {
+                setDummyAmmo(stack, item.initialAmmo());
+            }
             int hotbar = slot.hotbarIndex();
             if (hotbar >= 0 && hotbar < player.getInventory().items.size()) {
                 player.getInventory().setItem(hotbar, stack);
             }
-            totalAmmo += item.initialAmmo();
         }
-        grantMetaAmmo(player, totalAmmo);
         player.getInventory().setChanged();
         return resolution;
     }
 
-    /** 把元子弹（弹药盒）按总量发放到玩家背包；数量为 0 时跳过。 */
-    private void grantMetaAmmo(ServerPlayer player, int count) {
-        if (count <= 0) {
+    /**
+     * 为一把 TaCZ 枪设置虚拟弹药与容量记录。非枪械物品也只是写两个标签，无副作用。
+     */
+    public static void setDummyAmmo(ItemStack stack, int amount) {
+        if (stack == null || stack.isEmpty() || amount <= 0) {
             return;
         }
-        Item ammo = ForgeRegistries.ITEMS.getValue(META_AMMO_ID);
-        if (ammo == null) {
-            return;
-        }
-        int remaining = Math.min(count, 64 * 8); // 上限保护
-        while (remaining > 0) {
-            int give = Math.min(remaining, 64);
-            ItemStack box = new ItemStack(ammo, give);
-            if (!player.getInventory().add(box) && box.getCount() > 0) {
-                player.drop(box, false);
+        CompoundTag tag = stack.getOrCreateTag();
+        tag.putInt(DUMMY_AMMO_KEY, amount);
+        tag.putInt(AMMO_CAP_KEY, amount);
+    }
+
+    /** 该 ItemStack 是否为 TaCZ 枪（含 {@code GunId} 标签）。 */
+    public static boolean isTaczGun(ItemStack stack) {
+        return stack != null && stack.hasTag() && stack.getTag().contains(TACZ_GUN_ID_KEY);
+    }
+
+    /**
+     * 把玩家背包内所有 TaCZ 枪的虚拟弹药补满（补给箱拾取时调用）。
+     *
+     * @return 实际补给的枪械数量
+     */
+    public static int refillAllGuns(ServerPlayer player) {
+        int refilled = 0;
+        for (ItemStack stack : player.getInventory().items) {
+            if (!isTaczGun(stack)) {
+                continue;
             }
-            remaining -= give;
+            CompoundTag tag = stack.getOrCreateTag();
+            int cap = tag.contains(AMMO_CAP_KEY) ? tag.getInt(AMMO_CAP_KEY) : 0;
+            if (cap <= 0 && tag.contains(DUMMY_AMMO_KEY)) {
+                cap = Math.max(tag.getInt(DUMMY_AMMO_KEY), 60);
+            }
+            if (cap <= 0) {
+                cap = 60;
+            }
+            tag.putInt(DUMMY_AMMO_KEY, cap);
+            tag.putInt(AMMO_CAP_KEY, cap);
+            refilled++;
         }
+        if (refilled > 0) {
+            player.getInventory().setChanged();
+        }
+        return refilled;
     }
 
     /**

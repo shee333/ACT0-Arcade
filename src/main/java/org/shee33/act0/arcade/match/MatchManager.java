@@ -1,11 +1,18 @@
 package org.shee33.act0.arcade.match;
 
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
+import net.minecraftforge.event.entity.player.EntityItemPickupEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import org.shee33.act0.arcade.loadout.mc.LoadoutApplier;
 
 import java.util.Collection;
 import java.util.Iterator;
@@ -139,6 +146,28 @@ public final class MatchManager {
         if (match.onDeath(victim.getUUID(), killerId)) {
             event.setCanceled(true);
         }
+    }
+
+    /**
+     * 拾取死亡补给箱：仅对局中玩家生效，补满虚拟弹药后消耗补给箱。
+     */
+    @SubscribeEvent
+    public void onItemPickup(EntityItemPickupEvent event) {
+        ItemEntity itemEntity = event.getItem();
+        ItemStack stack = itemEntity.getItem();
+        if (!stack.hasTag() || !stack.getTag().getBoolean(ArcadeMatch.AMMO_CRATE_KEY)) {
+            return;
+        }
+        event.setCanceled(true); // 补给箱不进背包
+        ServerPlayer player = (ServerPlayer) event.getEntity();
+        if (!matchByPlayer.containsKey(player.getUUID())) {
+            return; // 非参战玩家不能拾取
+        }
+        int refilled = LoadoutApplier.refillAllGuns(player);
+        itemEntity.discard();
+        player.playNotifySound(SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, 0.8f, 1.5f);
+        player.displayClientMessage(Component.literal(
+                refilled > 0 ? "§b补给箱 §7» 弹药已补满" : "§7补给箱：没有可补给的枪"), true);
     }
 
     private UUID resolveKiller(LivingDeathEvent event) {
