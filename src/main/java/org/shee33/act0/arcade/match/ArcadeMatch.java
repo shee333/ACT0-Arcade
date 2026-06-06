@@ -11,6 +11,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.ChatFormatting;
 import net.minecraft.world.BossEvent;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -19,6 +20,9 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.scores.Scoreboard;
+import net.minecraft.world.scores.Team;
 import org.shee33.act0.arcade.arena.ArcadeArena;
 import org.shee33.act0.arcade.arena.SpawnPoint;
 import org.shee33.act0.arcade.loadout.Loadout;
@@ -108,6 +112,8 @@ public final class ArcadeMatch {
     private final Map<UUID, UUID> deathCamKiller = new HashMap<>();
     /** 玩家最近一次受伤 tick，用于街机“呼吸回血”。 */
     private final Map<UUID, Long> lastHurtTick = new HashMap<>();
+    /** 本对局创建的原版计分板队伍：用于隐藏敌方头顶名、保留队友头顶名。 */
+    private final List<PlayerTeam> nameTagTeams = new ArrayList<>();
 
     /** 死亡补给箱标记 NBT 键：拾取后补满虚拟弹药。 */
     public static final String AMMO_CRATE_KEY = "Act0AmmoCrate";
@@ -187,6 +193,7 @@ public final class ArcadeMatch {
                 sidebar.showTo(player);
             }
         }
+        setupNameTagTeams();
         bossBar.setVisible(!usesPersonalBossBars());
         if (settings.timeLimitSeconds() > 0) {
             matchClockTicks = settings.timeLimitSeconds() * 20;
@@ -232,6 +239,7 @@ public final class ArcadeMatch {
         switch (phase) {
             case COUNTDOWN -> {
                 enforceCountdownLock();
+                syncTeamHighlights();
                 int secs = timer.remainingSeconds();
                 if (secs != lastCountdownSecond) {
                     lastCountdownSecond = secs;
@@ -251,6 +259,7 @@ public final class ArcadeMatch {
             }
             case COMBAT -> {
                 enforceDeathCam();
+                syncTeamHighlights();
                 tickRespawns();
                 tickBreathHealing();
                 if (tickMatchClock()) {
@@ -311,6 +320,7 @@ public final class ArcadeMatch {
             }
             exitSpectator(player);
             enterAdventureMode(player);
+            setupNameTagTeams();
             respawn(player, sideOf.getOrDefault(id, 0));
             equip(player);
             player.setHealth(player.getMaxHealth());
@@ -503,6 +513,8 @@ public final class ArcadeMatch {
         ServerPlayer victim = player(victimId);
         if (victim != null) {
             victim.getInventory().clearContent();
+            clearTeamHighlightFor(victim);
+            clearTeamHighlightTarget(victim);
             enterSpectator(victim, killerId);
             actionBar(victimId, "§c阵亡 · 等待本回合结束");
         }
@@ -576,6 +588,8 @@ public final class ArcadeMatch {
 
     private void finish() {
         releaseCountdownLock();
+        clearAllTeamHighlights();
+        clearNameTagTeams();
         clearAllKillerGlow();
         respawnTimers.clear();
         respawnLastSecond.clear();
@@ -629,6 +643,8 @@ public final class ArcadeMatch {
         ServerPlayer p = player(playerId);
         if (p != null) {
             clearKillerGlow(p);
+            clearTeamHighlightFor(p);
+            clearTeamHighlightTarget(p);
             exitSpectator(p);
                 removeBossBarPlayer(p);
             sidebar.hideFrom(p);
@@ -696,6 +712,7 @@ public final class ArcadeMatch {
         sideOf.put(id, side);
         kills.put(id, 0);
         rememberPreMatchMode(player);
+        setupNameTagTeams();
         addBossBarPlayer(player);
         sidebar.showTo(player);
         if (phase == MatchPhase.COMBAT || phase == MatchPhase.COUNTDOWN) {
@@ -770,6 +787,111 @@ public final class ArcadeMatch {
             int winner = connectedSides.iterator().next();
             broadcast("§7其余玩家已离开，对局结束。");
             winMatch(winner);
+        }
+    }
+
+    private void setupNameTagTeams() {
+        clearNameTagTeams();
+        Scoreboard scoreboard = server.getScoreboard();
+        for (int side = 0; side < sides.size(); side++) {
+            String teamName = scoreboardTeamName(side);
+            PlayerTeam team = scoreboard.getPlayerTeam(teamName);
+            if (team != null) {
+                scoreboard.removePlayerTeam(team);
+            }
+            team = scoreboard.addPlayerTeam(teamName);
+            team.setNameTagVisibility(Team.Visibility.HIDE_FOR_OTHER_TEAMS);
+            team.setColor(teamColor(side));
+            nameTagTeams.add(team);
+            for (UUID id : sides.get(side)) {
+                ServerPlayer player = player(id);
+                if (player != null) {
+                    scoreboard.addPlayerToTeam(player.getScoreboardName(), team);
+                }
+            }
+        }
+    }
+
+    private void clearNameTagTeams() {
+        if (nameTagTeams.isEmpty()) {
+            return;
+        }
+        Scoreboard scoreboard = server.getScoreboard();
+        for (PlayerTeam team : new ArrayList<>(nameTagTeams)) {
+            PlayerTeam live = scoreboard.getPlayerTeam(team.getName());
+            if (live != null) {
+                scoreboard.removePlayerTeam(live);
+            }
+        }
+        nameTagTeams.clear();
+    }
+
+    private String scoreboardTeamName(int side) {
+        String base = "a0" + Integer.toHexString(matchId.hashCode()) + "_" + side;
+        return base.length() <= 16 ? base : base.substring(0, 16);
+    }
+
+    private ChatFormatting teamColor(int side) {
+        return side == 0 ? ChatFormatting.RED : (side == 1 ? ChatFormatting.BLUE : ChatFormatting.GRAY);
+    }
+
+    private boolean hasVisibleTeamMates() {
+        return settings.teamSize() > 1;
+    }
+
+    private void syncTeamHighlights() {
+        if (!hasVisibleTeamMates()) {
+            return;
+        }
+        for (UUID viewerId : sideOf.keySet()) {
+            ServerPlayer viewer = player(viewerId);
+            if (viewer == null || !viewer.isAlive() || viewer.isSpectator() || deathCamView.containsKey(viewerId)) {
+                continue;
+            }
+            Integer viewerSide = sideOf.get(viewerId);
+            for (UUID targetId : sideOf.keySet()) {
+                if (targetId.equals(viewerId)) {
+                    continue;
+                }
+                ServerPlayer target = player(targetId);
+                boolean teammate = viewerSide != null && viewerSide.equals(sideOf.get(targetId));
+                boolean show = teammate && target != null && target.isAlive() && !target.isSpectator()
+                        && !deathCamView.containsKey(targetId);
+                if (target != null) {
+                    if (show) {
+                        GlowSync.showGlowTo(viewer, target);
+                    } else {
+                        GlowSync.hideGlowFrom(viewer, target);
+                    }
+                }
+            }
+        }
+    }
+
+    private void clearTeamHighlightFor(ServerPlayer viewer) {
+        for (UUID targetId : sideOf.keySet()) {
+            ServerPlayer target = player(targetId);
+            if (target != null && !target.getUUID().equals(viewer.getUUID())) {
+                GlowSync.hideGlowFrom(viewer, target);
+            }
+        }
+    }
+
+    private void clearTeamHighlightTarget(ServerPlayer target) {
+        for (UUID viewerId : sideOf.keySet()) {
+            ServerPlayer viewer = player(viewerId);
+            if (viewer != null && !viewer.getUUID().equals(target.getUUID())) {
+                GlowSync.hideGlowFrom(viewer, target);
+            }
+        }
+    }
+
+    private void clearAllTeamHighlights() {
+        for (UUID viewerId : sideOf.keySet()) {
+            ServerPlayer viewer = player(viewerId);
+            if (viewer != null) {
+                clearTeamHighlightFor(viewer);
+            }
         }
     }
 
