@@ -50,6 +50,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 /**
  * {@code /arcade} 命令：街机玩法的管理与接入层。
@@ -957,7 +960,13 @@ public final class ArcadeCommand {
         return v == Math.floor(v) ? String.valueOf((long) v) : String.valueOf(v);
     }
 
-    /** 从手持物品推导稳定的武器 key：优先取 TaCZ {@code GunId}，否则取物品注册名。 */
+    /**
+     * 从手持物品推导稳定的武器 key。
+     *
+     * <p>TaCZ 枪械优先使用 {@code GunId}，便于同一把枪重复上架时覆盖旧定义。非枪械物品则加入完整
+     * {@link ItemStack#save(CompoundTag)} 的短哈希，避免一批近战/模型物品共享同一个注册名时互相覆盖，
+     * 造成“无论添加多少个近战，最后只剩一个”。
+     */
     private static String deriveKey(ItemStack stack) {
         CompoundTag tag = stack.getTag();
         if (tag != null && tag.contains("GunId")) {
@@ -967,7 +976,24 @@ public final class ArcadeCommand {
             }
         }
         ResourceLocation id = ForgeRegistries.ITEMS.getKey(stack.getItem());
-        return id != null ? id.toString().replace(':', '.') : "item." + stack.getItem();
+        String base = id != null ? id.toString().replace(':', '.') : "item." + stack.getItem();
+        CompoundTag full = new CompoundTag();
+        stack.save(full);
+        return base + "." + shortHash(full.toString());
+    }
+
+    private static String shortHash(String input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-1");
+            byte[] bytes = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(10);
+            for (int i = 0; i < 5 && i < bytes.length; i++) {
+                sb.append(String.format("%02x", bytes[i] & 0xFF));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            return Integer.toHexString(input.hashCode());
+        }
     }
 
     // ---------------- helpers ----------------
