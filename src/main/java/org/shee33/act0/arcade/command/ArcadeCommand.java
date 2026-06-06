@@ -204,8 +204,7 @@ public final class ArcadeCommand {
     // ---------------- room ----------------
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildRoomBranch() {
-        LiteralArgumentBuilder<CommandSourceStack> create = Commands.literal("create")
-                .requires(src -> src.hasPermission(2));
+        LiteralArgumentBuilder<CommandSourceStack> create = Commands.literal("create");
         for (String mode : List.of("duel_1v1", "duel_2v2", "team_deathmatch", "free_for_all")) {
             create.then(Commands.literal(mode)
                     .then(Commands.argument("arena", StringArgumentType.word()).suggests(ARENA_IDS)

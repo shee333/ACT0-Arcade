@@ -10,7 +10,7 @@ import org.shee33.act0.arcade.match.RoomManager;
 import java.util.List;
 
 /**
- * 创建房间界面（仅管理员）：选择模式、竞技场与计分目标，提交 {@code /arcade room create}。
+ * 创建房间界面：选择模式、竞技场与计分目标，提交 {@code /arcade room create}。
  *
  * <p>计分目标随模式语义切换——回合制模式为"先到几胜"，击杀制模式为"先到几杀"。
  */

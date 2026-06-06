@@ -12,7 +12,7 @@ import org.shee33.act0.arcade.network.RoomDto;
 import java.util.List;
 
 /**
- * 像素风"游戏浏览器"界面（客户端）：浏览当前可加入的房间，一键加入/离开；管理员可创建房间。
+ * 像素风"游戏浏览器"界面（客户端）：浏览当前可加入的房间，一键加入/离开；玩家可创建房间。
  *
  * <p>房间数据来自 {@link ClientRoomList}（由 {@code SyncRoomListPacket} 下发），界面打开后每 2 秒
  * 自动向服务端请求一次最新列表。列表区支持滚轮滚动，避免房间过多撑大界面。
@@ -54,10 +54,8 @@ public final class RoomBrowserScreen extends Screen {
         addRenderableWidget(Button.builder(Component.literal("刷新"), b -> requestRefresh())
                 .bounds(bx, footY, 50, 18).build());
         bx += 56;
-        if (ClientRoomList.canManage()) {
-            addRenderableWidget(Button.builder(Component.literal("§a创建房间"), b -> openCreate())
-                    .bounds(bx, footY, 80, 18).build());
-        }
+        addRenderableWidget(Button.builder(Component.literal("§a创建房间"), b -> openCreate())
+            .bounds(bx, footY, 80, 18).build());
         addRenderableWidget(Button.builder(Component.literal("关闭"), b -> onClose())
                 .bounds(left + W - 58, footY, 48, 18).build());
 
@@ -161,7 +159,7 @@ public final class RoomBrowserScreen extends Screen {
 
         List<RoomDto> list = rooms();
         if (list.isEmpty()) {
-            gg.drawCenteredString(font, "§7暂无房间" + (ClientRoomList.canManage() ? "，点击下方创建" : "，请稍候"),
+                gg.drawCenteredString(font, "§7暂无房间，点击下方创建",
                     left + W / 2, listY + viewportH / 2 - 4, PixelTheme.TEXT_DIM);
         } else {
             gg.enableScissor(listX, listY, listX + listW, listY + viewportH);
