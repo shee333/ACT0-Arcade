@@ -16,6 +16,7 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.shee33.act0.arcade.command.ArcadeCommand;
 import org.shee33.act0.arcade.match.ArcadeServices;
 import org.shee33.act0.arcade.network.ArcadeNetwork;
+import org.shee33.act0.arcade.storage.ArcadeGlobalSettings;
 import org.slf4j.Logger;
 
 /**
@@ -77,6 +78,7 @@ public final class Act0Arcade {
     @SubscribeEvent
     public void onPlayerLoggedIn(final PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player) {
+            ArcadeGlobalSettings.get(player.server).applyHealth(player);
             ArcadeNetwork.syncCatalog(player, SERVICES.registry());
             ArcadeNetwork.syncAttachmentCatalog(player);
             // 若属于某进行中的对局，则重连归位

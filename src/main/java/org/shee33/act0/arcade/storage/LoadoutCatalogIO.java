@@ -18,6 +18,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 装备目录的 JSON 数据驱动读写。
@@ -47,6 +49,7 @@ import java.util.Locale;
 public final class LoadoutCatalogIO {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+    private static final Pattern GUN_ID_PATTERN = Pattern.compile("GunId:\\s*\\\"([^\\\"]+)\\\"");
 
     private LoadoutCatalogIO() {
     }
@@ -139,7 +142,7 @@ public final class LoadoutCatalogIO {
             return false;
         }
         LoadoutItem.Builder builder = LoadoutItem.builder(entry.key, category)
-                .displayName(entry.name != null ? entry.name : entry.key)
+            .displayName(displayNameFor(entry))
                 .price(entry.price)
                 .initialAmmo(entry.ammo)
                 .isDefault(entry.isDefault);
@@ -216,6 +219,54 @@ public final class LoadoutCatalogIO {
 
     private static WeaponCategory parseCategory(String raw) {
         return WeaponCategory.byName(raw == null ? null : raw.trim());
+    }
+
+    private static String displayNameFor(CatalogEntryDto entry) {
+        String name = entry.name != null ? entry.name.trim() : "";
+        if (!name.isEmpty() && !name.startsWith("item.")) {
+            return name;
+        }
+        String gunId = gunIdFromSnbt(entry.snbt);
+        if (gunId != null && !gunId.isBlank()) {
+            int colon = gunId.indexOf(':');
+            return humanize(colon >= 0 ? gunId.substring(colon + 1) : gunId);
+        }
+        if (entry.key != null && entry.key.startsWith("gun.")) {
+            return humanize(entry.key.substring(entry.key.lastIndexOf('.') + 1));
+        }
+        if (!name.isEmpty()) {
+            return humanize(name.substring(name.lastIndexOf('.') + 1));
+        }
+        return entry.key != null ? entry.key : "未命名";
+    }
+
+    private static String gunIdFromSnbt(String snbt) {
+        if (snbt == null) {
+            return null;
+        }
+        Matcher matcher = GUN_ID_PATTERN.matcher(snbt);
+        return matcher.find() ? matcher.group(1) : null;
+    }
+
+    private static String humanize(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "未命名";
+        }
+        String[] parts = raw.replace('-', '_').split("_");
+        StringBuilder out = new StringBuilder();
+        for (String part : parts) {
+            if (part.isBlank()) {
+                continue;
+            }
+            if (!out.isEmpty()) {
+                out.append(' ');
+            }
+            out.append(Character.toUpperCase(part.charAt(0)));
+            if (part.length() > 1) {
+                out.append(part.substring(1));
+            }
+        }
+        return out.isEmpty() ? raw : out.toString();
     }
 
     private static PlayerClassType[] parseClasses(List<String> raw) {

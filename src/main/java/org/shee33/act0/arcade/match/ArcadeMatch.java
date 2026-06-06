@@ -34,6 +34,7 @@ import org.shee33.act0.arcade.round.MatchPhase;
 import org.shee33.act0.arcade.round.MatchScore;
 import org.shee33.act0.arcade.round.PhaseTimer;
 import org.shee33.act0.arcade.round.RespawnPolicy;
+import org.shee33.act0.arcade.storage.ArcadeGlobalSettings;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -103,6 +104,8 @@ public final class ArcadeMatch {
     private final Map<UUID, DeathView> deathCamView = new HashMap<>();
     /** 死者 → 其死亡相机正盯着的击杀者（用于持续追踪朝向与高亮发光管理）。 */
     private final Map<UUID, UUID> deathCamKiller = new HashMap<>();
+    /** 玩家最近一次受伤 tick，用于街机“呼吸回血”。 */
+    private final Map<UUID, Long> lastHurtTick = new HashMap<>();
 
     /** 死亡补给箱标记 NBT 键：拾取后补满虚拟弹药。 */
     public static final String AMMO_CRATE_KEY = "Act0AmmoCrate";
@@ -245,6 +248,7 @@ public final class ArcadeMatch {
             case COMBAT -> {
                 enforceDeathCam();
                 tickRespawns();
+                tickBreathHealing();
                 if (tickMatchClock()) {
                     return; // 限时到，已收尾
                 }
@@ -384,6 +388,7 @@ public final class ArcadeMatch {
         if (phase == MatchPhase.ENDED || !sideOf.containsKey(victimId)) {
             return false;
         }
+        lastHurtTick.put(victimId, (long) server.getTickCount());
         ServerPlayer victim = player(victimId);
         // 仅对局战斗阶段：在死亡点掉落补给箱（拾取恢复弹药），且必须在传送前掉落。
         if (victim != null && phase == MatchPhase.COMBAT) {
@@ -406,6 +411,39 @@ public final class ArcadeMatch {
             handleRoundElimination(victimId, killerId);
         }
         return true;
+    }
+
+    public void onHurt(UUID playerId) {
+        if (!sideOf.containsKey(playerId) || phase != MatchPhase.COMBAT) {
+            return;
+        }
+        lastHurtTick.put(playerId, (long) server.getTickCount());
+        ServerPlayer p = player(playerId);
+        if (p != null) {
+            p.removeEffect(MobEffects.REGENERATION);
+        }
+    }
+
+    private void tickBreathHealing() {
+        int delay = ArcadeGlobalSettings.get(server).breathHealDelayTicks();
+        long now = server.getTickCount();
+        for (UUID id : sideOf.keySet()) {
+            if (respawnTimers.containsKey(id) || deathCamView.containsKey(id)) {
+                continue;
+            }
+            ServerPlayer p = player(id);
+            if (p == null || !p.isAlive() || p.isSpectator()) {
+                continue;
+            }
+            if (p.getHealth() >= p.getMaxHealth()) {
+                p.removeEffect(MobEffects.REGENERATION);
+                continue;
+            }
+            long last = lastHurtTick.getOrDefault(id, now);
+            if (now - last >= delay) {
+                p.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 60, 1, false, false, true));
+            }
+        }
     }
 
     /** 在玩家死亡点掉落一个补给箱（箱子物品 + 标记 NBT），拾取后补满虚拟弹药。 */
@@ -537,6 +575,7 @@ public final class ArcadeMatch {
         respawnTimers.clear();
         respawnLastSecond.clear();
         deathCamView.clear();
+        lastHurtTick.clear();
         for (UUID id : sideOf.keySet()) {
             ServerPlayer player = player(id);
             if (player != null) {
@@ -579,6 +618,7 @@ public final class ArcadeMatch {
         respawnLastSecond.remove(playerId);
         countdownLock.remove(playerId);
         deathCamView.remove(playerId);
+        lastHurtTick.remove(playerId);
         boolean wasAlive = alive.remove(playerId);
         ServerPlayer p = player(playerId);
         if (p != null) {

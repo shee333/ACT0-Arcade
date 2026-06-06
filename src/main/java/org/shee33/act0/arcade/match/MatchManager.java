@@ -9,6 +9,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.player.EntityItemPickupEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -146,6 +147,21 @@ public final class MatchManager {
                     endListener.accept(match.matchId());
                 }
             }
+        }
+    }
+
+    @SubscribeEvent
+    public void onLivingHurt(LivingHurtEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer victim)) {
+            return;
+        }
+        String matchId = matchByPlayer.get(victim.getUUID());
+        if (matchId == null) {
+            return;
+        }
+        ArcadeMatch match = matches.get(matchId);
+        if (match != null) {
+            match.onHurt(victim.getUUID());
         }
     }
 

@@ -2,6 +2,7 @@ package org.shee33.act0.arcade.command;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -39,6 +40,7 @@ import org.shee33.act0.arcade.match.MatchLauncher;
 import org.shee33.act0.arcade.mode.MatchSettings;
 import org.shee33.act0.arcade.network.ArcadeNetwork;
 import org.shee33.act0.arcade.storage.ArcadeLoadoutStore;
+import org.shee33.act0.arcade.storage.ArcadeGlobalSettings;
 import org.shee33.act0.arcade.storage.ArcadePlayerUnlocks;
 import org.shee33.act0.arcade.storage.ArenaRegistry;
 import org.shee33.act0.arcade.storage.AttachmentCatalogIO;
@@ -111,6 +113,7 @@ public final class ArcadeCommand {
         root.then(buildRoomBranch());
         root.then(buildArmoryBranch());
         root.then(buildMoneyBranch());
+        root.then(buildSettingsBranch());
         root.then(Commands.literal("buy")
                 .then(Commands.argument("item", StringArgumentType.word()).suggests(ITEM_KEYS)
                         .executes(ArcadeCommand::buy)));
@@ -121,6 +124,38 @@ public final class ArcadeCommand {
 
         dispatcher.register(root);
     }
+
+        private static LiteralArgumentBuilder<CommandSourceStack> buildSettingsBranch() {
+        return Commands.literal("settings")
+            .requires(src -> src.hasPermission(2))
+            .then(Commands.literal("health")
+                .then(Commands.argument("target", EntityArgument.player())
+                    .then(Commands.argument("value", DoubleArgumentType.doubleArg(1.0, 200.0))
+                        .executes(ArcadeCommand::settingsHealth))))
+            .then(Commands.literal("regenDelay")
+                .then(Commands.argument("seconds", DoubleArgumentType.doubleArg(0.0, 60.0))
+                    .executes(ArcadeCommand::settingsRegenDelay)));
+        }
+
+        private static int settingsHealth(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "target");
+        double value = DoubleArgumentType.getDouble(ctx, "value");
+        ArcadeGlobalSettings settings = ArcadeGlobalSettings.get(ctx.getSource().getServer());
+        settings.setMaxHealth(target.getUUID(), value);
+        settings.applyHealth(target);
+        ctx.getSource().sendSuccess(() -> Component.literal(
+            "§a已将 §e" + target.getGameProfile().getName() + " §a默认血量设为 §e" + fmt(value)), true);
+        return 1;
+        }
+
+        private static int settingsRegenDelay(CommandContext<CommandSourceStack> ctx) {
+        double seconds = DoubleArgumentType.getDouble(ctx, "seconds");
+        ArcadeGlobalSettings settings = ArcadeGlobalSettings.get(ctx.getSource().getServer());
+        settings.setBreathHealDelaySeconds(seconds);
+        ctx.getSource().sendSuccess(() -> Component.literal(
+            "§a街机呼吸回血等待时间已设为 §e" + fmt(seconds) + " 秒"), true);
+        return 1;
+        }
 
     // ---------------- queue ----------------
 
