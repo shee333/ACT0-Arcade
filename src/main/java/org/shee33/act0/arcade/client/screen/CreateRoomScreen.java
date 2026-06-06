@@ -43,6 +43,8 @@ public final class CreateRoomScreen extends Screen {
     private boolean randomWeapons = false;
     private int capacity = 2;
     private Button randomToggle;
+    private Button capacityMinus;
+    private Button capacityPlus;
 
     public CreateRoomScreen(RoomBrowserScreen parent) {
         super(Component.literal("创建房间"));
@@ -105,14 +107,13 @@ public final class CreateRoomScreen extends Screen {
 
         // 人数调整（击杀制可改，回合制固定）
         int capY = top + 168;
-        Button capMinus = Button.builder(Component.literal("-"), b -> adjustCapacity(-1))
+        capacityMinus = Button.builder(Component.literal("-"), b -> adjustCapacity(-1))
             .bounds(rx, capY, 18, 18).build();
-        capMinus.active = capacityEditable();
-        addRenderableWidget(capMinus);
-        Button capPlus = Button.builder(Component.literal("+"), b -> adjustCapacity(1))
+        addRenderableWidget(capacityMinus);
+        capacityPlus = Button.builder(Component.literal("+"), b -> adjustCapacity(1))
             .bounds(rx + 110, capY, 18, 18).build();
-        capPlus.active = capacityEditable();
-        addRenderableWidget(capPlus);
+        addRenderableWidget(capacityPlus);
+        updateCapacityButtons();
 
         // 随机武器开关
         int randomY = top + 200;
@@ -149,16 +150,31 @@ public final class CreateRoomScreen extends Screen {
     private void adjustCapacity(int dir) {
         if (!capacityEditable()) {
             capacity = defaultCapacity();
+            updateCapacityButtons();
             return;
         }
         int step = "team_deathmatch".equals(mode().id()) ? 2 : 1;
         capacity = RoomManager.normalizeCapacity(mode().id(), capacity + dir * step);
+        updateCapacityButtons();
     }
 
     private void selectMode(int idx) {
         selectedMode = idx;
         target = mode().defTarget();
         capacity = defaultCapacity();
+        updateCapacityButtons();
+    }
+
+    private void updateCapacityButtons() {
+        boolean editable = capacityEditable();
+        if (capacityMinus != null) {
+            capacityMinus.active = editable;
+            capacityMinus.visible = editable;
+        }
+        if (capacityPlus != null) {
+            capacityPlus.active = editable;
+            capacityPlus.visible = editable;
+        }
     }
 
     private void cycleArena(int dir) {
@@ -227,11 +243,10 @@ public final class CreateRoomScreen extends Screen {
                 : "§e" + (timeLimitSeconds / 60) + " §7分钟";
         gg.drawCenteredString(font, timeText, rx + 64, top + 141, PixelTheme.TEXT);
 
-        gg.drawString(font, "§7房间人数", rx, top + 156, PixelTheme.TEXT_DIM, false);
-        String capText = capacityEditable()
-            ? "§e" + capacity + " §7人"
-            : "§7固定 §e" + defaultCapacity() + " §7人";
-        gg.drawCenteredString(font, capText, rx + 64, top + 173, PixelTheme.TEXT);
+        if (capacityEditable()) {
+            gg.drawString(font, "§7房间人数", rx, top + 156, PixelTheme.TEXT_DIM, false);
+            gg.drawCenteredString(font, "§e" + capacity + " §7人", rx + 64, top + 173, PixelTheme.TEXT);
+        }
 
         gg.drawString(font, "§8满员将自动开局，房主也可提前开始", rx, top + 228, PixelTheme.TEXT_DIM, false);
         gg.drawString(font, "§8限时到则领先者胜，平分则平局", rx, top + 240, PixelTheme.TEXT_DIM, false);
