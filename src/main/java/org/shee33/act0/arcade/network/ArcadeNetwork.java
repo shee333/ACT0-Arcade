@@ -8,10 +8,13 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 import org.shee33.act0.arcade.Act0Arcade;
 import org.shee33.act0.arcade.economy.BuyOutcome;
+import org.shee33.act0.arcade.loadout.DefaultLoadoutCatalog;
 import org.shee33.act0.arcade.loadout.LoadoutRegistry;
+import org.shee33.act0.arcade.loadout.LoadoutSet;
 import org.shee33.act0.arcade.match.ArcadeRoom;
 import org.shee33.act0.arcade.match.RoomManager;
 import org.shee33.act0.arcade.storage.AttachmentCatalogIO;
+import org.shee33.act0.arcade.storage.ArcadeLoadoutStore;
 import org.shee33.act0.arcade.storage.ArcadePlayerUnlocks;
 import org.shee33.act0.arcade.storage.ArenaRegistry;
 import org.shee33.act0.arcade.storage.LoadoutCatalogIO;
@@ -24,7 +27,7 @@ import java.util.List;
  */
 public final class ArcadeNetwork {
 
-        private static final String PROTOCOL = "2";
+        private static final String PROTOCOL = "3";
 
     @SuppressWarnings("removal")
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
@@ -69,6 +72,10 @@ public final class ArcadeNetwork {
                 DeathCamPacket::encode, DeathCamPacket::decode, DeathCamPacket::handle);
         CHANNEL.registerMessage(id++, CloseRoomBrowserPacket.class,
                 CloseRoomBrowserPacket::encode, CloseRoomBrowserPacket::decode, CloseRoomBrowserPacket::handle);
+        CHANNEL.registerMessage(id++, RequestLoadoutPacket.class,
+                RequestLoadoutPacket::encode, RequestLoadoutPacket::decode, RequestLoadoutPacket::handle);
+        CHANNEL.registerMessage(id++, SelectLoadoutPacket.class,
+                SelectLoadoutPacket::encode, SelectLoadoutPacket::decode, SelectLoadoutPacket::handle);
     }
 
     /** 把服务端当前装备目录下发给指定玩家。 */
@@ -81,6 +88,14 @@ public final class ArcadeNetwork {
     public static void sendDeathCam(ServerPlayer player, boolean active, String killerName) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new DeathCamPacket(active, killerName));
     }
+
+        public static void openLoadout(ServerPlayer player) {
+                LoadoutSet set = ArcadeLoadoutStore.get(player.server).getOrCreateSet(player.getUUID(),
+                                DefaultLoadoutCatalog.defaultLoadout(Act0Arcade.services().registry()));
+                syncUnlocks(player);
+                syncAttachmentCatalog(player);
+                CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenLoadoutPacket(set));
+        }
 
         public static void closeRoomBrowser(ServerPlayer player) {
                 CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new CloseRoomBrowserPacket());

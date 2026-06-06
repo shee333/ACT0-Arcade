@@ -16,6 +16,7 @@ import java.util.List;
  * <pre>
  * {
  *   active: 0,
+ *   default: 0,
  *   loadouts: [ {Loadout}, {Loadout}, ... ]
  * }
  * </pre>
@@ -23,6 +24,7 @@ import java.util.List;
 public final class LoadoutSetCodec {
 
     private static final String KEY_ACTIVE = "active";
+    private static final String KEY_DEFAULT = "default";
     private static final String KEY_LOADOUTS = "loadouts";
 
     private LoadoutSetCodec() {
@@ -31,6 +33,7 @@ public final class LoadoutSetCodec {
     public static CompoundTag write(LoadoutSet set) {
         CompoundTag tag = new CompoundTag();
         tag.putInt(KEY_ACTIVE, set.activeIndex());
+        tag.putInt(KEY_DEFAULT, set.defaultIndex());
         ListTag list = new ListTag();
         for (Loadout loadout : set.all()) {
             list.add(LoadoutCodec.write(loadout));
@@ -41,6 +44,7 @@ public final class LoadoutSetCodec {
 
     public static LoadoutSet read(CompoundTag tag) {
         int active = tag.contains(KEY_ACTIVE) ? tag.getInt(KEY_ACTIVE) : 0;
+        int def = tag.contains(KEY_DEFAULT) ? tag.getInt(KEY_DEFAULT) : active;
         List<Loadout> loadouts = new ArrayList<>();
         ListTag list = tag.getList(KEY_LOADOUTS, Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
@@ -49,6 +53,6 @@ public final class LoadoutSetCodec {
         if (loadouts.isEmpty()) {
             loadouts.add(new Loadout("配装 1"));
         }
-        return new LoadoutSet(loadouts, active);
+        return new LoadoutSet(loadouts, active, def);
     }
 }

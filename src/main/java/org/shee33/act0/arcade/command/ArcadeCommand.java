@@ -17,7 +17,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.shee33.act0.arcade.Act0Arcade;
 import org.shee33.act0.arcade.arena.ArcadeArena;
@@ -39,7 +38,6 @@ import org.shee33.act0.arcade.match.ArcadeServices;
 import org.shee33.act0.arcade.match.MatchLauncher;
 import org.shee33.act0.arcade.mode.MatchSettings;
 import org.shee33.act0.arcade.network.ArcadeNetwork;
-import org.shee33.act0.arcade.network.OpenLoadoutPacket;
 import org.shee33.act0.arcade.storage.ArcadeLoadoutStore;
 import org.shee33.act0.arcade.storage.ArcadePlayerUnlocks;
 import org.shee33.act0.arcade.storage.ArenaRegistry;
@@ -482,6 +480,10 @@ public final class ArcadeCommand {
 
     private static int loadoutSetClass(CommandContext<CommandSourceStack> ctx, PlayerClassType type) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
+        if (!services().matches().canChangeLoadout(player.getUUID())) {
+            ctx.getSource().sendFailure(Component.literal("§c战斗中无法修改配装。"));
+            return 0;
+        }
         Loadout loadout = ownLoadout(ctx.getSource(), player);
         loadout.setClassType(type);
         ArcadeLoadoutStore.get(ctx.getSource().getServer()).save(player.getUUID(), loadout);
@@ -491,6 +493,10 @@ public final class ArcadeCommand {
 
     private static int loadoutSetSlot(CommandContext<CommandSourceStack> ctx, LoadoutSlot slot) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
+        if (!services().matches().canChangeLoadout(player.getUUID())) {
+            ctx.getSource().sendFailure(Component.literal("§c战斗中无法修改配装。"));
+            return 0;
+        }
         String itemKey = StringArgumentType.getString(ctx, "item");
         LoadoutRegistry registry = services().registry();
         Optional<LoadoutItem> item = registry.find(itemKey);
@@ -513,6 +519,10 @@ public final class ArcadeCommand {
 
     private static int loadoutClearSlot(CommandContext<CommandSourceStack> ctx, LoadoutSlot slot) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
+        if (!services().matches().canChangeLoadout(player.getUUID())) {
+            ctx.getSource().sendFailure(Component.literal("§c战斗中无法修改配装。"));
+            return 0;
+        }
         Loadout loadout = ownLoadout(ctx.getSource(), player);
         loadout.setSlot(slot, null);
         ArcadeLoadoutStore.get(ctx.getSource().getServer()).save(player.getUUID(), loadout);
@@ -522,15 +532,11 @@ public final class ArcadeCommand {
 
     private static int loadoutEdit(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
-        ArcadeLoadoutStore store = ArcadeLoadoutStore.get(ctx.getSource().getServer());
-        org.shee33.act0.arcade.loadout.LoadoutSet set = store.getOrCreateSet(player.getUUID(),
-            DefaultLoadoutCatalog.defaultLoadout(services().registry()));
-        // 先同步该玩家的解锁状态，确保二级武器界面能正确显示灰蒙版
-        ArcadeNetwork.syncUnlocks(player);
-        ArcadeNetwork.syncAttachmentCatalog(player);
-        ArcadeNetwork.CHANNEL.send(
-                PacketDistributor.PLAYER.with(() -> player),
-            new OpenLoadoutPacket(set));
+        if (!services().matches().canChangeLoadout(player.getUUID())) {
+            ctx.getSource().sendFailure(Component.literal("§c战斗中无法打开配装。"));
+            return 0;
+        }
+        ArcadeNetwork.openLoadout(player);
         return 1;
     }
 

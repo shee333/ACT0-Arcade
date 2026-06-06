@@ -63,6 +63,15 @@ public final class MatchManager {
         return matchByPlayer.containsKey(playerId);
     }
 
+    public boolean canChangeLoadout(UUID playerId) {
+        String matchId = matchByPlayer.get(playerId);
+        if (matchId == null) {
+            return true;
+        }
+        ArcadeMatch match = matches.get(matchId);
+        return match != null && match.canChangeLoadout(playerId);
+    }
+
     /** 玩家所在对局 id；不在任何对局返回 {@code null}。 */
     public String matchIdOf(UUID playerId) {
         return matchByPlayer.get(playerId);

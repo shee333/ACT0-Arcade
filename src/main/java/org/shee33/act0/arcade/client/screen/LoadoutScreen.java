@@ -14,6 +14,7 @@ import org.shee33.act0.arcade.loadout.LoadoutSlot;
 import org.shee33.act0.arcade.loadout.PlayerClassType;
 import org.shee33.act0.arcade.network.ArcadeNetwork;
 import org.shee33.act0.arcade.network.SaveLoadoutPacket;
+import org.shee33.act0.arcade.network.SelectLoadoutPacket;
 
 import java.util.List;
 
@@ -28,7 +29,11 @@ import java.util.List;
  */
 public final class LoadoutScreen extends Screen {
 
-    private static final int PANEL_W = 280;
+    private static final int PANEL_W = 560;
+    private static final int PANEL_H = 420;
+    private static final int CARD_W = 156;
+    private static final int CARD_H = 62;
+    private static final int CARD_GAP = 8;
     private static final int ROW_H = 20;
     private static final int HEADER_H = 38;
 
@@ -54,26 +59,18 @@ public final class LoadoutScreen extends Screen {
     }
 
     private int panelHeight() {
-        return HEADER_H + ROW_H * (LoadoutSlot.values().length + 2) + 36;
+        return PANEL_H;
     }
 
     @Override
     protected void init() {
-        int h = panelHeight();
         this.left = (this.width - PANEL_W) / 2;
-        this.top = (this.height - h) / 2;
+        this.top = (this.height - PANEL_H) / 2;
 
-        int rowX = left + 12;
-        int rowW = PANEL_W - 24;
+        int rowX = editorX();
+        int rowW = editorW();
         int btnW = 18;
-        int y = top + HEADER_H;
-
-        // 方案切换行
-        addRenderableWidget(Button.builder(Component.literal("◀"), b -> cycleProfile(-1))
-            .bounds(rowX + rowW - btnW * 2 - 2, y, btnW, 16).build());
-        addRenderableWidget(Button.builder(Component.literal("▶"), b -> cycleProfile(1))
-            .bounds(rowX + rowW - btnW, y, btnW, 16).build());
-        y += ROW_H;
+        int y = top + 72;
 
         // 职业切换行
         addRenderableWidget(Button.builder(Component.literal("◀"), b -> cycleClass(-1))
@@ -90,16 +87,16 @@ public final class LoadoutScreen extends Screen {
             y += ROW_H;
         }
 
-        // 底部：保存 / 取消
-        int footY = top + h - 26;
-        addRenderableWidget(Button.builder(Component.literal("§a保存"), b -> saveAndClose())
-                .bounds(left + PANEL_W / 2 - 84, footY, 80, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("取消"), b -> onClose())
-                .bounds(left + PANEL_W / 2 + 4, footY, 80, 20).build());
-    }
-
-    private void cycleProfile(int dir) {
-        activeIndex = Math.floorMod(activeIndex + dir, LoadoutSet.MAX_SLOTS);
+        // 底部：保存 / 下次复活使用 / 默认 / 关闭
+        int footY = top + PANEL_H - 30;
+        addRenderableWidget(Button.builder(Component.literal("§a保存修改"), b -> saveOnly())
+            .bounds(rowX, footY, 82, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("下次复活使用"), b -> selectForNextRespawn())
+            .bounds(rowX + 88, footY, 108, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("设为默认"), b -> setDefaultLoadout())
+            .bounds(rowX + 202, footY, 82, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("关闭"), b -> onClose())
+            .bounds(rowX + rowW - 54, footY, 54, 20).build());
     }
 
     private void cycleClass(int dir) {
@@ -139,31 +136,37 @@ public final class LoadoutScreen extends Screen {
         }
     }
 
-    private void saveAndClose() {
+    private void saveOnly() {
+        ArcadeNetwork.CHANNEL.sendToServer(new SaveLoadoutPacket(activeIndex, working(), false, false));
+    }
+
+    private void selectForNextRespawn() {
         loadoutSet.setActiveIndex(activeIndex);
-        ArcadeNetwork.CHANNEL.sendToServer(new SaveLoadoutPacket(activeIndex, working()));
-        onClose();
+        ArcadeNetwork.CHANNEL.sendToServer(new SelectLoadoutPacket(activeIndex, SelectLoadoutPacket.Action.SELECT_NEXT));
+    }
+
+    private void setDefaultLoadout() {
+        loadoutSet.setDefaultIndex(activeIndex);
+        loadoutSet.setActiveIndex(activeIndex);
+        ArcadeNetwork.CHANNEL.sendToServer(new SelectLoadoutPacket(activeIndex, SelectLoadoutPacket.Action.SET_DEFAULT));
     }
 
     @Override
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         renderBackground(gg);
 
-        int h = panelHeight();
-        PixelTheme.panel(gg, left, top, PANEL_W, h);
+        PixelTheme.panel(gg, left, top, PANEL_W, PANEL_H);
 
         // 标题
         gg.drawCenteredString(font, "§l配装", left + PANEL_W / 2, top + 10, PixelTheme.ACCENT);
+        gg.drawString(font, "§7点击左侧方案卡片进行修改", left + 18, top + 30, PixelTheme.TEXT_DIM, false);
+        gg.drawString(font, "§7当前编辑：§f第 " + (activeIndex + 1) + " 套", editorX(), top + 46, PixelTheme.TEXT_DIM, false);
 
-        int rowX = left + 12;
-        int rowW = PANEL_W - 24;
-        int y = top + HEADER_H;
+        renderProfileCards(gg, mouseX, mouseY);
 
-        // 方案行
-        PixelTheme.row(gg, rowX, y - 2, rowW, 18, false);
-        gg.drawString(font, "方案", rowX + 4, y + 4, PixelTheme.TEXT_DIM, false);
-        gg.drawString(font, "第 " + (activeIndex + 1) + " 套", rowX + 60, y + 4, PixelTheme.TEXT, false);
-        y += ROW_H;
+        int rowX = editorX();
+        int rowW = editorW();
+        int y = top + 72;
 
         // 职业行
         PixelTheme.row(gg, rowX, y - 2, rowW, 18, false);
@@ -195,6 +198,74 @@ public final class LoadoutScreen extends Screen {
         }
 
         super.render(gg, mouseX, mouseY, partialTick);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        for (int i = 0; i < LoadoutSet.MAX_SLOTS; i++) {
+            int x = cardX();
+            int y = cardY(i);
+            if (mouseX >= x && mouseX <= x + CARD_W && mouseY >= y && mouseY <= y + CARD_H) {
+                activeIndex = i;
+                return true;
+            }
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    private int cardX() {
+        return left + 18;
+    }
+
+    private int cardY(int index) {
+        return top + 56 + index * (CARD_H + CARD_GAP);
+    }
+
+    private int editorX() {
+        return left + CARD_W + 44;
+    }
+
+    private int editorW() {
+        return PANEL_W - CARD_W - 62;
+    }
+
+    private void renderProfileCards(GuiGraphics gg, int mouseX, int mouseY) {
+        for (int i = 0; i < LoadoutSet.MAX_SLOTS; i++) {
+            int x = cardX();
+            int y = cardY(i);
+            boolean selected = i == activeIndex;
+            boolean active = i == loadoutSet.activeIndex();
+            boolean def = i == loadoutSet.defaultIndex();
+            boolean hovered = mouseX >= x && mouseX <= x + CARD_W && mouseY >= y && mouseY <= y + CARD_H;
+            PixelTheme.row(gg, x, y, CARD_W, CARD_H, selected || hovered);
+            int border = selected ? PixelTheme.ACCENT : (active ? 0xFF9ACD68 : 0x55395B2F);
+            gg.fill(x, y, x + CARD_W, y + 1, border);
+            gg.fill(x, y + CARD_H - 1, x + CARD_W, y + CARD_H, border);
+            gg.fill(x, y, x + 1, y + CARD_H, border);
+            gg.fill(x + CARD_W - 1, y, x + CARD_W, y + CARD_H, border);
+
+            Loadout loadout = loadoutSet.get(i);
+            String tags = (def ? " §e默认" : "") + (active ? " §a已选" : "");
+            gg.drawString(font, "§f第 " + (i + 1) + " 套" + tags, x + 6, y + 5, PixelTheme.TEXT, false);
+            gg.drawString(font, "§7" + classLabel(loadout.classType()), x + 6, y + 17, PixelTheme.TEXT_DIM, false);
+
+            renderCardWeapon(gg, loadout, LoadoutSlot.PRIMARY_WEAPON, x + 8, y + 34);
+            renderCardWeapon(gg, loadout, LoadoutSlot.SECONDARY_WEAPON, x + 58, y + 34);
+            renderCardWeapon(gg, loadout, LoadoutSlot.MELEE, x + 108, y + 34);
+        }
+    }
+
+    private void renderCardWeapon(GuiGraphics gg, Loadout loadout, LoadoutSlot slot, int x, int y) {
+        String key = loadout.slotItemKey(slot).orElse(null);
+        if (key != null) {
+            ItemStack icon = ClientCatalog.iconFor(key);
+            if (!icon.isEmpty()) {
+                gg.renderItem(icon, x, y);
+                return;
+            }
+        }
+        gg.fill(x + 1, y + 1, x + 15, y + 15, 0x55000000);
+        gg.drawCenteredString(font, "-", x + 8, y + 4, PixelTheme.TEXT_DIM);
     }
 
     private static String classLabel(PlayerClassType type) {

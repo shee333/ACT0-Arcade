@@ -1333,4 +1333,11 @@ public final class ArcadeMatch {
     public boolean contains(UUID playerId) {
         return sideOf.containsKey(playerId);
     }
+
+    public boolean canChangeLoadout(UUID playerId) {
+        if (!sideOf.containsKey(playerId) || phase == MatchPhase.ENDED || phase == MatchPhase.MATCH_RESULT) {
+            return false;
+        }
+        return deathCamView.containsKey(playerId) || !alive.contains(playerId);
+    }
 }

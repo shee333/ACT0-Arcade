@@ -6,8 +6,8 @@ import java.util.List;
 /**
  * 一个玩家的多套配装集合。
  *
- * <p>首版固定 5 个方案槽，{@link #activeIndex()} 表示当前激活方案；开局/重生发装备时使用激活方案，
- * GUI 可切换不同方案编辑。旧版单套配装会迁移为第 1 套。
+ * <p>固定 5 个方案槽，{@link #activeIndex()} 表示下次发装备使用的方案；{@link #defaultIndex()}
+ * 表示玩家默认方案。旧版单套配装会迁移为第 1 套。
  */
 public final class LoadoutSet {
 
@@ -15,13 +15,19 @@ public final class LoadoutSet {
 
     private final List<Loadout> loadouts = new ArrayList<>(MAX_SLOTS);
     private int activeIndex;
+    private int defaultIndex;
 
     public LoadoutSet(List<Loadout> loadouts, int activeIndex) {
+        this(loadouts, activeIndex, 0);
+    }
+
+    public LoadoutSet(List<Loadout> loadouts, int activeIndex, int defaultIndex) {
         for (int i = 0; i < MAX_SLOTS; i++) {
             Loadout l = loadouts != null && i < loadouts.size() ? loadouts.get(i) : null;
             this.loadouts.add(l != null ? l : emptyLoadout(i));
         }
         this.activeIndex = clamp(activeIndex);
+        this.defaultIndex = clamp(defaultIndex);
     }
 
     public static LoadoutSet single(Loadout loadout) {
@@ -34,8 +40,16 @@ public final class LoadoutSet {
         return activeIndex;
     }
 
+    public int defaultIndex() {
+        return defaultIndex;
+    }
+
     public void setActiveIndex(int index) {
         this.activeIndex = clamp(index);
+    }
+
+    public void setDefaultIndex(int index) {
+        this.defaultIndex = clamp(index);
     }
 
     public Loadout active() {

@@ -83,12 +83,35 @@ public final class ArcadeLoadoutStore extends SavedData {
 
     /** 保存玩家某个方案槽，并把它设为激活方案。 */
     public void save(UUID playerId, int index, Loadout loadout) {
+        save(playerId, index, loadout, true, false);
+    }
+
+    /** 保存玩家某个方案槽，并按需设为激活/默认方案。 */
+    public void save(UUID playerId, int index, Loadout loadout, boolean activate, boolean makeDefault) {
         LoadoutSet set = loadouts.get(playerId);
         if (set == null) {
             set = LoadoutSet.single(loadout);
             loadouts.put(playerId, set);
         }
         set.set(index, loadout);
+        if (activate) {
+            set.setActiveIndex(index);
+        }
+        if (makeDefault) {
+            set.setDefaultIndex(index);
+        }
+        setDirty();
+    }
+
+    public void selectActive(UUID playerId, int index, Loadout fallback) {
+        LoadoutSet set = getOrCreateSet(playerId, fallback);
+        set.setActiveIndex(index);
+        setDirty();
+    }
+
+    public void setDefault(UUID playerId, int index, Loadout fallback) {
+        LoadoutSet set = getOrCreateSet(playerId, fallback);
+        set.setDefaultIndex(index);
         set.setActiveIndex(index);
         setDirty();
     }
