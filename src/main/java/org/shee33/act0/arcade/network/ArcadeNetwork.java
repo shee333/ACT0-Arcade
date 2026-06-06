@@ -76,8 +76,8 @@ public final class ArcadeNetwork {
     }
 
     /** 向玩家下发死亡相机/滤镜状态。 */
-    public static void sendDeathCam(ServerPlayer player, boolean active) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new DeathCamPacket(active));
+    public static void sendDeathCam(ServerPlayer player, boolean active, String killerName) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new DeathCamPacket(active, killerName));
     }
 
     /** 把服务端当前配件目录下发给指定玩家。 */

@@ -53,5 +53,13 @@ public final class DeathCamOverlay {
         int tw = font.width(title);
         gg.drawString(font, title, -tw / 2, -4, 0xFFFFFFFF, true);
         gg.pose().popPose();
+
+        // 凶手提示：镜头已朝向击杀者并对其高亮发光，这里补一行文字说明。
+        String killer = ClientDeathCam.killerName();
+        if (killer != null && !killer.isBlank()) {
+            String line = "§7被 §c" + killer + " §7击杀";
+            int lw = font.width(line);
+            gg.drawString(font, line, (w - lw) / 2, h / 2 + 4, 0xFFFFFFFF, true);
+        }
     }
 }

@@ -100,6 +100,8 @@ public final class ArcadeMatch {
     private final Map<UUID, Vec3> countdownLock = new HashMap<>();
     /** 死亡观战期间锁定相机的位置与朝向（钉在死亡点，禁止自由飞）。 */
     private final Map<UUID, DeathView> deathCamView = new HashMap<>();
+    /** 死者 → 其死亡相机正盯着的击杀者（用于持续追踪朝向与高亮发光管理）。 */
+    private final Map<UUID, UUID> deathCamKiller = new HashMap<>();
 
     /** 死亡补给箱标记 NBT 键：拾取后补满虚拟弹药。 */
     public static final String AMMO_CRATE_KEY = "Act0AmmoCrate";
@@ -398,7 +400,7 @@ public final class ArcadeMatch {
         if (settings.scoringMode() == ScoringMode.KILL_COUNT) {
             handleKillScoring(victimId, killerId);
         } else {
-            handleRoundElimination(victimId);
+            handleRoundElimination(victimId, killerId);
         }
         return true;
     }
@@ -438,7 +440,7 @@ public final class ArcadeMatch {
         ServerPlayer victim = player(victimId);
         if (victim != null) {
             victim.getInventory().clearContent();
-            enterSpectator(victim);
+            enterSpectator(victim, killerId);
         }
         PhaseTimer t = new PhaseTimer();
         t.startSeconds(settings.reEquipProtectionSeconds());
@@ -447,11 +449,15 @@ public final class ArcadeMatch {
     }
 
     private void handleRoundElimination(UUID victimId) {
+        handleRoundElimination(victimId, null);
+    }
+
+    private void handleRoundElimination(UUID victimId, UUID killerId) {
         alive.remove(victimId);
         ServerPlayer victim = player(victimId);
         if (victim != null) {
             victim.getInventory().clearContent();
-            enterSpectator(victim);
+            enterSpectator(victim, killerId);
             actionBar(victimId, "§c阵亡 · 等待本回合结束");
         }
         evaluateRoundElimination();
@@ -522,6 +528,7 @@ public final class ArcadeMatch {
 
     private void finish() {
         releaseCountdownLock();
+        clearAllKillerGlow();
         respawnTimers.clear();
         respawnLastSecond.clear();
         deathCamView.clear();
@@ -563,9 +570,12 @@ public final class ArcadeMatch {
         respawnLastSecond.remove(playerId);
         countdownLock.remove(playerId);
         deathCamView.remove(playerId);
+        clearKillerGlow(playerId);
         boolean wasAlive = alive.remove(playerId);
         ServerPlayer p = player(playerId);
         if (p != null) {
+            // 若该掉线者正被别的死者高亮，关掉他的发光，避免残留。
+            p.setGlowingTag(false);
             exitSpectator(p);
             bossBar.removePlayer(p);
             sidebar.hideFrom(p);
@@ -744,23 +754,40 @@ public final class ArcadeMatch {
 
     // ---- 观察者 / 开局移动锁 ----
 
-    /** 进入观察者视角（死亡等待时），记录原始游戏模式以便复活时还原，并锁定死亡相机。 */
-    private void enterSpectator(ServerPlayer player) {
+    /** 进入观察者视角（死亡等待时），记录原始游戏模式以便复活时还原，锁定死亡相机并朝向击杀者。 */
+    private void enterSpectator(ServerPlayer player, UUID killerId) {
         GameType current = player.gameMode.getGameModeForPlayer();
         if (current != GameType.SPECTATOR) {
             originalGameMode.put(player.getUUID(), current);
         }
-        // 记录死亡相机点：站在死亡点上方略高、俯视，营造"钉在死亡现场"的固定视角。
-        deathCamView.put(player.getUUID(), new DeathView(
-                player.getX(), player.getEyeY() + 0.6, player.getZ(), player.getYRot(), 35f));
+        // 死亡相机点：站在死亡点上方略高；若有击杀者则镜头朝向击杀者，否则俯视。
+        float yaw = player.getYRot();
+        float pitch = 35f;
+        ServerPlayer killer = killerId != null ? player(killerId) : null;
+        boolean validKiller = killer != null && killer.isAlive() && !killer.getUUID().equals(player.getUUID());
+        double camX = player.getX();
+        double camY = player.getEyeY() + 0.6;
+        double camZ = player.getZ();
+        if (validKiller) {
+            float[] look = lookAt(camX, camY, camZ, killer.getX(), killer.getEyeY(), killer.getZ());
+            yaw = look[0];
+            pitch = look[1];
+            // 击杀者对死者高亮发光（仅死者客户端可见，复活时关闭）。
+            killer.setGlowingTag(true);
+            deathCamKiller.put(player.getUUID(), killerId);
+        }
+        deathCamView.put(player.getUUID(), new DeathView(camX, camY, camZ, yaw, pitch));
         player.setGameMode(GameType.SPECTATOR);
-        ArcadeNetwork.sendDeathCam(player, true);
+        player.connection.teleport(camX, camY, camZ, yaw, pitch);
+        String killerName = validKiller ? killer.getGameProfile().getName() : "";
+        ArcadeNetwork.sendDeathCam(player, true, killerName);
     }
 
-    /** 退出观察者视角，还原至记录的原始游戏模式（默认生存），清除死亡相机。 */
+    /** 退出观察者视角，还原至记录的原始游戏模式（默认生存），清除死亡相机与击杀者高亮。 */
     private void exitSpectator(ServerPlayer player) {
         deathCamView.remove(player.getUUID());
-        ArcadeNetwork.sendDeathCam(player, false);
+        clearKillerGlow(player.getUUID());
+        ArcadeNetwork.sendDeathCam(player, false, "");
         if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
             return;
         }
@@ -768,24 +795,77 @@ public final class ArcadeMatch {
         player.setGameMode(original);
     }
 
-    /** 死亡观战每刻把旁观相机钉回死亡点，禁止玩家自由飞行观战。 */
+    /** 关闭某死者所盯击杀者的高亮（若该击杀者未被别的死者同时盯着）。 */
+    private void clearKillerGlow(UUID viewerId) {
+        UUID killerId = deathCamKiller.remove(viewerId);
+        if (killerId == null) {
+            return;
+        }
+        if (deathCamKiller.containsValue(killerId)) {
+            return; // 仍被其他死者盯着，保持发光
+        }
+        ServerPlayer killer = player(killerId);
+        if (killer != null) {
+            killer.setGlowingTag(false);
+        }
+    }
+
+    /** 清除所有击杀者高亮（对局结束/中止时）。 */
+    private void clearAllKillerGlow() {
+        for (UUID killerId : deathCamKiller.values()) {
+            ServerPlayer killer = player(killerId);
+            if (killer != null) {
+                killer.setGlowingTag(false);
+            }
+        }
+        deathCamKiller.clear();
+    }
+
+    /** 死亡观战每刻把旁观相机钉回死亡点并持续朝向击杀者，禁止玩家自由飞行观战。 */
     private void enforceDeathCam() {
         if (deathCamView.isEmpty()) {
             return;
         }
         for (Map.Entry<UUID, DeathView> e : deathCamView.entrySet()) {
-            ServerPlayer p = player(e.getKey());
+            UUID viewerId = e.getKey();
+            ServerPlayer p = player(viewerId);
             if (p == null) {
                 continue;
             }
             DeathView v = e.getValue();
+            // 击杀者仍存活时持续追踪其方向，制造"死亡回放盯着凶手"的电影感。
+            float yaw = p.getYRot();
+            float pitch = p.getXRot();
+            boolean reaim = false;
+            UUID killerId = deathCamKiller.get(viewerId);
+            if (killerId != null) {
+                ServerPlayer killer = player(killerId);
+                if (killer != null && killer.isAlive()) {
+                    float[] look = lookAt(v.x(), v.y(), v.z(), killer.getX(), killer.getEyeY(), killer.getZ());
+                    yaw = look[0];
+                    pitch = look[1];
+                    reaim = true;
+                }
+            }
             double dx = p.getX() - v.x();
             double dz = p.getZ() - v.z();
-            if (dx * dx + dz * dz > 0.04 || Math.abs(p.getY() - v.y()) > 0.5) {
-                p.connection.teleport(v.x(), v.y(), v.z(), p.getYRot(), p.getXRot());
+            boolean offPos = dx * dx + dz * dz > 0.04 || Math.abs(p.getY() - v.y()) > 0.5;
+            if (offPos || reaim) {
+                p.connection.teleport(v.x(), v.y(), v.z(), yaw, pitch);
                 p.setDeltaMovement(0.0, 0.0, 0.0);
             }
         }
+    }
+
+    /** 计算从相机点看向目标点的 yaw/pitch（度）。 */
+    private static float[] lookAt(double fromX, double fromY, double fromZ, double toX, double toY, double toZ) {
+        double dx = toX - fromX;
+        double dy = toY - fromY;
+        double dz = toZ - fromZ;
+        double horiz = Math.sqrt(dx * dx + dz * dz);
+        float yaw = (float) (Math.toDegrees(Math.atan2(-dx, dz)));
+        float pitch = (float) (-Math.toDegrees(Math.atan2(dy, horiz)));
+        return new float[]{yaw, pitch};
     }
 
     /** 死亡相机锁定点。 */

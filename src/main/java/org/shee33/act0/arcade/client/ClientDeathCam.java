@@ -10,19 +10,26 @@ public final class ClientDeathCam {
 
     private static volatile boolean active = false;
     private static volatile long activatedAtMs = 0L;
+    private static volatile String killerName = "";
 
     private ClientDeathCam() {
     }
 
-    public static void setActive(boolean active) {
+    public static void setActive(boolean active, String killerName) {
         if (active && !ClientDeathCam.active) {
             activatedAtMs = System.currentTimeMillis();
         }
         ClientDeathCam.active = active;
+        ClientDeathCam.killerName = killerName != null ? killerName : "";
     }
 
     public static boolean isActive() {
         return active;
+    }
+
+    /** 击杀者名（可能为空，表示自杀/环境死亡）。 */
+    public static String killerName() {
+        return killerName;
     }
 
     /** 死亡滤镜淡入进度 0~1（前 0.6 秒淡入）。 */

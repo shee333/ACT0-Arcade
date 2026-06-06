@@ -17,23 +17,26 @@ import java.util.function.Supplier;
 public final class DeathCamPacket {
 
     private final boolean active;
+    private final String killerName;
 
-    public DeathCamPacket(boolean active) {
+    public DeathCamPacket(boolean active, String killerName) {
         this.active = active;
+        this.killerName = killerName != null ? killerName : "";
     }
 
     public static void encode(DeathCamPacket msg, FriendlyByteBuf buf) {
         buf.writeBoolean(msg.active);
+        buf.writeUtf(msg.killerName);
     }
 
     public static DeathCamPacket decode(FriendlyByteBuf buf) {
-        return new DeathCamPacket(buf.readBoolean());
+        return new DeathCamPacket(buf.readBoolean(), buf.readUtf());
     }
 
     public static void handle(DeathCamPacket msg, Supplier<NetworkEvent.Context> ctx) {
         NetworkEvent.Context context = ctx.get();
         context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
-                () -> () -> ClientDeathCam.setActive(msg.active)));
+                () -> () -> ClientDeathCam.setActive(msg.active, msg.killerName)));
         context.setPacketHandled(true);
     }
 }
