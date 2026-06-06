@@ -121,8 +121,17 @@ public final class ArcadeCommand {
         root.then(Commands.literal("reload")
                 .requires(src -> src.hasPermission(2))
                 .executes(ArcadeCommand::reloadCatalog));
+        root.then(Commands.literal("cleandrops")
+            .requires(src -> src.hasPermission(2))
+            .executes(ArcadeCommand::cleanDrops));
 
         dispatcher.register(root);
+    }
+
+    private static int cleanDrops(CommandContext<CommandSourceStack> ctx) {
+        int removed = services().matches().cleanupAmmoCrates(ctx.getSource().getServer());
+        ctx.getSource().sendSuccess(() -> Component.literal("§a已清理地面弹药补给箱 §e" + removed + " §a个。"), true);
+        return removed;
     }
 
         private static LiteralArgumentBuilder<CommandSourceStack> buildSettingsBranch() {

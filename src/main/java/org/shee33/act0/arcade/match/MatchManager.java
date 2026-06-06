@@ -1,6 +1,8 @@
 package org.shee33.act0.arcade.match;
 
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -122,6 +124,20 @@ public final class MatchManager {
         return matches.size();
     }
 
+    /** 清理所有已加载世界中的街机弹药补给箱。 */
+    public int cleanupAmmoCrates(MinecraftServer server) {
+        int removed = 0;
+        for (ServerLevel level : server.getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (entity instanceof ItemEntity item && isAmmoCrate(item.getItem())) {
+                    item.discard();
+                    removed++;
+                }
+            }
+        }
+        return removed;
+    }
+
     /** 中止并移除全部对局（如服务器停止）。 */
     public void abortAll() {
         for (ArcadeMatch match : matches.values()) {
@@ -192,7 +208,7 @@ public final class MatchManager {
     public void onItemPickup(EntityItemPickupEvent event) {
         ItemEntity itemEntity = event.getItem();
         ItemStack stack = itemEntity.getItem();
-        if (!stack.hasTag() || !stack.getTag().getBoolean(ArcadeMatch.AMMO_CRATE_KEY)) {
+        if (!isAmmoCrate(stack)) {
             return;
         }
         event.setCanceled(true); // 补给箱不进背包
@@ -205,6 +221,10 @@ public final class MatchManager {
         player.playNotifySound(SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, 0.8f, 1.5f);
         player.displayClientMessage(Component.literal(
                 refilled > 0 ? "§b补给箱 §7» 弹药已补满" : "§7补给箱：没有可补给的枪"), true);
+    }
+
+    private static boolean isAmmoCrate(ItemStack stack) {
+        return stack.hasTag() && stack.getTag().getBoolean(ArcadeMatch.AMMO_CRATE_KEY);
     }
 
     private UUID resolveKiller(LivingDeathEvent event) {

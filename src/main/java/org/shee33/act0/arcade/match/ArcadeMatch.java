@@ -15,6 +15,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.world.BossEvent;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -112,6 +113,8 @@ public final class ArcadeMatch {
     private final Map<UUID, UUID> deathCamKiller = new HashMap<>();
     /** 玩家最近一次受伤 tick，用于街机“呼吸回血”。 */
     private final Map<UUID, Long> lastHurtTick = new HashMap<>();
+    /** 本对局生成的弹药补给箱实体 UUID，对局结束时清理。 */
+    private final Set<UUID> ammoCrates = new LinkedHashSet<>();
     /** 本对局创建的原版计分板队伍：用于隐藏敌方头顶名、保留队友头顶名。 */
     private final List<PlayerTeam> nameTagTeams = new ArrayList<>();
 
@@ -473,6 +476,7 @@ public final class ArcadeMatch {
         entity.setUnlimitedLifetime();
         entity.setDefaultPickUpDelay();
         victim.serverLevel().addFreshEntity(entity);
+        ammoCrates.add(entity.getUUID());
     }
 
     private void handleKillScoring(UUID victimId, UUID killerId) {
@@ -588,6 +592,7 @@ public final class ArcadeMatch {
 
     private void finish() {
         releaseCountdownLock();
+        cleanupAmmoCrates();
         clearAllTeamHighlights();
         clearNameTagTeams();
         clearAllKillerGlow();
@@ -620,6 +625,20 @@ public final class ArcadeMatch {
         }
         personalBossBars.clear();
         phase = MatchPhase.ENDED;
+    }
+
+    private void cleanupAmmoCrates() {
+        if (ammoCrates.isEmpty()) {
+            return;
+        }
+        for (ServerLevel level : server.getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (ammoCrates.contains(entity.getUUID())) {
+                    entity.discard();
+                }
+            }
+        }
+        ammoCrates.clear();
     }
 
     /**
