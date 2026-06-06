@@ -238,7 +238,7 @@ public final class ArcadeMatch {
             }
             exitSpectator(player);
             enterAdventureMode(player);
-            spawnForRound(player, sideOf.get(id));
+            spawnForRound(player, id, sideOf.get(id));
             equip(player);
             player.setHealth(player.getMaxHealth());
             applyCountdownLock(player);
@@ -709,7 +709,7 @@ public final class ArcadeMatch {
         if (phase == MatchPhase.COMBAT || phase == MatchPhase.COUNTDOWN) {
             exitSpectator(player);
             enterAdventureMode(player);
-            spawnForRound(player, side);
+            spawnForRound(player, id, side);
             equip(player);
             player.setHealth(player.getMaxHealth());
             alive.add(id);
@@ -753,7 +753,7 @@ public final class ArcadeMatch {
         sidebar.showTo(player);
         if (phase == MatchPhase.COMBAT || phase == MatchPhase.COUNTDOWN) {
             enterAdventureMode(player);
-            spawnForRound(player, side);
+            spawnForRound(player, id, side);
             equip(player);
             player.setHealth(player.getMaxHealth());
             alive.add(id);
@@ -958,12 +958,40 @@ public final class ArcadeMatch {
         TeleportHelper.teleport(player, arena.sideSpawn(side));
     }
 
-    private void spawnForRound(ServerPlayer player, int side) {
+    private void spawnForRound(ServerPlayer player, UUID playerId, int side) {
         if (settings.respawnPolicy() == RespawnPolicy.RANDOM) {
             TeleportHelper.teleport(player, initialFreeForAllSpawn(side));
+        } else if ("duel_2v2".equals(settings.modeId())) {
+            TeleportHelper.teleport(player, offsetTeamSpawn(playerId, side));
         } else {
             spawnAtSide(player, side);
         }
+    }
+
+    private SpawnPoint offsetTeamSpawn(UUID playerId, int side) {
+        SpawnPoint base = arena.sideSpawn(side);
+        int index = memberIndexInSide(playerId, side);
+        int size = Math.max(1, sides.get(side).size());
+        if (size <= 1) {
+            return base;
+        }
+        double spacing = 1.25;
+        double offset = (index - (size - 1) / 2.0) * spacing;
+        double radians = Math.toRadians(base.yaw() + 90.0);
+        double x = base.x() + Math.cos(radians) * offset;
+        double z = base.z() + Math.sin(radians) * offset;
+        return new SpawnPoint(base.dimension(), x, base.y(), z, base.yaw(), base.pitch());
+    }
+
+    private int memberIndexInSide(UUID playerId, int side) {
+        int index = 0;
+        for (UUID id : sides.get(side)) {
+            if (id.equals(playerId)) {
+                return index;
+            }
+            index++;
+        }
+        return 0;
     }
 
     private SpawnPoint initialFreeForAllSpawn(int side) {
