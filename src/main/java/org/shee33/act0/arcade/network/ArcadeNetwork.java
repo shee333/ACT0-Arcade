@@ -65,12 +65,19 @@ public final class ArcadeNetwork {
                 BuyAttachmentPacket::encode, BuyAttachmentPacket::decode, BuyAttachmentPacket::handle);
         CHANNEL.registerMessage(id++, SyncSidebarPacket.class,
                 SyncSidebarPacket::encode, SyncSidebarPacket::decode, SyncSidebarPacket::handle);
+        CHANNEL.registerMessage(id++, DeathCamPacket.class,
+                DeathCamPacket::encode, DeathCamPacket::decode, DeathCamPacket::handle);
     }
 
     /** 把服务端当前装备目录下发给指定玩家。 */
     public static void syncCatalog(ServerPlayer player, LoadoutRegistry registry) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
                 new SyncCatalogPacket(LoadoutCatalogIO.toDtos(registry)));
+    }
+
+    /** 向玩家下发死亡相机/滤镜状态。 */
+    public static void sendDeathCam(ServerPlayer player, boolean active) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new DeathCamPacket(active));
     }
 
     /** 把服务端当前配件目录下发给指定玩家。 */

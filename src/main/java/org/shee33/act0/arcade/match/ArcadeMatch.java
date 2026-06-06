@@ -28,6 +28,7 @@ import org.shee33.act0.arcade.loadout.PlayerClassType;
 import org.shee33.act0.arcade.loadout.mc.LoadoutApplier;
 import org.shee33.act0.arcade.mode.MatchSettings;
 import org.shee33.act0.arcade.mode.ScoringMode;
+import org.shee33.act0.arcade.network.ArcadeNetwork;
 import org.shee33.act0.arcade.round.MatchPhase;
 import org.shee33.act0.arcade.round.MatchScore;
 import org.shee33.act0.arcade.round.PhaseTimer;
@@ -97,6 +98,8 @@ public final class ArcadeMatch {
     private final Map<UUID, Integer> respawnLastSecond = new HashMap<>();
     /** 开局倒计时期间锁定的位置（防乱跑）。 */
     private final Map<UUID, Vec3> countdownLock = new HashMap<>();
+    /** 死亡观战期间锁定相机的位置与朝向（钉在死亡点，禁止自由飞）。 */
+    private final Map<UUID, DeathView> deathCamView = new HashMap<>();
 
     /** 死亡补给箱标记 NBT 键：拾取后补满虚拟弹药。 */
     public static final String AMMO_CRATE_KEY = "Act0AmmoCrate";
@@ -235,6 +238,7 @@ public final class ArcadeMatch {
                 updateBossBar();
             }
             case COMBAT -> {
+                enforceDeathCam();
                 tickRespawns();
                 if (tickMatchClock()) {
                     return; // 限时到，已收尾
@@ -242,6 +246,7 @@ public final class ArcadeMatch {
                 updateBossBar();
             }
             case ROUND_RESULT -> {
+                enforceDeathCam();
                 int secs = timer.remainingSeconds();
                 if (secs != lastCountdownSecond) {
                     lastCountdownSecond = secs;
@@ -519,6 +524,7 @@ public final class ArcadeMatch {
         releaseCountdownLock();
         respawnTimers.clear();
         respawnLastSecond.clear();
+        deathCamView.clear();
         for (UUID id : sideOf.keySet()) {
             ServerPlayer player = player(id);
             if (player != null) {
@@ -556,6 +562,7 @@ public final class ArcadeMatch {
         respawnTimers.remove(playerId);
         respawnLastSecond.remove(playerId);
         countdownLock.remove(playerId);
+        deathCamView.remove(playerId);
         boolean wasAlive = alive.remove(playerId);
         ServerPlayer p = player(playerId);
         if (p != null) {
@@ -737,22 +744,52 @@ public final class ArcadeMatch {
 
     // ---- 观察者 / 开局移动锁 ----
 
-    /** 进入观察者视角（死亡等待时），记录原始游戏模式以便复活时还原。 */
+    /** 进入观察者视角（死亡等待时），记录原始游戏模式以便复活时还原，并锁定死亡相机。 */
     private void enterSpectator(ServerPlayer player) {
         GameType current = player.gameMode.getGameModeForPlayer();
         if (current != GameType.SPECTATOR) {
             originalGameMode.put(player.getUUID(), current);
         }
+        // 记录死亡相机点：站在死亡点上方略高、俯视，营造"钉在死亡现场"的固定视角。
+        deathCamView.put(player.getUUID(), new DeathView(
+                player.getX(), player.getEyeY() + 0.6, player.getZ(), player.getYRot(), 35f));
         player.setGameMode(GameType.SPECTATOR);
+        ArcadeNetwork.sendDeathCam(player, true);
     }
 
-    /** 退出观察者视角，还原至记录的原始游戏模式（默认生存）。 */
+    /** 退出观察者视角，还原至记录的原始游戏模式（默认生存），清除死亡相机。 */
     private void exitSpectator(ServerPlayer player) {
+        deathCamView.remove(player.getUUID());
+        ArcadeNetwork.sendDeathCam(player, false);
         if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
             return;
         }
         GameType original = originalGameMode.getOrDefault(player.getUUID(), GameType.SURVIVAL);
         player.setGameMode(original);
+    }
+
+    /** 死亡观战每刻把旁观相机钉回死亡点，禁止玩家自由飞行观战。 */
+    private void enforceDeathCam() {
+        if (deathCamView.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<UUID, DeathView> e : deathCamView.entrySet()) {
+            ServerPlayer p = player(e.getKey());
+            if (p == null) {
+                continue;
+            }
+            DeathView v = e.getValue();
+            double dx = p.getX() - v.x();
+            double dz = p.getZ() - v.z();
+            if (dx * dx + dz * dz > 0.04 || Math.abs(p.getY() - v.y()) > 0.5) {
+                p.connection.teleport(v.x(), v.y(), v.z(), p.getYRot(), p.getXRot());
+                p.setDeltaMovement(0.0, 0.0, 0.0);
+            }
+        }
+    }
+
+    /** 死亡相机锁定点。 */
+    private record DeathView(double x, double y, double z, float yaw, float pitch) {
     }
 
     /** 开局倒计时锁定：记录当前位置并施加隐藏减速，防止玩家在准备阶段乱跑。 */
