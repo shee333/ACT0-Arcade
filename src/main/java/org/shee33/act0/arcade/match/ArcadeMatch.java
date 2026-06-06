@@ -111,6 +111,10 @@ public final class ArcadeMatch {
     private final Map<UUID, DeathView> deathCamView = new HashMap<>();
     /** 死者 → 其死亡相机正盯着的击杀者（用于持续追踪朝向与高亮发光管理）。 */
     private final Map<UUID, UUID> deathCamKiller = new HashMap<>();
+    /** 2v2 阵亡后延迟切到队友视角的 tick。 */
+    private final Map<UUID, Long> teammateSpectateSwitchTick = new HashMap<>();
+    /** 当前正在借用队友相机的死者 → 队友。 */
+    private final Map<UUID, UUID> teammateSpectateTarget = new HashMap<>();
     /** 玩家最近一次受伤 tick，用于街机“呼吸回血”。 */
     private final Map<UUID, Long> lastHurtTick = new HashMap<>();
     /** 本对局生成的弹药补给箱实体 UUID，对局结束时清理。 */
@@ -278,6 +282,7 @@ public final class ArcadeMatch {
             }
             case COMBAT -> {
                 enforceDeathCam();
+                tickTeammateSpectate();
                 syncTeamHighlights();
                 tickRespawns();
                 tickBreathHealing();
@@ -288,6 +293,7 @@ public final class ArcadeMatch {
             }
             case ROUND_RESULT -> {
                 enforceDeathCam();
+                tickTeammateSpectate();
                 int secs = timer.remainingSeconds();
                 if (secs != lastCountdownSecond) {
                     lastCountdownSecond = secs;
@@ -537,6 +543,7 @@ public final class ArcadeMatch {
             clearTeamHighlightFor(victim);
             clearTeamHighlightTarget(victim);
             enterSpectator(victim, killerId);
+            scheduleTeammateSpectate(victimId);
             actionBar(victimId, "§c阵亡 · 等待本回合结束");
         }
         evaluateRoundElimination();
@@ -616,6 +623,8 @@ public final class ArcadeMatch {
         respawnTimers.clear();
         respawnLastSecond.clear();
         deathCamView.clear();
+        teammateSpectateSwitchTick.clear();
+        teammateSpectateTarget.clear();
         lastHurtTick.clear();
         for (UUID id : sideOf.keySet()) {
             ServerPlayer player = player(id);
@@ -674,6 +683,8 @@ public final class ArcadeMatch {
         respawnLastSecond.remove(playerId);
         countdownLock.remove(playerId);
         deathCamView.remove(playerId);
+        teammateSpectateSwitchTick.remove(playerId);
+        teammateSpectateTarget.remove(playerId);
         lastHurtTick.remove(playerId);
         boolean wasAlive = alive.remove(playerId);
         ServerPlayer p = player(playerId);
@@ -1088,6 +1099,71 @@ public final class ArcadeMatch {
         return null;
     }
 
+    private void scheduleTeammateSpectate(UUID victimId) {
+        if (!"duel_2v2".equals(settings.modeId())) {
+            return;
+        }
+        teammateSpectateSwitchTick.put(victimId, (long) server.getTickCount() + 70L);
+    }
+
+    private void tickTeammateSpectate() {
+        if (teammateSpectateSwitchTick.isEmpty() && teammateSpectateTarget.isEmpty()) {
+            return;
+        }
+        long now = server.getTickCount();
+        for (Map.Entry<UUID, UUID> e : new ArrayList<>(teammateSpectateTarget.entrySet())) {
+            ServerPlayer viewer = player(e.getKey());
+            ServerPlayer target = player(e.getValue());
+            if (viewer == null || target == null || !target.isAlive() || target.isSpectator() || !alive.contains(e.getValue())) {
+                if (viewer != null) {
+                    viewer.setCamera(viewer);
+                }
+                teammateSpectateTarget.remove(e.getKey());
+            }
+        }
+        for (Map.Entry<UUID, Long> e : new ArrayList<>(teammateSpectateSwitchTick.entrySet())) {
+            if (now < e.getValue() || phase != MatchPhase.COMBAT) {
+                continue;
+            }
+            UUID viewerId = e.getKey();
+            ServerPlayer viewer = player(viewerId);
+            if (viewer == null) {
+                teammateSpectateSwitchTick.remove(viewerId);
+                continue;
+            }
+            UUID teammateId = livingTeammateId(viewerId);
+            ServerPlayer teammate = teammateId != null ? player(teammateId) : null;
+            if (teammate == null) {
+                teammateSpectateSwitchTick.remove(viewerId);
+                continue;
+            }
+            deathCamView.remove(viewerId);
+            clearKillerGlow(viewer);
+            ArcadeNetwork.sendDeathCam(viewer, false, "");
+            viewer.setCamera(teammate);
+            teammateSpectateTarget.put(viewerId, teammateId);
+            teammateSpectateSwitchTick.remove(viewerId);
+            actionBar(viewerId, "§7正在观察队友 §a" + teammate.getGameProfile().getName());
+        }
+    }
+
+    private UUID livingTeammateId(UUID self) {
+        Integer side = sideOf.get(self);
+        if (side == null) {
+            return null;
+        }
+        for (UUID mate : sides.get(side)) {
+            if (mate.equals(self)) {
+                continue;
+            }
+            ServerPlayer mp = player(mate);
+            if (mp != null && mp.isAlive() && !mp.isSpectator() && alive.contains(mate)) {
+                return mate;
+            }
+        }
+        return null;
+    }
+
     // ---- 观察者 / 开局移动锁 ----
 
     /** 进入观察者视角（死亡等待时），记录原始游戏模式以便复活时还原，锁定死亡相机并朝向击杀者。 */
@@ -1121,7 +1197,10 @@ public final class ArcadeMatch {
 
     /** 退出观察者视角，还原至记录的原始游戏模式（默认生存），清除死亡相机与击杀者高亮。 */
     private void exitSpectator(ServerPlayer player) {
+        player.setCamera(player);
         deathCamView.remove(player.getUUID());
+        teammateSpectateSwitchTick.remove(player.getUUID());
+        teammateSpectateTarget.remove(player.getUUID());
         clearKillerGlow(player);
         ArcadeNetwork.sendDeathCam(player, false, "");
         if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
