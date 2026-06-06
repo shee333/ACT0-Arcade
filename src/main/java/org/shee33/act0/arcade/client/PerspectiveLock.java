@@ -8,7 +8,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.shee33.act0.arcade.Act0Arcade;
 
-/** 全局禁用第三人称：玩家按 F5 后下一客户端 tick 立即锁回第一人称。 */
+/** 全局禁用第三人称：普通玩家按 F5 后锁回第一人称，OP 管理员可忽略以便调试。 */
 @Mod.EventBusSubscriber(modid = Act0Arcade.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class PerspectiveLock {
 
@@ -21,6 +21,9 @@ public final class PerspectiveLock {
             return;
         }
         Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null && mc.player.hasPermissions(2)) {
+            return;
+        }
         if (mc.player != null && mc.options.getCameraType() != CameraType.FIRST_PERSON) {
             mc.options.setCameraType(CameraType.FIRST_PERSON);
         }

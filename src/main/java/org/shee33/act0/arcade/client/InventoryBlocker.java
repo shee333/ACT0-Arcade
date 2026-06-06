@@ -10,7 +10,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.shee33.act0.arcade.Act0Arcade;
 
-/** 全局禁用玩家物品栏：sandbox 世界除外。 */
+/** 全局禁用玩家物品栏：sandbox 世界与 OP 管理员除外。 */
 @Mod.EventBusSubscriber(modid = Act0Arcade.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class InventoryBlocker {
 
@@ -23,6 +23,9 @@ public final class InventoryBlocker {
             return;
         }
         Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null && mc.player.hasPermissions(2)) {
+            return;
+        }
         if (mc.level == null || isSandbox(mc.level.dimension().location())) {
             return;
         }
