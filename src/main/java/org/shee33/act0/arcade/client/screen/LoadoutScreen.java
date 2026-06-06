@@ -16,32 +16,31 @@ import org.shee33.act0.arcade.network.ArcadeNetwork;
 import org.shee33.act0.arcade.network.SaveLoadoutPacket;
 import org.shee33.act0.arcade.network.SelectLoadoutPacket;
 
-import java.util.List;
-
 /**
  * 像素风配装编辑界面（客户端）。
  *
- * <p>展示多个配装方案、职业与六个槽位；玩家可切换方案并编辑当前方案，保存时把当前方案发回服务端持久化。
- *
- * <p>渲染基于原生 {@link GuiGraphics} + {@link PixelTheme} 程序化像素面板，不依赖外部贴图资源。
- * 兵种装置槽（{@link LoadoutSlot#isCoreCombatSlot()} 为 {@code false}）以"街机禁用"提示标注，
- * 直观呈现"街机模式无缝禁用兵种道具"的设计。
+ * <p>左侧固定 5 个方案卡片，右侧编辑当前方案。布局会按 Minecraft GUI 逻辑尺寸自适应，避免高 UI
+ * 缩放或小窗口时面板溢出屏幕。
  */
 public final class LoadoutScreen extends Screen {
 
-    private static final int PANEL_W = 560;
-    private static final int PANEL_H = 420;
-    private static final int CARD_W = 156;
-    private static final int CARD_H = 62;
-    private static final int CARD_GAP = 8;
-    private static final int ROW_H = 20;
-    private static final int HEADER_H = 38;
+    private static final int MAX_PANEL_W = 560;
+    private static final int MAX_PANEL_H = 420;
+    private static final int MAX_CARD_W = 156;
+    private static final int MAX_CARD_H = 62;
 
     private final LoadoutSet loadoutSet;
     private final LoadoutRegistry registry;
+
     private int activeIndex;
     private int left;
     private int top;
+    private int panelW;
+    private int panelH;
+    private int cardW;
+    private int cardH;
+    private int cardGap;
+    private int rowH;
 
     public LoadoutScreen(Loadout loadout) {
         this(LoadoutSet.single(loadout));
@@ -58,45 +57,62 @@ public final class LoadoutScreen extends Screen {
         return loadoutSet.get(activeIndex);
     }
 
-    private int panelHeight() {
-        return PANEL_H;
-    }
-
     @Override
     protected void init() {
-        this.left = (this.width - PANEL_W) / 2;
-        this.top = (this.height - PANEL_H) / 2;
+        computeLayout();
+        this.left = (this.width - panelW) / 2;
+        this.top = (this.height - panelH) / 2;
 
         int rowX = editorX();
         int rowW = editorW();
         int btnW = 18;
-        int y = top + 72;
+        int y = editorTop();
 
-        // 职业切换行
         addRenderableWidget(Button.builder(Component.literal("◀"), b -> cycleClass(-1))
                 .bounds(rowX + rowW - btnW * 2 - 2, y, btnW, 16).build());
         addRenderableWidget(Button.builder(Component.literal("▶"), b -> cycleClass(1))
                 .bounds(rowX + rowW - btnW, y, btnW, 16).build());
-        y += ROW_H;
+        y += rowH;
 
-        // 六个槽位行：点击「选择」打开二级武器选择界面
         for (LoadoutSlot slot : LoadoutSlot.values()) {
             final LoadoutSlot s = slot;
             addRenderableWidget(Button.builder(Component.literal("选择"), b -> openSelect(s))
                     .bounds(rowX + rowW - btnW * 2 - 2, y, btnW * 2 + 2, 16).build());
-            y += ROW_H;
+            y += rowH;
         }
 
-        // 底部：保存 / 下次复活使用 / 默认 / 关闭
-        int footY = top + PANEL_H - 30;
-        addRenderableWidget(Button.builder(Component.literal("§a保存修改"), b -> saveOnly())
-            .bounds(rowX, footY, 82, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("下次复活使用"), b -> selectForNextRespawn())
-            .bounds(rowX + 88, footY, 108, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("设为默认"), b -> setDefaultLoadout())
-            .bounds(rowX + 202, footY, 82, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("关闭"), b -> onClose())
-            .bounds(rowX + rowW - 54, footY, 54, 20).build());
+        int footY = top + panelH - 30;
+        if (rowW >= 330) {
+            addRenderableWidget(Button.builder(Component.literal("§a保存修改"), b -> saveOnly())
+                    .bounds(rowX, footY, 82, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("下次复活使用"), b -> selectForNextRespawn())
+                    .bounds(rowX + 88, footY, 108, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("设为默认"), b -> setDefaultLoadout())
+                    .bounds(rowX + 202, footY, 82, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("关闭"), b -> onClose())
+                    .bounds(rowX + rowW - 54, footY, 54, 20).build());
+        } else {
+            int half = (rowW - 6) / 2;
+            addRenderableWidget(Button.builder(Component.literal("§a保存修改"), b -> saveOnly())
+                    .bounds(rowX, footY - 22, half, 18).build());
+            addRenderableWidget(Button.builder(Component.literal("下次复活使用"), b -> selectForNextRespawn())
+                    .bounds(rowX + half + 6, footY - 22, half, 18).build());
+            addRenderableWidget(Button.builder(Component.literal("设为默认"), b -> setDefaultLoadout())
+                    .bounds(rowX, footY, half, 18).build());
+            addRenderableWidget(Button.builder(Component.literal("关闭"), b -> onClose())
+                    .bounds(rowX + half + 6, footY, half, 18).build());
+        }
+    }
+
+    private void computeLayout() {
+        panelW = Math.min(MAX_PANEL_W, Math.max(260, width - 24));
+        panelH = Math.min(MAX_PANEL_H, Math.max(220, height - 24));
+        rowH = panelH < 350 ? 18 : 20;
+        cardGap = panelH < 350 ? 5 : 8;
+        cardW = clamp(panelW / 3, 118, MAX_CARD_W);
+        int cardAreaH = panelH - (panelH < 350 ? 58 : 70);
+        cardH = clamp((cardAreaH - cardGap * (LoadoutSet.MAX_SLOTS - 1)) / LoadoutSet.MAX_SLOTS,
+                34, MAX_CARD_H);
     }
 
     private void cycleClass(int dir) {
@@ -106,7 +122,6 @@ public final class LoadoutScreen extends Screen {
         sanitizeSelections();
     }
 
-    /** 打开某槽位的武器选择：多分类先进类别选择，单分类直接进武器网格。 */
     private void openSelect(LoadoutSlot slot) {
         if (minecraft == null) {
             return;
@@ -121,7 +136,6 @@ public final class LoadoutScreen extends Screen {
         }
     }
 
-    /** 切换职业后，清掉对新职业不再可用的选择。 */
     private void sanitizeSelections() {
         for (LoadoutSlot slot : LoadoutSlot.values()) {
             String key = working().slotItemKey(slot).orElse(null);
@@ -154,37 +168,33 @@ public final class LoadoutScreen extends Screen {
     @Override
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         renderBackground(gg);
+        PixelTheme.panel(gg, left, top, panelW, panelH);
 
-        PixelTheme.panel(gg, left, top, PANEL_W, PANEL_H);
-
-        // 标题
-        gg.drawCenteredString(font, "§l配装", left + PANEL_W / 2, top + 10, PixelTheme.ACCENT);
-        gg.drawString(font, "§7点击左侧方案卡片进行修改", left + 18, top + 30, PixelTheme.TEXT_DIM, false);
-        gg.drawString(font, "§7当前编辑：§f第 " + (activeIndex + 1) + " 套", editorX(), top + 46, PixelTheme.TEXT_DIM, false);
+        gg.drawCenteredString(font, "§l配装", left + panelW / 2, top + 8, PixelTheme.ACCENT);
+        if (panelH >= 330) {
+            gg.drawString(font, "§7点击左侧方案卡片进行修改", left + 18, top + 28, PixelTheme.TEXT_DIM, false);
+        }
+        gg.drawString(font, "§7当前编辑：§f第 " + (activeIndex + 1) + " 套",
+                editorX(), top + (panelH < 350 ? 36 : 46), PixelTheme.TEXT_DIM, false);
 
         renderProfileCards(gg, mouseX, mouseY);
 
         int rowX = editorX();
         int rowW = editorW();
-        int y = top + 72;
+        int y = editorTop();
 
-        // 职业行
         PixelTheme.row(gg, rowX, y - 2, rowW, 18, false);
         gg.drawString(font, "职业", rowX + 4, y + 4, PixelTheme.TEXT_DIM, false);
         gg.drawString(font, classLabel(working().classType()), rowX + 60, y + 4, PixelTheme.TEXT, false);
-        y += ROW_H;
+        y += rowH;
 
-        // 槽位行
         for (LoadoutSlot slot : LoadoutSlot.values()) {
             PixelTheme.row(gg, rowX, y - 2, rowW, 18, false);
             gg.drawString(font, slotLabel(slot), rowX + 4, y + 4, PixelTheme.TEXT_DIM, false);
 
             String key = working().slotItemKey(slot).orElse(null);
-            String name = key == null ? "§8— 未选 —"
-                    : registry.find(key).map(LoadoutItem::displayName).orElse(key);
+            String name = key == null ? "§8— 未选 —" : registry.find(key).map(LoadoutItem::displayName).orElse(key);
             int color = key == null ? PixelTheme.TEXT_DIM : PixelTheme.TEXT;
-
-            // 物品图标（来自服务端目录的真实物品，含 TaCZ 枪械模型）
             int iconX = rowX + 56;
             int textX = iconX + 20;
             if (key != null) {
@@ -193,8 +203,8 @@ public final class LoadoutScreen extends Screen {
                     gg.renderItem(icon, iconX, y);
                 }
             }
-            gg.drawString(font, name, textX, y + 4, color, false);
-            y += ROW_H;
+            gg.drawString(font, trim(name, rowW - (textX - rowX) - 48), textX, y + 4, color, false);
+            y += rowH;
         }
 
         super.render(gg, mouseX, mouseY, partialTick);
@@ -205,28 +215,12 @@ public final class LoadoutScreen extends Screen {
         for (int i = 0; i < LoadoutSet.MAX_SLOTS; i++) {
             int x = cardX();
             int y = cardY(i);
-            if (mouseX >= x && mouseX <= x + CARD_W && mouseY >= y && mouseY <= y + CARD_H) {
+            if (mouseX >= x && mouseX <= x + cardW && mouseY >= y && mouseY <= y + cardH) {
                 activeIndex = i;
                 return true;
             }
         }
         return super.mouseClicked(mouseX, mouseY, button);
-    }
-
-    private int cardX() {
-        return left + 18;
-    }
-
-    private int cardY(int index) {
-        return top + 56 + index * (CARD_H + CARD_GAP);
-    }
-
-    private int editorX() {
-        return left + CARD_W + 44;
-    }
-
-    private int editorW() {
-        return PANEL_W - CARD_W - 62;
     }
 
     private void renderProfileCards(GuiGraphics gg, int mouseX, int mouseY) {
@@ -236,22 +230,27 @@ public final class LoadoutScreen extends Screen {
             boolean selected = i == activeIndex;
             boolean active = i == loadoutSet.activeIndex();
             boolean def = i == loadoutSet.defaultIndex();
-            boolean hovered = mouseX >= x && mouseX <= x + CARD_W && mouseY >= y && mouseY <= y + CARD_H;
-            PixelTheme.row(gg, x, y, CARD_W, CARD_H, selected || hovered);
+            boolean hovered = mouseX >= x && mouseX <= x + cardW && mouseY >= y && mouseY <= y + cardH;
+            PixelTheme.row(gg, x, y, cardW, cardH, selected || hovered);
             int border = selected ? PixelTheme.ACCENT : (active ? 0xFF9ACD68 : 0x55395B2F);
-            gg.fill(x, y, x + CARD_W, y + 1, border);
-            gg.fill(x, y + CARD_H - 1, x + CARD_W, y + CARD_H, border);
-            gg.fill(x, y, x + 1, y + CARD_H, border);
-            gg.fill(x + CARD_W - 1, y, x + CARD_W, y + CARD_H, border);
+            gg.fill(x, y, x + cardW, y + 1, border);
+            gg.fill(x, y + cardH - 1, x + cardW, y + cardH, border);
+            gg.fill(x, y, x + 1, y + cardH, border);
+            gg.fill(x + cardW - 1, y, x + cardW, y + cardH, border);
 
             Loadout loadout = loadoutSet.get(i);
             String tags = (def ? " §e默认" : "") + (active ? " §a已选" : "");
-            gg.drawString(font, "§f第 " + (i + 1) + " 套" + tags, x + 6, y + 5, PixelTheme.TEXT, false);
-            gg.drawString(font, "§7" + classLabel(loadout.classType()), x + 6, y + 17, PixelTheme.TEXT_DIM, false);
+            gg.drawString(font, trim("§f第 " + (i + 1) + " 套" + tags, cardW - 12),
+                    x + 6, y + 5, PixelTheme.TEXT, false);
+            if (cardH >= 44) {
+                gg.drawString(font, "§7" + classLabel(loadout.classType()), x + 6, y + 17, PixelTheme.TEXT_DIM, false);
+            }
 
-            renderCardWeapon(gg, loadout, LoadoutSlot.PRIMARY_WEAPON, x + 8, y + 34);
-            renderCardWeapon(gg, loadout, LoadoutSlot.SECONDARY_WEAPON, x + 58, y + 34);
-            renderCardWeapon(gg, loadout, LoadoutSlot.MELEE, x + 108, y + 34);
+            int iconY = y + Math.max(cardH >= 44 ? 30 : 20, cardH - 24);
+            int iconGap = Math.max(34, (cardW - 28) / 3);
+            renderCardWeapon(gg, loadout, LoadoutSlot.PRIMARY_WEAPON, x + 8, iconY);
+            renderCardWeapon(gg, loadout, LoadoutSlot.SECONDARY_WEAPON, x + 8 + iconGap, iconY);
+            renderCardWeapon(gg, loadout, LoadoutSlot.MELEE, x + 8 + iconGap * 2, iconY);
         }
     }
 
@@ -266,6 +265,41 @@ public final class LoadoutScreen extends Screen {
         }
         gg.fill(x + 1, y + 1, x + 15, y + 15, 0x55000000);
         gg.drawCenteredString(font, "-", x + 8, y + 4, PixelTheme.TEXT_DIM);
+    }
+
+    private int cardX() {
+        return left + 14;
+    }
+
+    private int cardY(int index) {
+        return top + (panelH < 350 ? 42 : 56) + index * (cardH + cardGap);
+    }
+
+    private int editorX() {
+        return left + cardW + 38;
+    }
+
+    private int editorW() {
+        return panelW - cardW - 52;
+    }
+
+    private int editorTop() {
+        return top + (panelH < 350 ? 54 : 72);
+    }
+
+    private String trim(String text, int maxW) {
+        if (font.width(text) <= maxW) {
+            return text;
+        }
+        String out = text;
+        while (out.length() > 1 && font.width(out + "…") > maxW) {
+            out = out.substring(0, out.length() - 1);
+        }
+        return out + "…";
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private static String classLabel(PlayerClassType type) {
