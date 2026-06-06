@@ -1,8 +1,6 @@
 package org.shee33.act0.arcade.storage;
 
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -10,27 +8,21 @@ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.level.saveddata.SavedData;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-
 /**
  * ACT0-Arcade 全局玩法设置，基于存档持久化。
  *
- * <p>包含玩家默认最大血量、街机呼吸回血延迟等需要重启后仍生效的设置。
+ * <p>包含全体玩家默认最大血量、街机呼吸回血延迟等需要重启后仍生效的设置。
  */
 public final class ArcadeGlobalSettings extends SavedData {
 
     private static final String DATA_NAME = "act0_arcade_global_settings";
-    private static final String KEY_PLAYER_HEALTH = "playerHealth";
-    private static final String KEY_UUID = "uuid";
-    private static final String KEY_HEALTH = "health";
+    private static final String KEY_HEALTH = "globalHealth";
     private static final String KEY_BREATH_DELAY = "breathHealDelayTicks";
 
     public static final double DEFAULT_MAX_HEALTH = 20.0;
     public static final int DEFAULT_BREATH_HEAL_DELAY_TICKS = 5 * 20;
 
-    private final Map<UUID, Double> playerHealth = new HashMap<>();
+    private double globalHealth = DEFAULT_MAX_HEALTH;
     private int breathHealDelayTicks = DEFAULT_BREATH_HEAL_DELAY_TICKS;
 
     public ArcadeGlobalSettings() {
@@ -42,12 +34,12 @@ public final class ArcadeGlobalSettings extends SavedData {
                 ArcadeGlobalSettings::load, ArcadeGlobalSettings::new, DATA_NAME);
     }
 
-    public double maxHealth(UUID id) {
-        return playerHealth.getOrDefault(id, DEFAULT_MAX_HEALTH);
+    public double maxHealth() {
+        return globalHealth;
     }
 
-    public void setMaxHealth(UUID id, double health) {
-        playerHealth.put(id, clampHealth(health));
+    public void setMaxHealth(double health) {
+        globalHealth = clampHealth(health);
         setDirty();
     }
 
@@ -61,7 +53,7 @@ public final class ArcadeGlobalSettings extends SavedData {
     }
 
     public void applyHealth(ServerPlayer player) {
-        double max = maxHealth(player.getUUID());
+        double max = maxHealth();
         AttributeInstance attr = player.getAttribute(Attributes.MAX_HEALTH);
         if (attr != null) {
             attr.setBaseValue(max);
@@ -75,29 +67,18 @@ public final class ArcadeGlobalSettings extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag) {
+        tag.putDouble(KEY_HEALTH, globalHealth);
         tag.putInt(KEY_BREATH_DELAY, breathHealDelayTicks);
-        ListTag list = new ListTag();
-        for (Map.Entry<UUID, Double> e : playerHealth.entrySet()) {
-            CompoundTag entry = new CompoundTag();
-            entry.putUUID(KEY_UUID, e.getKey());
-            entry.putDouble(KEY_HEALTH, e.getValue());
-            list.add(entry);
-        }
-        tag.put(KEY_PLAYER_HEALTH, list);
         return tag;
     }
 
     public static ArcadeGlobalSettings load(CompoundTag tag) {
         ArcadeGlobalSettings settings = new ArcadeGlobalSettings();
+        if (tag.contains(KEY_HEALTH)) {
+            settings.globalHealth = clampHealth(tag.getDouble(KEY_HEALTH));
+        }
         if (tag.contains(KEY_BREATH_DELAY)) {
             settings.breathHealDelayTicks = Math.max(0, tag.getInt(KEY_BREATH_DELAY));
-        }
-        ListTag list = tag.getList(KEY_PLAYER_HEALTH, Tag.TAG_COMPOUND);
-        for (int i = 0; i < list.size(); i++) {
-            CompoundTag entry = list.getCompound(i);
-            if (entry.hasUUID(KEY_UUID)) {
-                settings.playerHealth.put(entry.getUUID(KEY_UUID), clampHealth(entry.getDouble(KEY_HEALTH)));
-            }
         }
         return settings;
     }

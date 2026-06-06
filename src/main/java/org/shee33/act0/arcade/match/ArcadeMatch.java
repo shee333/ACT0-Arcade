@@ -96,6 +96,8 @@ public final class ArcadeMatch {
     private final Map<UUID, Integer> kills = new HashMap<>();
     /** 死亡进入观察者前记录的原始游戏模式，复活时还原。 */
     private final Map<UUID, GameType> originalGameMode = new HashMap<>();
+    /** 进入对局前的游戏模式，对局结束时尽量恢复。 */
+    private final Map<UUID, GameType> preMatchGameMode = new HashMap<>();
     /** 复活倒计时上次播报的整秒，用于逐秒 title + 音符盒去重（按玩家）。 */
     private final Map<UUID, Integer> respawnLastSecond = new HashMap<>();
     /** 开局倒计时期间锁定的位置（防乱跑）。 */
@@ -180,6 +182,7 @@ public final class ArcadeMatch {
         for (UUID id : sideOf.keySet()) {
             ServerPlayer player = player(id);
             if (player != null) {
+                rememberPreMatchMode(player);
                 addBossBarPlayer(player);
                 sidebar.showTo(player);
             }
@@ -208,6 +211,7 @@ public final class ArcadeMatch {
                 continue;
             }
             exitSpectator(player);
+            enterAdventureMode(player);
             spawnAtSide(player, sideOf.get(id));
             equip(player);
             player.setHealth(player.getMaxHealth());
@@ -306,6 +310,7 @@ public final class ArcadeMatch {
                 continue;
             }
             exitSpectator(player);
+            enterAdventureMode(player);
             respawn(player, sideOf.getOrDefault(id, 0));
             equip(player);
             player.setHealth(player.getMaxHealth());
@@ -581,6 +586,7 @@ public final class ArcadeMatch {
             if (player != null) {
                 exitSpectator(player);
                 TeleportHelper.teleport(player, arena.returnSpawn());
+                restorePreMatchMode(player);
                 player.getInventory().clearContent();
                 sidebar.hideFrom(player);
                 removeBossBarPlayer(player);
@@ -650,6 +656,7 @@ public final class ArcadeMatch {
         int side = sideOf.getOrDefault(id, 0);
         if (phase == MatchPhase.COMBAT || phase == MatchPhase.COUNTDOWN) {
             exitSpectator(player);
+            enterAdventureMode(player);
             spawnAtSide(player, side);
             equip(player);
             player.setHealth(player.getMaxHealth());
@@ -685,9 +692,11 @@ public final class ArcadeMatch {
         sides.get(side).add(id);
         sideOf.put(id, side);
         kills.put(id, 0);
+        rememberPreMatchMode(player);
         addBossBarPlayer(player);
         sidebar.showTo(player);
         if (phase == MatchPhase.COMBAT || phase == MatchPhase.COUNTDOWN) {
+            enterAdventureMode(player);
             spawnAtSide(player, side);
             equip(player);
             player.setHealth(player.getMaxHealth());
@@ -771,6 +780,26 @@ public final class ArcadeMatch {
 
     private void spawnAtSide(ServerPlayer player, int side) {
         TeleportHelper.teleport(player, arena.sideSpawn(side));
+    }
+
+    private void rememberPreMatchMode(ServerPlayer player) {
+        GameType current = player.gameMode.getGameModeForPlayer();
+        if (current != GameType.SPECTATOR) {
+            preMatchGameMode.putIfAbsent(player.getUUID(), current);
+        }
+    }
+
+    private void enterAdventureMode(ServerPlayer player) {
+        rememberPreMatchMode(player);
+        player.setGameMode(GameType.ADVENTURE);
+    }
+
+    private void restorePreMatchMode(ServerPlayer player) {
+        GameType original = preMatchGameMode.remove(player.getUUID());
+        if (original != null && original != GameType.SPECTATOR) {
+            player.setGameMode(original);
+        }
+        originalGameMode.remove(player.getUUID());
     }
 
     private void respawn(ServerPlayer player, int side) {

@@ -124,7 +124,7 @@ public final class AttachmentCatalogIO {
             return false;
         }
         ArcadeAttachment.Builder builder = ArcadeAttachment.builder(entry.key, entry.attachmentId, slot)
-                .displayName(entry.name != null ? entry.name : entry.key)
+            .displayName(displayNameFor(entry))
                 .price(entry.price)
                 .isDefault(entry.isDefault);
         if (entry.snbt != null) {
@@ -183,5 +183,42 @@ public final class AttachmentCatalogIO {
         try (Writer writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
             GSON.toJson(dto, writer);
         }
+    }
+
+    private static String displayNameFor(AttachmentEntryDto entry) {
+        String name = entry.name != null ? entry.name.trim() : "";
+        if (!name.isEmpty() && !name.startsWith("item.")) {
+            return name;
+        }
+        if (entry.attachmentId != null && !entry.attachmentId.isBlank()) {
+            int colon = entry.attachmentId.indexOf(':');
+            return humanize(colon >= 0 ? entry.attachmentId.substring(colon + 1) : entry.attachmentId);
+        }
+        if (entry.key != null && entry.key.startsWith("attach.")) {
+            return humanize(entry.key.substring(entry.key.lastIndexOf('.') + 1));
+        }
+        return !name.isEmpty() ? humanize(name.substring(name.lastIndexOf('.') + 1))
+                : (entry.key != null ? entry.key : "未命名配件");
+    }
+
+    private static String humanize(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "未命名配件";
+        }
+        String[] parts = raw.replace('-', '_').split("_");
+        StringBuilder out = new StringBuilder();
+        for (String part : parts) {
+            if (part.isBlank()) {
+                continue;
+            }
+            if (!out.isEmpty()) {
+                out.append(' ');
+            }
+            out.append(Character.toUpperCase(part.charAt(0)));
+            if (part.length() > 1) {
+                out.append(part.substring(1));
+            }
+        }
+        return out.isEmpty() ? raw : out.toString();
     }
 }

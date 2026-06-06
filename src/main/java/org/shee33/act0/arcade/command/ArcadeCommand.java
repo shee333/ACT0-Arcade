@@ -129,22 +129,22 @@ public final class ArcadeCommand {
         return Commands.literal("settings")
             .requires(src -> src.hasPermission(2))
             .then(Commands.literal("health")
-                .then(Commands.argument("target", EntityArgument.player())
                     .then(Commands.argument("value", DoubleArgumentType.doubleArg(1.0, 200.0))
-                        .executes(ArcadeCommand::settingsHealth))))
+                        .executes(ArcadeCommand::settingsHealth)))
             .then(Commands.literal("regenDelay")
                 .then(Commands.argument("seconds", DoubleArgumentType.doubleArg(0.0, 60.0))
                     .executes(ArcadeCommand::settingsRegenDelay)));
         }
 
-        private static int settingsHealth(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
-        ServerPlayer target = EntityArgument.getPlayer(ctx, "target");
+        private static int settingsHealth(CommandContext<CommandSourceStack> ctx) {
         double value = DoubleArgumentType.getDouble(ctx, "value");
         ArcadeGlobalSettings settings = ArcadeGlobalSettings.get(ctx.getSource().getServer());
-        settings.setMaxHealth(target.getUUID(), value);
-        settings.applyHealth(target);
+            settings.setMaxHealth(value);
+            for (ServerPlayer online : ctx.getSource().getServer().getPlayerList().getPlayers()) {
+                settings.applyHealth(online);
+            }
         ctx.getSource().sendSuccess(() -> Component.literal(
-            "§a已将 §e" + target.getGameProfile().getName() + " §a默认血量设为 §e" + fmt(value)), true);
+                "§a已将全体玩家默认血量设为 §e" + fmt(value)), true);
         return 1;
         }
 
