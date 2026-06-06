@@ -168,9 +168,23 @@ public final class MatchLauncher {
                                String arenaId,
                                List<UUID> players,
                                MatchOptions options) {
+        int defaultCapacity = Math.max(2, MatchQueue.targetSize(mode));
+        return start(services, server, mode, arenaId, players, options, defaultCapacity);
+    }
+
+    public static Result start(ArcadeServices services,
+                               MinecraftServer server,
+                               String mode,
+                               String arenaId,
+                               List<UUID> players,
+                               MatchOptions options,
+                               int sizingCount) {
         Optional<ArcadeArena> arenaOpt = ArenaRegistry.get(server).find(arenaId);
         if (arenaOpt.isEmpty()) {
             return Result.fail("竞技场不存在：" + arenaId);
+        }
+        if (services.matches().isArenaInUse(arenaId)) {
+            return Result.fail("竞技场正在对局中：" + arenaId);
         }
         ArcadeArena arena = arenaOpt.get();
 
@@ -180,7 +194,7 @@ public final class MatchLauncher {
             }
         }
 
-        int capacity = Math.max(2, MatchQueue.targetSize(mode));
+        int capacity = Math.max(2, sizingCount);
         MatchSettings settings = buildSettings(mode, capacity, options);
         if (settings == null) {
             return Result.fail("未知模式：" + mode);

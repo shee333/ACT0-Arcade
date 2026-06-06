@@ -1314,6 +1314,10 @@ public final class ArcadeMatch {
         return matchId;
     }
 
+    public String arenaId() {
+        return arena.arenaId();
+    }
+
     public MatchSettings settings() {
         return settings;
     }

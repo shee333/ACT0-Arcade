@@ -129,6 +129,9 @@ public final class RoomManager {
         if (ArenaRegistry.get(server).find(arenaId).isEmpty()) {
             return "§c竞技场不存在：" + arenaId;
         }
+        if (isArenaReserved(arenaId)) {
+            return "§c竞技场正在使用中：" + arenaId;
+        }
         Integer target = winTarget != null ? Math.max(1, Math.min(99, winTarget)) : null;
         int timeLimit = Math.max(0, Math.min(3600, timeLimitSeconds));
 
@@ -172,6 +175,21 @@ public final class RoomManager {
     /** 由房间构建完整可配置项。 */
     private static MatchOptions optionsOf(ArcadeRoom room) {
         return new MatchOptions(room.winTarget(), room.timeLimitSeconds(), room.randomWeapons());
+    }
+
+    private boolean isArenaReserved(String arenaId) {
+        if (services.matches().isArenaInUse(arenaId)) {
+            return true;
+        }
+        for (ArcadeRoom room : rooms.values()) {
+            if (arenaId.equals(room.arenaId()) && room.state() != ArcadeRoom.State.IN_PROGRESS) {
+                return true;
+            }
+            if (arenaId.equals(room.arenaId()) && room.state() == ArcadeRoom.State.IN_PROGRESS) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ---------------- 加入 ----------------
@@ -330,7 +348,7 @@ public final class RoomManager {
         List<UUID> members = new ArrayList<>(room.members());
 
         MatchLauncher.Result result = MatchLauncher.start(
-                services, server, room.modeId(), room.arenaId(), members, optionsOf(room));
+            services, server, room.modeId(), room.arenaId(), members, optionsOf(room), room.capacity());
         if (!result.isOk()) {
             room.setState(ArcadeRoom.State.WAITING);
             notifyAll(server, members, "§c开局失败：" + result.message());

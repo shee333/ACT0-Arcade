@@ -59,6 +59,18 @@ public final class MatchManager {
         return matches.get(matchId);
     }
 
+    public boolean isArenaInUse(String arenaId) {
+        if (arenaId == null) {
+            return false;
+        }
+        for (ArcadeMatch match : matches.values()) {
+            if (!match.isEnded() && arenaId.equals(match.arenaId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean isInMatch(UUID playerId) {
         return matchByPlayer.containsKey(playerId);
     }
