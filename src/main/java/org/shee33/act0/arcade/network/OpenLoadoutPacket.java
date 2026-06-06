@@ -18,31 +18,45 @@ import java.util.function.Supplier;
 public final class OpenLoadoutPacket {
 
     private final CompoundTag setTag;
+    private final boolean quickSelect;
 
     public OpenLoadoutPacket(Loadout loadout) {
         this(LoadoutSet.single(loadout));
     }
 
     public OpenLoadoutPacket(LoadoutSet set) {
-        this.setTag = LoadoutSetCodec.write(set);
+        this(set, false);
     }
 
-    private OpenLoadoutPacket(CompoundTag setTag) {
+    public OpenLoadoutPacket(LoadoutSet set, boolean quickSelect) {
+        this.setTag = LoadoutSetCodec.write(set);
+        this.quickSelect = quickSelect;
+    }
+
+    private OpenLoadoutPacket(CompoundTag setTag, boolean quickSelect) {
         this.setTag = setTag;
+        this.quickSelect = quickSelect;
     }
 
     public static void encode(OpenLoadoutPacket msg, FriendlyByteBuf buf) {
         buf.writeNbt(msg.setTag);
+        buf.writeBoolean(msg.quickSelect);
     }
 
     public static OpenLoadoutPacket decode(FriendlyByteBuf buf) {
-        return new OpenLoadoutPacket(buf.readNbt());
+        return new OpenLoadoutPacket(buf.readNbt(), buf.readBoolean());
     }
 
     public static void handle(OpenLoadoutPacket msg, Supplier<NetworkEvent.Context> ctx) {
         NetworkEvent.Context context = ctx.get();
         context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
-            () -> () -> ClientLoadoutScreenOpener.open(LoadoutSetCodec.read(msg.setTag))));
+            () -> () -> {
+                if (msg.quickSelect) {
+                    ClientLoadoutScreenOpener.openQuickSelect(LoadoutSetCodec.read(msg.setTag));
+                } else {
+                    ClientLoadoutScreenOpener.open(LoadoutSetCodec.read(msg.setTag));
+                }
+            }));
         context.setPacketHandled(true);
     }
 }

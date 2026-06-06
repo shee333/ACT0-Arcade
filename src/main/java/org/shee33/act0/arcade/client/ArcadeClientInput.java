@@ -22,7 +22,7 @@ public final class ArcadeClientInput {
         if (event.phase != TickEvent.Phase.END) {
             return;
         }
-        if (ModList.get().isLoaded("act0_battlefield")) {
+        if (ModList.get().isLoaded("act0_battlefield") && isBattlefieldActive()) {
             return;
         }
         Minecraft mc = Minecraft.getInstance();
@@ -32,5 +32,21 @@ public final class ArcadeClientInput {
         while (ArcadeKeyMappings.OPEN_LOADOUT.consumeClick()) {
             ArcadeNetwork.CHANNEL.sendToServer(new RequestLoadoutPacket());
         }
+    }
+
+    private static boolean isBattlefieldActive() {
+        try {
+            Class<?> hud = Class.forName("org.shee33.act0.battlefield.client.ClientBattleHud");
+            if (Boolean.TRUE.equals(hud.getMethod("isShown").invoke(null))) {
+                return true;
+            }
+            Class<?> deploy = Class.forName("org.shee33.act0.battlefield.client.ClientDeployStatus");
+            Object status = deploy.getMethod("status").invoke(null);
+            if (status != null && Boolean.TRUE.equals(status.getClass().getMethod("active").invoke(status))) {
+                return true;
+            }
+        } catch (ReflectiveOperationException ignored) {
+        }
+        return false;
     }
 }

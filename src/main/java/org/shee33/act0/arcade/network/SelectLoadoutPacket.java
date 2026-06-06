@@ -20,19 +20,26 @@ public final class SelectLoadoutPacket {
 
     private final int index;
     private final Action action;
+    private final boolean matchContext;
 
     public SelectLoadoutPacket(int index, Action action) {
+        this(index, action, false);
+    }
+
+    public SelectLoadoutPacket(int index, Action action, boolean matchContext) {
         this.index = index;
         this.action = action != null ? action : Action.SELECT_NEXT;
+        this.matchContext = matchContext;
     }
 
     public static void encode(SelectLoadoutPacket msg, FriendlyByteBuf buf) {
         buf.writeVarInt(msg.index);
         buf.writeEnum(msg.action);
+        buf.writeBoolean(msg.matchContext);
     }
 
     public static SelectLoadoutPacket decode(FriendlyByteBuf buf) {
-        return new SelectLoadoutPacket(buf.readVarInt(), buf.readEnum(Action.class));
+        return new SelectLoadoutPacket(buf.readVarInt(), buf.readEnum(Action.class), buf.readBoolean());
     }
 
     public static void handle(SelectLoadoutPacket msg, Supplier<NetworkEvent.Context> ctx) {
@@ -42,7 +49,7 @@ public final class SelectLoadoutPacket {
             if (sender == null) {
                 return;
             }
-            if (!Act0Arcade.services().matches().canChangeLoadout(sender.getUUID())) {
+            if (!msg.matchContext && !Act0Arcade.services().matches().canChangeLoadout(sender.getUUID())) {
                 sender.displayClientMessage(Component.literal("§c战斗中无法更换配装"), true);
                 return;
             }
@@ -54,13 +61,15 @@ public final class SelectLoadoutPacket {
             } else {
                 store.selectActive(sender.getUUID(), msg.index,
                         DefaultLoadoutCatalog.defaultLoadout(Act0Arcade.services().registry()));
-                if (Act0Arcade.services().matches().isInMatch(sender.getUUID())) {
-                    sender.displayClientMessage(Component.literal("§a你会在下次重生时使用新的配装"), true);
+                if (msg.matchContext || Act0Arcade.services().matches().isInMatch(sender.getUUID())) {
+                    sender.displayClientMessage(Component.literal("§a将在下次复活时使用该配装"), true);
                 } else {
                     sender.displayClientMessage(Component.literal("§a已选择配装"), true);
                 }
             }
-            ArcadeNetwork.openLoadout(sender);
+            if (!msg.matchContext) {
+                ArcadeNetwork.openLoadout(sender);
+            }
         });
         context.setPacketHandled(true);
     }

@@ -1,6 +1,7 @@
 package org.shee33.act0.arcade.client;
 
 import net.minecraft.client.Minecraft;
+import org.shee33.act0.arcade.client.screen.LoadoutQuickSelectScreen;
 import org.shee33.act0.arcade.client.screen.LoadoutScreen;
 import org.shee33.act0.arcade.loadout.Loadout;
 import org.shee33.act0.arcade.loadout.LoadoutSet;
@@ -19,5 +20,9 @@ public final class ClientLoadoutScreenOpener {
 
     public static void open(LoadoutSet set) {
         Minecraft.getInstance().setScreen(new LoadoutScreen(set));
+    }
+
+    public static void openQuickSelect(LoadoutSet set) {
+        Minecraft.getInstance().setScreen(new LoadoutQuickSelectScreen(set));
     }
 }

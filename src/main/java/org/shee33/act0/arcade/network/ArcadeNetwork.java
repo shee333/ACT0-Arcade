@@ -27,7 +27,7 @@ import java.util.List;
  */
 public final class ArcadeNetwork {
 
-        private static final String PROTOCOL = "3";
+        private static final String PROTOCOL = "4";
 
     @SuppressWarnings("removal")
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
@@ -95,6 +95,13 @@ public final class ArcadeNetwork {
                 syncUnlocks(player);
                 syncAttachmentCatalog(player);
                 CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenLoadoutPacket(set));
+        }
+
+        public static void openLoadoutSelector(ServerPlayer player) {
+                LoadoutSet set = ArcadeLoadoutStore.get(player.server).getOrCreateSet(player.getUUID(),
+                                DefaultLoadoutCatalog.defaultLoadout(Act0Arcade.services().registry()));
+                syncUnlocks(player);
+                CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenLoadoutPacket(set, true));
         }
 
         public static void closeRoomBrowser(ServerPlayer player) {

@@ -28,11 +28,11 @@ public final class RequestLoadoutPacket {
             if (sender == null) {
                 return;
             }
-            if (!Act0Arcade.services().matches().canChangeLoadout(sender.getUUID())) {
-                sender.displayClientMessage(Component.literal("§c战斗中无法更换配装"), true);
-                return;
+            if (Act0Arcade.services().matches().isInMatch(sender.getUUID())) {
+                ArcadeNetwork.openLoadoutSelector(sender);
+            } else {
+                ArcadeNetwork.openLoadout(sender);
             }
-            ArcadeNetwork.openLoadout(sender);
         });
         context.setPacketHandled(true);
     }
