@@ -121,6 +121,22 @@ public final class ArcadeMatch {
     /** 死亡补给箱标记 NBT 键：拾取后补满虚拟弹药。 */
     public static final String AMMO_CRATE_KEY = "Act0AmmoCrate";
     private static final double RESPAWN_CLEAR_RADIUS = 10.0;
+        private static final ChatFormatting[] FFA_COLORS = new ChatFormatting[]{
+            ChatFormatting.RED,
+            ChatFormatting.BLUE,
+            ChatFormatting.GREEN,
+            ChatFormatting.YELLOW,
+            ChatFormatting.AQUA,
+            ChatFormatting.LIGHT_PURPLE,
+            ChatFormatting.GOLD,
+            ChatFormatting.DARK_GREEN,
+            ChatFormatting.DARK_AQUA,
+            ChatFormatting.DARK_PURPLE,
+            ChatFormatting.DARK_RED,
+            ChatFormatting.DARK_BLUE,
+            ChatFormatting.GRAY,
+            ChatFormatting.WHITE
+        };
 
     private MatchPhase phase = MatchPhase.WAITING;
     private int winnerSide = -1;
@@ -485,7 +501,8 @@ public final class ArcadeMatch {
             int killerSide = sideOf.get(killerId);
             int total = score.addPoint(sideId(killerSide));
             kills.merge(killerId, 1, Integer::sum);
-            broadcast("§b" + nameOf(killerId) + " §7击杀了 §b" + nameOf(victimId)
+                broadcast(sideColor(killerSide) + nameOf(killerId) + " §7击杀了 "
+                    + sideColor(sideOf.getOrDefault(victimId, -1)) + nameOf(victimId)
                     + " §7(" + sideLabel(killerSide) + ": " + total + "/" + score.pointsToWin() + ")");
             actionBar(killerId, "§a+1 击杀 §7(" + total + "/" + score.pointsToWin() + ")");
             playTo(killerId, SoundEvents.ARROW_HIT_PLAYER, 1.0f);
@@ -851,7 +868,21 @@ public final class ArcadeMatch {
     }
 
     private ChatFormatting teamColor(int side) {
+        if (usesPersonalBossBars()) {
+            return ffaColor(side);
+        }
         return side == 0 ? ChatFormatting.RED : (side == 1 ? ChatFormatting.BLUE : ChatFormatting.GRAY);
+    }
+
+    private ChatFormatting ffaColor(int side) {
+        if (side < 0) {
+            return ChatFormatting.GRAY;
+        }
+        return FFA_COLORS[side % FFA_COLORS.length];
+    }
+
+    private String sideColor(int side) {
+        return teamColor(side).toString();
     }
 
     private boolean hasVisibleTeamMates() {
@@ -1358,7 +1389,9 @@ public final class ArcadeMatch {
             int rank = 1;
             for (UUID id : ranked) {
                 String tag = disconnected.contains(id) ? " §8(掉线)" : "";
-                lines.add("§f" + rank + ". §e" + nameOf(id) + " §7- §a" + kills.getOrDefault(id, 0) + tag);
+                int side = sideOf.getOrDefault(id, -1);
+                lines.add("§f" + rank + ". " + sideColor(side) + nameOf(id)
+                        + " §7- " + sideColor(side) + kills.getOrDefault(id, 0) + tag);
                 rank++;
             }
         } else {
@@ -1450,9 +1483,10 @@ public final class ArcadeMatch {
                     int own = kills.getOrDefault(id, 0);
                     int leader = leadingScore();
                     int target = Math.max(1, score.pointsToWin());
-                    bar.setName(Component.literal("§a击杀战 §7| 你的击杀 §f" + own + "/" + target
+                        int side = sideOf.getOrDefault(id, -1);
+                        bar.setName(Component.literal(sideColor(side) + "击杀战 §7| 你的击杀 " + sideColor(side) + own + "/" + target
                             + " §7| 领先 §e" + leader));
-                    bar.setColor(BossEvent.BossBarColor.GREEN);
+                        bar.setColor(bossColor(side));
                     bar.setProgress(clamp01((float) own / target));
                 }
                 default -> {
@@ -1469,10 +1503,21 @@ public final class ArcadeMatch {
             UUID id = e.getKey();
             ServerBossEvent bar = e.getValue();
             boolean won = sideOf.getOrDefault(id, -1) == winningSide;
-            bar.setName(Component.literal(won ? "§6§l胜利" : "§7对局结束"));
-            bar.setColor(won ? BossEvent.BossBarColor.GREEN : BossEvent.BossBarColor.RED);
+            int side = sideOf.getOrDefault(id, -1);
+            bar.setName(Component.literal(won ? sideColor(side) + "§l胜利" : "§7对局结束"));
+            bar.setColor(won ? bossColor(side) : BossEvent.BossBarColor.RED);
             bar.setProgress(1.0f);
         }
+    }
+
+    private BossEvent.BossBarColor bossColor(int side) {
+        return switch (ffaColor(side)) {
+            case BLUE, DARK_BLUE, AQUA, DARK_AQUA -> BossEvent.BossBarColor.BLUE;
+            case RED, DARK_RED, GOLD, YELLOW -> BossEvent.BossBarColor.RED;
+            case GREEN, DARK_GREEN -> BossEvent.BossBarColor.GREEN;
+            case LIGHT_PURPLE, DARK_PURPLE -> BossEvent.BossBarColor.PURPLE;
+            default -> BossEvent.BossBarColor.WHITE;
+        };
     }
 
     private void showPersonalDrawBars() {
@@ -1497,7 +1542,7 @@ public final class ArcadeMatch {
             if (i > 0) {
                 sb.append(" §7- ");
             }
-            sb.append("§f").append(score.score(sideId(i)));
+            sb.append(sideColor(i)).append(score.score(sideId(i)));
         }
         sb.append(" §7/ ").append(score.pointsToWin());
         return sb.toString();
@@ -1531,9 +1576,14 @@ public final class ArcadeMatch {
     }
 
     private String sideLabel(int index) {
+        if (usesPersonalBossBars()) {
+            for (UUID id : sides.get(index)) {
+                return sideColor(index) + nameOf(id);
+            }
+        }
         if (settings.teamSize() == 1 && settings.scoringMode() != ScoringMode.KILL_COUNT) {
             for (UUID id : sides.get(index)) {
-                return nameOf(id);
+                return sideColor(index) + nameOf(id);
             }
         }
         return "队伍 " + (index + 1);
