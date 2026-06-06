@@ -5,6 +5,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.shee33.act0.arcade.client.ClientRoomList;
+import org.shee33.act0.arcade.match.RoomManager;
 
 import java.util.List;
 
@@ -16,7 +17,7 @@ import java.util.List;
 public final class CreateRoomScreen extends Screen {
 
     private static final int W = 280;
-    private static final int H = 248;
+    private static final int H = 278;
 
     /** 模式定义：id、显示名、是否击杀制、默认目标、目标下限、目标上限、步长。 */
     private record ModeDef(String id, String name, boolean killBased,
@@ -40,6 +41,7 @@ public final class CreateRoomScreen extends Screen {
     private int timeLimitSeconds = 0;
     /** 是否随机武器。 */
     private boolean randomWeapons = false;
+    private int capacity = 2;
     private Button randomToggle;
 
     public CreateRoomScreen(RoomBrowserScreen parent) {
@@ -49,6 +51,14 @@ public final class CreateRoomScreen extends Screen {
 
     private ModeDef mode() {
         return MODES.get(selectedMode);
+    }
+
+    private int defaultCapacity() {
+        return RoomManager.capacityFor(mode().id());
+    }
+
+    private boolean capacityEditable() {
+        return mode().killBased();
     }
 
     private List<String> arenas() {
@@ -93,8 +103,19 @@ public final class CreateRoomScreen extends Screen {
         addRenderableWidget(Button.builder(Component.literal("+"), b -> adjustTime(1))
                 .bounds(rx + 110, timeY, 18, 18).build());
 
+        // 人数调整（击杀制可改，回合制固定）
+        int capY = top + 168;
+        Button capMinus = Button.builder(Component.literal("-"), b -> adjustCapacity(-1))
+            .bounds(rx, capY, 18, 18).build();
+        capMinus.active = capacityEditable();
+        addRenderableWidget(capMinus);
+        Button capPlus = Button.builder(Component.literal("+"), b -> adjustCapacity(1))
+            .bounds(rx + 110, capY, 18, 18).build();
+        capPlus.active = capacityEditable();
+        addRenderableWidget(capPlus);
+
         // 随机武器开关
-        int randomY = top + 168;
+        int randomY = top + 200;
         randomToggle = Button.builder(randomLabel(), b -> toggleRandom())
                 .bounds(rx, randomY, 128, 18).build();
         addRenderableWidget(randomToggle);
@@ -125,9 +146,19 @@ public final class CreateRoomScreen extends Screen {
         timeLimitSeconds = Math.max(0, Math.min(3600, timeLimitSeconds + dir * 60));
     }
 
+    private void adjustCapacity(int dir) {
+        if (!capacityEditable()) {
+            capacity = defaultCapacity();
+            return;
+        }
+        int step = "team_deathmatch".equals(mode().id()) ? 2 : 1;
+        capacity = RoomManager.normalizeCapacity(mode().id(), capacity + dir * step);
+    }
+
     private void selectMode(int idx) {
         selectedMode = idx;
         target = mode().defTarget();
+        capacity = defaultCapacity();
     }
 
     private void cycleArena(int dir) {
@@ -147,9 +178,10 @@ public final class CreateRoomScreen extends Screen {
             return;
         }
         String arena = arenas().get(Math.min(selectedArena, arenas().size() - 1));
+        int cap = capacityEditable() ? capacity : defaultCapacity();
         minecraft.player.connection.sendCommand(
                 "arcade room create " + mode().id() + " " + arena + " " + target
-                        + " " + timeLimitSeconds + " " + randomWeapons);
+                + " " + timeLimitSeconds + " " + randomWeapons + " " + cap);
         onClose();
     }
 
@@ -195,8 +227,14 @@ public final class CreateRoomScreen extends Screen {
                 : "§e" + (timeLimitSeconds / 60) + " §7分钟";
         gg.drawCenteredString(font, timeText, rx + 64, top + 141, PixelTheme.TEXT);
 
-        gg.drawString(font, "§8满员将自动开局，房主也可提前开始", rx, top + 196, PixelTheme.TEXT_DIM, false);
-        gg.drawString(font, "§8限时到则领先者胜，平分则平局", rx, top + 208, PixelTheme.TEXT_DIM, false);
+        gg.drawString(font, "§7房间人数", rx, top + 156, PixelTheme.TEXT_DIM, false);
+        String capText = capacityEditable()
+            ? "§e" + capacity + " §7人"
+            : "§7固定 §e" + defaultCapacity() + " §7人";
+        gg.drawCenteredString(font, capText, rx + 64, top + 173, PixelTheme.TEXT);
+
+        gg.drawString(font, "§8满员将自动开局，房主也可提前开始", rx, top + 228, PixelTheme.TEXT_DIM, false);
+        gg.drawString(font, "§8限时到则领先者胜，平分则平局", rx, top + 240, PixelTheme.TEXT_DIM, false);
 
         super.render(gg, mouseX, mouseY, partialTick);
     }

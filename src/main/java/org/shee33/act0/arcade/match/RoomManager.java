@@ -6,6 +6,7 @@ import net.minecraft.server.level.ServerPlayer;
 import org.shee33.act0.arcade.mode.MatchOptions;
 import org.shee33.act0.arcade.mode.MatchSettings;
 import org.shee33.act0.arcade.mode.ScoringMode;
+import org.shee33.act0.arcade.network.ArcadeNetwork;
 import org.shee33.act0.arcade.storage.ArenaRegistry;
 
 import java.util.ArrayList;
@@ -38,6 +39,40 @@ public final class RoomManager {
     /** 房间满员开局所需的总人数（沿用匹配队列的人数门槛）。 */
     public static int capacityFor(String mode) {
         return MatchQueue.targetSize(mode);
+    }
+
+    public static int minCapacityFor(String mode) {
+        return switch (mode) {
+            case "duel_1v1" -> 2;
+            case "duel_2v2" -> 4;
+            case "team_deathmatch", "free_for_all" -> 2;
+            default -> -1;
+        };
+    }
+
+    public static int maxCapacityFor(String mode) {
+        return switch (mode) {
+            case "duel_1v1" -> 2;
+            case "duel_2v2" -> 4;
+            case "team_deathmatch", "free_for_all" -> 32;
+            default -> -1;
+        };
+    }
+
+    public static int normalizeCapacity(String mode, int requested) {
+        int min = minCapacityFor(mode);
+        int max = maxCapacityFor(mode);
+        if (min <= 0 || max <= 0) {
+            return -1;
+        }
+        int value = Math.max(min, Math.min(max, requested));
+        if ("team_deathmatch".equals(mode) && value % 2 != 0) {
+            value++;
+            if (value > max) {
+                value -= 2;
+            }
+        }
+        return Math.max(min, Math.min(max, value));
     }
 
     /** 房间快照（只读，保持创建顺序）。 */
@@ -79,8 +114,8 @@ public final class RoomManager {
      * @return 面向发起者的反馈文本
      */
     public String create(MinecraftServer server, ServerPlayer host, String mode, String arenaId,
-                         Integer winTarget, int timeLimitSeconds, boolean randomWeapons) {
-        int capacity = capacityFor(mode);
+                         Integer winTarget, int timeLimitSeconds, boolean randomWeapons, Integer requestedCapacity) {
+        int capacity = requestedCapacity != null ? normalizeCapacity(mode, requestedCapacity) : capacityFor(mode);
         if (capacity <= 0) {
             return "§c未知模式：" + mode;
         }
@@ -106,6 +141,32 @@ public final class RoomManager {
                 + (randomWeapons ? " §7随机武器" : "");
         return "§a已创建房间 §e" + modeName(room) + " §7@ §e" + arenaId
                 + " §7(1/" + capacity + ")" + extra;
+    }
+
+    public String resize(MinecraftServer server, ServerPlayer player, String roomId, int requestedCapacity, boolean privileged) {
+        ArcadeRoom room = roomId != null ? rooms.get(roomId) : rooms.get(roomOf.get(player.getUUID()));
+        if (room == null) {
+            return "§c房间不存在或已关闭。";
+        }
+        if (room.state() != ArcadeRoom.State.WAITING) {
+            return "§c对局已开始，无法修改人数。";
+        }
+        if (!player.getUUID().equals(room.hostId()) && !privileged) {
+            return "§c只有房主或管理员可以修改人数。";
+        }
+        int capacity = normalizeCapacity(room.modeId(), requestedCapacity);
+        if (capacity <= 0) {
+            return "§c未知模式：" + room.modeId();
+        }
+        if (capacity < room.size()) {
+            return "§c人数不能小于当前成员数 " + room.size() + "。";
+        }
+        if (("duel_1v1".equals(room.modeId()) || "duel_2v2".equals(room.modeId())) && capacity != capacityFor(room.modeId())) {
+            return "§c该模式为固定人数。";
+        }
+        room.setCapacity(capacity);
+        notifyRoom(server, room, "§e房间人数已调整为 §f" + room.size() + "/" + room.capacity());
+        return "§a已修改房间人数为 §e" + capacity;
     }
 
     /** 由房间构建完整可配置项。 */
@@ -177,6 +238,7 @@ public final class RoomManager {
         room.addMember(id);
         roomOf.put(id, room.roomId());
         services.matches().addParticipant(room.matchId(), id);
+        ArcadeNetwork.closeRoomBrowser(player);
         return "§a已加入进行中的对局 §e" + modeName(room);
     }
 
@@ -281,6 +343,7 @@ public final class RoomManager {
             room.setMatchId(match.matchId());
             room.setState(ArcadeRoom.State.IN_PROGRESS);
             notifyAll(server, members, "§a对局开始！祝你好运。");
+            closeRoomBrowsers(server, members);
             return "§a对局开始 §7(" + result.message() + ")";
         }
         // 固定模式：回收房间
@@ -289,7 +352,17 @@ public final class RoomManager {
             roomOf.remove(id);
         }
         notifyAll(server, members, "§a对局开始！祝你好运。");
+        closeRoomBrowsers(server, members);
         return "§a对局开始 §7(" + result.message() + ")";
+    }
+
+    private void closeRoomBrowsers(MinecraftServer server, Collection<UUID> ids) {
+        for (UUID id : ids) {
+            ServerPlayer p = server.getPlayerList().getPlayer(id);
+            if (p != null) {
+                ArcadeNetwork.closeRoomBrowser(p);
+            }
+        }
     }
 
     /**

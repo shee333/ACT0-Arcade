@@ -30,7 +30,7 @@ public final class ArcadeRoom {
     private final String arenaId;
     /** 自定义计分目标（回合胜场 / 击杀数）；{@code null} 表示用模式默认值。 */
     private final Integer winTarget;
-    private final int capacity;
+    private int capacity;
     /** 对局限时（秒）；0 表示不限时。 */
     private final int timeLimitSeconds;
     /** 是否随机武器。 */
@@ -83,6 +83,10 @@ public final class ArcadeRoom {
 
     public int capacity() {
         return capacity;
+    }
+
+    void setCapacity(int capacity) {
+        this.capacity = Math.max(2, capacity);
     }
 
     public int timeLimitSeconds() {

@@ -179,10 +179,18 @@ public final class ArcadeCommand {
                                     .then(Commands.argument("time", IntegerArgumentType.integer(0, 3600))
                                             .executes(ctx -> roomCreate(ctx, mode))
                                             .then(Commands.argument("random", BoolArgumentType.bool())
-                                                    .executes(ctx -> roomCreate(ctx, mode)))))));
+                                                    .executes(ctx -> roomCreate(ctx, mode))
+                                                    .then(Commands.argument("capacity", IntegerArgumentType.integer(2, 32))
+                                                        .executes(ctx -> roomCreate(ctx, mode))))))));
         }
         return Commands.literal("room")
                 .then(create)
+                                .then(Commands.literal("size")
+                                    .then(Commands.argument("players", IntegerArgumentType.integer(2, 32))
+                                        .executes(ctx -> roomResize(ctx, null)))
+                                    .then(Commands.argument("id", StringArgumentType.word()).suggests(ROOM_IDS)
+                                        .then(Commands.argument("players", IntegerArgumentType.integer(2, 32))
+                                            .executes(ctx -> roomResize(ctx, StringArgumentType.getString(ctx, "id"))))))
                 .then(Commands.literal("join")
                         .then(Commands.argument("id", StringArgumentType.word()).suggests(ROOM_IDS)
                                 .executes(ArcadeCommand::roomJoin)))
@@ -198,7 +206,19 @@ public final class ArcadeCommand {
         Integer target = optInt(ctx, "target");
         int time = optIntOr(ctx, "time", 0);
         boolean random = optBool(ctx, "random", false);
-        String feedback = services().rooms().create(server, player, mode, arena, target, time, random);
+        Integer capacity = optInt(ctx, "capacity");
+        String feedback = services().rooms().create(server, player, mode, arena, target, time, random, capacity);
+        ctx.getSource().sendSuccess(() -> Component.literal(feedback), false);
+        ArcadeNetwork.broadcastRoomList(server);
+        return 1;
+    }
+
+    private static int roomResize(CommandContext<CommandSourceStack> ctx, String roomId) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        MinecraftServer server = ctx.getSource().getServer();
+        int players = IntegerArgumentType.getInteger(ctx, "players");
+        boolean privileged = ctx.getSource().hasPermission(2);
+        String feedback = services().rooms().resize(server, player, roomId, players, privileged);
         ctx.getSource().sendSuccess(() -> Component.literal(feedback), false);
         ArcadeNetwork.broadcastRoomList(server);
         return 1;

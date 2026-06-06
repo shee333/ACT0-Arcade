@@ -46,4 +46,11 @@ public final class ClientRoomList {
             mc.setScreen(new RoomBrowserScreen());
         }
     }
+
+    public static void closeBrowser() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.screen instanceof RoomBrowserScreen) {
+            mc.setScreen(null);
+        }
+    }
 }

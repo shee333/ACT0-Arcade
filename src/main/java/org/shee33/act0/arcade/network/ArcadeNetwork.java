@@ -24,7 +24,7 @@ import java.util.List;
  */
 public final class ArcadeNetwork {
 
-    private static final String PROTOCOL = "1";
+        private static final String PROTOCOL = "2";
 
     @SuppressWarnings("removal")
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
@@ -67,6 +67,8 @@ public final class ArcadeNetwork {
                 SyncSidebarPacket::encode, SyncSidebarPacket::decode, SyncSidebarPacket::handle);
         CHANNEL.registerMessage(id++, DeathCamPacket.class,
                 DeathCamPacket::encode, DeathCamPacket::decode, DeathCamPacket::handle);
+        CHANNEL.registerMessage(id++, CloseRoomBrowserPacket.class,
+                CloseRoomBrowserPacket::encode, CloseRoomBrowserPacket::decode, CloseRoomBrowserPacket::handle);
     }
 
     /** 把服务端当前装备目录下发给指定玩家。 */
@@ -79,6 +81,10 @@ public final class ArcadeNetwork {
     public static void sendDeathCam(ServerPlayer player, boolean active, String killerName) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new DeathCamPacket(active, killerName));
     }
+
+        public static void closeRoomBrowser(ServerPlayer player) {
+                CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new CloseRoomBrowserPacket());
+        }
 
     /** 把服务端当前配件目录下发给指定玩家。 */
     public static void syncAttachmentCatalog(ServerPlayer player) {
