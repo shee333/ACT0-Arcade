@@ -214,6 +214,11 @@ public final class MatchLauncher {
         if (!validation.isValid()) {
             return Result.fail("竞技场不满足要求：" + validation.reason());
         }
+        if (settings.respawnPolicy() == org.shee33.act0.arcade.round.RespawnPolicy.RANDOM
+                && arena.randomSpawns().size() < players.size()) {
+            return Result.fail("个人乱斗复活点不足：需要至少 " + players.size()
+                    + " 个，当前 " + arena.randomSpawns().size() + " 个。");
+        }
 
         String matchId = mode + "-" + UUID.randomUUID().toString().substring(0, 8);
         Function<UUID, Loadout> loadoutProvider = id -> ArcadeLoadoutStore.get(server)

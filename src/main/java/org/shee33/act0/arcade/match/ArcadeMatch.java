@@ -212,7 +212,7 @@ public final class ArcadeMatch {
             }
             exitSpectator(player);
             enterAdventureMode(player);
-            spawnAtSide(player, sideOf.get(id));
+            spawnForRound(player, sideOf.get(id));
             equip(player);
             player.setHealth(player.getMaxHealth());
             applyCountdownLock(player);
@@ -657,7 +657,7 @@ public final class ArcadeMatch {
         if (phase == MatchPhase.COMBAT || phase == MatchPhase.COUNTDOWN) {
             exitSpectator(player);
             enterAdventureMode(player);
-            spawnAtSide(player, side);
+            spawnForRound(player, side);
             equip(player);
             player.setHealth(player.getMaxHealth());
             alive.add(id);
@@ -688,6 +688,9 @@ public final class ArcadeMatch {
         if (isFullCapacity()) {
             return "§c对局人数已满。";
         }
+        if (settings.respawnPolicy() == RespawnPolicy.RANDOM && arena.randomSpawns().size() <= sideOf.size()) {
+            return "§c个人乱斗复活点不足，无法继续加入。";
+        }
         int side = smallestSide();
         sides.get(side).add(id);
         sideOf.put(id, side);
@@ -697,7 +700,7 @@ public final class ArcadeMatch {
         sidebar.showTo(player);
         if (phase == MatchPhase.COMBAT || phase == MatchPhase.COUNTDOWN) {
             enterAdventureMode(player);
-            spawnAtSide(player, side);
+            spawnForRound(player, side);
             equip(player);
             player.setHealth(player.getMaxHealth());
             alive.add(id);
@@ -720,6 +723,7 @@ public final class ArcadeMatch {
     /** 是否可中途加入（弹性模式且未满且未结束）。 */
     public boolean acceptsLatecomers() {
         return settings.flexible() && !isFullCapacity()
+                && (settings.respawnPolicy() != RespawnPolicy.RANDOM || arena.randomSpawns().size() > sideOf.size())
                 && phase != MatchPhase.ENDED && phase != MatchPhase.MATCH_RESULT;
     }
 
@@ -780,6 +784,23 @@ public final class ArcadeMatch {
 
     private void spawnAtSide(ServerPlayer player, int side) {
         TeleportHelper.teleport(player, arena.sideSpawn(side));
+    }
+
+    private void spawnForRound(ServerPlayer player, int side) {
+        if (settings.respawnPolicy() == RespawnPolicy.RANDOM) {
+            TeleportHelper.teleport(player, initialFreeForAllSpawn(side));
+        } else {
+            spawnAtSide(player, side);
+        }
+    }
+
+    private SpawnPoint initialFreeForAllSpawn(int side) {
+        List<SpawnPoint> spawns = arena.randomSpawns();
+        if (spawns.isEmpty()) {
+            return arena.sideSpawn(side);
+        }
+        int index = Math.max(0, Math.min(side, spawns.size() - 1));
+        return spawns.get(index);
     }
 
     private void rememberPreMatchMode(ServerPlayer player) {
