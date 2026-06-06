@@ -18,10 +18,18 @@ public final class RoomDto {
     private final String targetText;
     private final boolean youAreMember;
     private final boolean inProgress;
+    private final String playersText;
+    private final int elapsedSeconds;
 
     public RoomDto(String roomId, String modeName, String arenaId, String hostName,
                    int size, int capacity, String targetText, boolean youAreMember,
                    boolean inProgress) {
+        this(roomId, modeName, arenaId, hostName, size, capacity, targetText, youAreMember, inProgress, "", 0);
+    }
+
+    public RoomDto(String roomId, String modeName, String arenaId, String hostName,
+                   int size, int capacity, String targetText, boolean youAreMember,
+                   boolean inProgress, String playersText, int elapsedSeconds) {
         this.roomId = roomId;
         this.modeName = modeName;
         this.arenaId = arenaId;
@@ -31,6 +39,8 @@ public final class RoomDto {
         this.targetText = targetText;
         this.youAreMember = youAreMember;
         this.inProgress = inProgress;
+        this.playersText = playersText != null ? playersText : "";
+        this.elapsedSeconds = Math.max(0, elapsedSeconds);
     }
 
     public String roomId() {
@@ -69,6 +79,14 @@ public final class RoomDto {
         return inProgress;
     }
 
+    public String playersText() {
+        return playersText;
+    }
+
+    public int elapsedSeconds() {
+        return elapsedSeconds;
+    }
+
     public boolean isFull() {
         return size >= capacity;
     }
@@ -83,12 +101,14 @@ public final class RoomDto {
         buf.writeUtf(targetText);
         buf.writeBoolean(youAreMember);
         buf.writeBoolean(inProgress);
+        buf.writeUtf(playersText);
+        buf.writeVarInt(elapsedSeconds);
     }
 
     public static RoomDto decode(FriendlyByteBuf buf) {
         return new RoomDto(
                 buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf(),
                 buf.readVarInt(), buf.readVarInt(), buf.readUtf(), buf.readBoolean(),
-                buf.readBoolean());
+                buf.readBoolean(), buf.readUtf(), buf.readVarInt());
     }
 }

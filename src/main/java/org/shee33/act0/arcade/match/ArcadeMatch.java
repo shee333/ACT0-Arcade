@@ -150,6 +150,7 @@ public final class ArcadeMatch {
     private int lastCountdownSecond = -1;
     /** 对局限时剩余刻（{@code <0} 表示不限时）。 */
     private int matchClockTicks = -1;
+    private long startedTick;
     private boolean draw = false;
     private final Map<UUID, ServerBossEvent> personalBossBars = new HashMap<>();
 
@@ -217,6 +218,7 @@ public final class ArcadeMatch {
             }
         }
         setupNameTagTeams();
+        startedTick = server.getTickCount();
         bossBar.setVisible(!usesPersonalBossBars());
         if (settings.timeLimitSeconds() > 0) {
             matchClockTicks = settings.timeLimitSeconds() * 20;
@@ -1724,6 +1726,27 @@ public final class ArcadeMatch {
 
     public boolean contains(UUID playerId) {
         return sideOf.containsKey(playerId);
+    }
+
+    public String displayName() {
+        return settings.displayName();
+    }
+
+    public String targetText() {
+        int pts = score.pointsToWin();
+        return settings.scoringMode() == ScoringMode.KILL_COUNT ? (pts + " 杀") : (pts + " 胜");
+    }
+
+    public int elapsedSeconds() {
+        return (int) Math.max(0L, (server.getTickCount() - startedTick) / 20L);
+    }
+
+    public String participantNames() {
+        List<String> names = new ArrayList<>();
+        for (UUID id : sideOf.keySet()) {
+            names.add(nameOf(id));
+        }
+        return String.join(", ", names);
     }
 
     public boolean canChangeLoadout(UUID playerId) {

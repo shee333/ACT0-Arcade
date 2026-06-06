@@ -21,8 +21,8 @@ public final class RoomBrowserScreen extends Screen {
 
     private static final int W = 320;
     private static final int H = 200;
-    private static final int ROW_H = 26;
-    private static final int VISIBLE_ROWS = 5;
+    private static final int ROW_H = 36;
+    private static final int VISIBLE_ROWS = 4;
     private static final int ACTION_W = 52;
     private static final int REFRESH_INTERVAL = 40; // ticks (2s)
 
@@ -155,7 +155,7 @@ public final class RoomBrowserScreen extends Screen {
         PixelTheme.panel(gg, left, top, W, H);
 
         gg.drawCenteredString(font, "§l游戏浏览器", left + W / 2, top + 12, PixelTheme.ACCENT);
-        gg.drawString(font, "§7当前可加入的房间", left + 12, top + 28, PixelTheme.TEXT_DIM, false);
+        gg.drawString(font, "§7房间与进行中的对局", left + 12, top + 28, PixelTheme.TEXT_DIM, false);
 
         List<RoomDto> list = rooms();
         if (list.isEmpty()) {
@@ -179,19 +179,21 @@ public final class RoomBrowserScreen extends Screen {
     private void renderRoomRow(GuiGraphics gg, RoomDto room, int y, int mouseX, int mouseY) {
         PixelTheme.row(gg, listX, y, listW, ROW_H - 2, room.youAreMember());
 
-        String status = room.inProgress() ? " §a[进行中]" : "";
+        String status = room.inProgress() ? " §a[进行中 " + formatClock(room.elapsedSeconds()) + "]" : "";
         gg.drawString(font, "§f" + room.modeName() + " §8· §7" + room.targetText() + status,
                 listX + 4, y + 4, PixelTheme.TEXT, false);
         gg.drawString(font, "§8战场 §7" + room.arenaId() + "  §8房主 §7" + room.hostName(),
                 listX + 4, y + 14, PixelTheme.TEXT_DIM, false);
+        String players = room.playersText().isBlank() ? "-" : trim(room.playersText(), listW - ACTION_W - 76);
+        gg.drawString(font, "§8玩家 §7" + players, listX + 4, y + 24, PixelTheme.TEXT_DIM, false);
 
         String count = room.size() + "/" + room.capacity();
         int countColor = room.isFull() ? 0xFFCF6A5A : PixelTheme.TEXT;
-        gg.drawString(font, count, listX + listW - ACTION_W - 4 - font.width(count) - 6, y + 9, countColor, false);
+        gg.drawString(font, count, listX + listW - ACTION_W - 4 - font.width(count) - 6, y + 14, countColor, false);
 
         // 操作按钮
         int ax = listX + listW - ACTION_W - 4;
-        int ay = y + 4;
+        int ay = y + 8;
         int ah = ROW_H - 8;
         String label;
         int color;
@@ -231,6 +233,22 @@ public final class RoomBrowserScreen extends Screen {
         int range = trackH - thumbH;
         int thumbY = trackY + (range * scrollRow / maxScrollRow());
         gg.fill(trackX, thumbY, trackX + 2, thumbY + thumbH, PixelTheme.BEVEL_LIGHT);
+    }
+
+    private String trim(String text, int maxW) {
+        if (font.width(text) <= maxW) {
+            return text;
+        }
+        String out = text;
+        while (out.length() > 1 && font.width(out + "…") > maxW) {
+            out = out.substring(0, out.length() - 1);
+        }
+        return out + "…";
+    }
+
+    private static String formatClock(int seconds) {
+        int s = Math.max(0, seconds);
+        return (s / 60) + ":" + String.format("%02d", s % 60);
     }
 
     @Override

@@ -62,6 +62,10 @@ public final class MatchManager {
         return matches.get(matchId);
     }
 
+    public Collection<ArcadeMatch> all() {
+        return java.util.List.copyOf(matches.values());
+    }
+
     public boolean isArenaInUse(String arenaId) {
         if (arenaId == null) {
             return false;

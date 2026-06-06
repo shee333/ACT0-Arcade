@@ -11,6 +11,7 @@ import org.shee33.act0.arcade.economy.BuyOutcome;
 import org.shee33.act0.arcade.loadout.DefaultLoadoutCatalog;
 import org.shee33.act0.arcade.loadout.LoadoutRegistry;
 import org.shee33.act0.arcade.loadout.LoadoutSet;
+import org.shee33.act0.arcade.match.ArcadeMatch;
 import org.shee33.act0.arcade.match.ArcadeRoom;
 import org.shee33.act0.arcade.match.RoomManager;
 import org.shee33.act0.arcade.storage.AttachmentCatalogIO;
@@ -20,14 +21,17 @@ import org.shee33.act0.arcade.storage.ArenaRegistry;
 import org.shee33.act0.arcade.storage.LoadoutCatalogIO;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * 街机模组网络通道：配装 GUI 开屏（S→C）、配装保存（C→S）、装备目录同步（S→C）、游戏浏览器开屏（S→C）。
  */
 public final class ArcadeNetwork {
 
-        private static final String PROTOCOL = "4";
+        private static final String PROTOCOL = "5";
 
     @SuppressWarnings("removal")
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
@@ -154,15 +158,41 @@ public final class ArcadeNetwork {
                         }
                 }
         List<RoomDto> dtos = new ArrayList<>();
+                Set<String> representedMatches = new HashSet<>();
         for (ArcadeRoom room : rooms.all()) {
+                        ArcadeMatch match = room.matchId() != null ? Act0Arcade.services().matches().get(room.matchId()) : null;
+                        if (match != null) {
+                                representedMatches.add(match.matchId());
+                        }
             dtos.add(new RoomDto(
                     room.roomId(), rooms.modeName(room), room.arenaId(), room.hostName(),
                     room.size(), room.capacity(), rooms.targetText(room),
-                    room.contains(player.getUUID()), room.isInProgress()));
+                                        room.contains(player.getUUID()), room.isInProgress(),
+                                        match != null ? match.participantNames() : participantNames(player.getServer(), room.members()),
+                                        match != null ? match.elapsedSeconds() : 0));
+                }
+                for (ArcadeMatch match : Act0Arcade.services().matches().all()) {
+                        if (representedMatches.contains(match.matchId())) {
+                                continue;
+                        }
+                        dtos.add(new RoomDto(
+                                        match.matchId(), match.displayName(), match.arenaId(), "-",
+                                        match.occupancy(), match.capacity(), match.targetText(),
+                                        match.contains(player.getUUID()), true,
+                                        match.participantNames(), match.elapsedSeconds()));
         }
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
                 new SyncRoomListPacket(canManage, open, arenaIds, dtos));
     }
+
+        private static String participantNames(net.minecraft.server.MinecraftServer server, Set<UUID> ids) {
+                List<String> names = new ArrayList<>();
+                for (UUID id : ids) {
+                        ServerPlayer p = server.getPlayerList().getPlayer(id);
+                        names.add(p != null ? p.getGameProfile().getName() : id.toString().substring(0, 8));
+                }
+                return String.join(", ", names);
+        }
 
     /** 把最新房间列表推送给所有在线玩家（创建/加入/离开/开局后调用）。 */
     public static void broadcastRoomList(MinecraftServer server) {
