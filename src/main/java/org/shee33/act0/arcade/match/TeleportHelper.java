@@ -25,6 +25,9 @@ public final class TeleportHelper {
      * @return 是否成功（维度无法解析时返回 {@code false}）。
      */
     public static boolean teleport(ServerPlayer player, SpawnPoint spawn) {
+        if (spawn == null) {
+            return false;
+        }
         ServerLevel level = resolveLevel(player.server, spawn.dimension());
         if (level == null) {
             return false;

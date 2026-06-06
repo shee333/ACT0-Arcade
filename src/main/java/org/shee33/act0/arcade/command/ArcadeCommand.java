@@ -290,6 +290,12 @@ public final class ArcadeCommand {
                 .then(Commands.literal("addspawn")
                         .then(Commands.argument("id", StringArgumentType.word()).suggests(ARENA_IDS)
                                 .executes(ArcadeCommand::arenaAddSideSpawn)))
+                .then(Commands.literal("setreturn")
+                    .then(Commands.argument("id", StringArgumentType.word()).suggests(ARENA_IDS)
+                        .executes(ArcadeCommand::arenaSetReturnSpawn)))
+                .then(Commands.literal("addrespawn")
+                    .then(Commands.argument("id", StringArgumentType.word()).suggests(ARENA_IDS)
+                        .executes(ArcadeCommand::arenaAddRandomSpawn)))
                 .then(Commands.literal("addrandom")
                         .then(Commands.argument("id", StringArgumentType.word()).suggests(ARENA_IDS)
                                 .executes(ArcadeCommand::arenaAddRandomSpawn)))
@@ -311,11 +317,30 @@ public final class ArcadeCommand {
             ctx.getSource().sendFailure(Component.literal("竞技场已存在：" + id));
             return 0;
         }
-        SpawnPoint here = spawnAt(player);
-        ArcadeArena arena = new ArcadeArena(id, new ArrayList<>(), new ArrayList<>(), here);
+        ArcadeArena arena = new ArcadeArena(id, new ArrayList<>(), new ArrayList<>(), null);
         registry.put(arena);
         ctx.getSource().sendSuccess(() -> Component.literal(
-                "§a已创建竞技场 §e" + id + " §a（返回点=当前位置）。用 addspawn/addrandom 录入出生点。"), true);
+                "§a已创建竞技场 §e" + id + " §a。请继续设置返回点、阵营出生点和个人乱斗复活点。"), true);
+        return 1;
+    }
+
+    private static int arenaSetReturnSpawn(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        String id = StringArgumentType.getString(ctx, "id");
+        ArenaRegistry registry = ArenaRegistry.get(ctx.getSource().getServer());
+        Optional<ArcadeArena> existing = registry.find(id);
+        if (existing.isEmpty()) {
+            ctx.getSource().sendFailure(Component.literal("竞技场不存在：" + id));
+            return 0;
+        }
+        ArcadeArena old = existing.get();
+        ArcadeArena.Builder builder = new ArcadeArena.Builder(id).returnSpawn(spawnAt(player));
+        old.sideSpawns().forEach(builder::addSideSpawn);
+        old.randomSpawns().forEach(builder::addRandomSpawn);
+        ArcadeArena updated = builder.build();
+        registry.put(updated);
+        ctx.getSource().sendSuccess(() -> Component.literal(
+                "§a已将当前位置设置为 §e" + id + " §a的对局结束返回点。"), true);
         return 1;
     }
 
@@ -357,7 +382,7 @@ public final class ArcadeCommand {
         ArcadeArena updated = builder.build();
         registry.put(updated);
         ctx.getSource().sendSuccess(() -> Component.literal(
-                "§a已为 §e" + id + " §a添加随机复活点 #" + updated.randomSpawns().size()), true);
+            "§a已为 §e" + id + " §a添加个人乱斗手动复活点 #" + updated.randomSpawns().size()), true);
         return 1;
     }
 
@@ -380,10 +405,11 @@ public final class ArcadeCommand {
             return 0;
         }
         ArcadeArena a = arena.get();
+        String ret = a.hasReturnSpawn() ? a.returnSpawn().toString() : "§c未设置";
         ctx.getSource().sendSuccess(() -> Component.literal(
                 "§e" + id + "§f：阵营出生点 " + a.sideSpawns().size()
-                        + "，随机点 " + a.randomSpawns().size()
-                        + "，返回点 " + a.returnSpawn()), false);
+                + "，个人乱斗复活点 " + a.randomSpawns().size()
+                + "，返回点 " + ret), false);
         return 1;
     }
 

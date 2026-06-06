@@ -55,7 +55,9 @@ public final class ArenaCodec {
         tag.putString(KEY_ID, arena.arenaId());
         tag.put(KEY_SIDE_SPAWNS, writeSpawnList(arena.sideSpawns()));
         tag.put(KEY_RANDOM_SPAWNS, writeSpawnList(arena.randomSpawns()));
-        tag.put(KEY_RETURN, writeSpawn(arena.returnSpawn()));
+        if (arena.hasReturnSpawn()) {
+            tag.put(KEY_RETURN, writeSpawn(arena.returnSpawn()));
+        }
         return tag;
     }
 
@@ -63,7 +65,7 @@ public final class ArenaCodec {
         String id = tag.getString(KEY_ID);
         List<SpawnPoint> sideSpawns = readSpawnList(tag.getList(KEY_SIDE_SPAWNS, Tag.TAG_COMPOUND));
         List<SpawnPoint> randomSpawns = readSpawnList(tag.getList(KEY_RANDOM_SPAWNS, Tag.TAG_COMPOUND));
-        SpawnPoint returnSpawn = readSpawn(tag.getCompound(KEY_RETURN));
+        SpawnPoint returnSpawn = tag.contains(KEY_RETURN, Tag.TAG_COMPOUND) ? readSpawn(tag.getCompound(KEY_RETURN)) : null;
         return new ArcadeArena(id, sideSpawns, randomSpawns, returnSpawn);
     }
 

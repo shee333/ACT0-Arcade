@@ -6,6 +6,7 @@ import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerBossEvent;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
@@ -105,6 +106,7 @@ public final class ArcadeMatch {
 
     /** 死亡补给箱标记 NBT 键：拾取后补满虚拟弹药。 */
     public static final String AMMO_CRATE_KEY = "Act0AmmoCrate";
+    private static final double RESPAWN_CLEAR_RADIUS = 10.0;
 
     private MatchPhase phase = MatchPhase.WAITING;
     private int winnerSide = -1;
@@ -115,6 +117,7 @@ public final class ArcadeMatch {
     /** 对局限时剩余刻（{@code <0} 表示不限时）。 */
     private int matchClockTicks = -1;
     private boolean draw = false;
+    private final Map<UUID, ServerBossEvent> personalBossBars = new HashMap<>();
 
     public ArcadeMatch(String matchId,
                        MatchSettings settings,
@@ -174,11 +177,11 @@ public final class ArcadeMatch {
         for (UUID id : sideOf.keySet()) {
             ServerPlayer player = player(id);
             if (player != null) {
-                bossBar.addPlayer(player);
+                addBossBarPlayer(player);
                 sidebar.showTo(player);
             }
         }
-        bossBar.setVisible(true);
+        bossBar.setVisible(!usesPersonalBossBars());
         if (settings.timeLimitSeconds() > 0) {
             matchClockTicks = settings.timeLimitSeconds() * 20;
         }
@@ -506,6 +509,7 @@ public final class ArcadeMatch {
         bossBar.setName(Component.literal("§6§l" + sideLabel(side) + " 获胜！"));
         bossBar.setProgress(1.0f);
         bossBar.setColor(BossEvent.BossBarColor.GREEN);
+        showPersonalResultBars(side);
         broadcast("§6§l胜利：" + sideLabel(side) + "！");
         playToAll(SoundEvents.PLAYER_LEVELUP, 1.0f);
         updateSidebar();
@@ -522,6 +526,7 @@ public final class ArcadeMatch {
         bossBar.setName(Component.literal("§7§l平局"));
         bossBar.setProgress(1.0f);
         bossBar.setColor(BossEvent.BossBarColor.WHITE);
+        showPersonalDrawBars();
         broadcast("§7§l平局！");
         updateSidebar();
     }
@@ -539,7 +544,7 @@ public final class ArcadeMatch {
                 TeleportHelper.teleport(player, arena.returnSpawn());
                 player.getInventory().clearContent();
                 sidebar.hideFrom(player);
-                bossBar.removePlayer(player);
+                removeBossBarPlayer(player);
                 String result = draw
                         ? "§7本局平局，已送你回大厅。"
                         : (sideOf.get(id) != null && sideOf.get(id) == winnerSide
@@ -551,6 +556,10 @@ public final class ArcadeMatch {
         }
         bossBar.removeAllPlayers();
         bossBar.setVisible(false);
+        for (ServerBossEvent bar : personalBossBars.values()) {
+            bar.removeAllPlayers();
+        }
+        personalBossBars.clear();
         phase = MatchPhase.ENDED;
     }
 
@@ -575,7 +584,7 @@ public final class ArcadeMatch {
         if (p != null) {
             clearKillerGlow(p);
             exitSpectator(p);
-            bossBar.removePlayer(p);
+                removeBossBarPlayer(p);
             sidebar.hideFrom(p);
         }
         if (settings.scoringMode() != ScoringMode.KILL_COUNT && wasAlive && phase == MatchPhase.COMBAT) {
@@ -596,7 +605,7 @@ public final class ArcadeMatch {
             return false;
         }
         disconnected.remove(id);
-        bossBar.addPlayer(player);
+        addBossBarPlayer(player);
         sidebar.showTo(player);
         int side = sideOf.getOrDefault(id, 0);
         if (phase == MatchPhase.COMBAT || phase == MatchPhase.COUNTDOWN) {
@@ -636,7 +645,7 @@ public final class ArcadeMatch {
         sides.get(side).add(id);
         sideOf.put(id, side);
         kills.put(id, 0);
-        bossBar.addPlayer(player);
+        addBossBarPlayer(player);
         sidebar.showTo(player);
         if (phase == MatchPhase.COMBAT || phase == MatchPhase.COUNTDOWN) {
             spawnAtSide(player, side);
@@ -731,8 +740,47 @@ public final class ArcadeMatch {
                 SpawnPoint near = livingTeammateSpawn(player.getUUID(), side);
                 TeleportHelper.teleport(player, near != null ? near : arena.sideSpawn(side));
             }
-            case RANDOM -> TeleportHelper.teleport(player, arena.randomSpawn(random));
+            case RANDOM -> TeleportHelper.teleport(player, manualFreeForAllSpawn(player));
         }
+    }
+
+    private SpawnPoint manualFreeForAllSpawn(ServerPlayer player) {
+        List<SpawnPoint> candidates = arena.randomSpawns();
+        if (candidates.isEmpty()) {
+            return arena.sideSpawn(sideOf.getOrDefault(player.getUUID(), 0));
+        }
+        int start = random.nextInt(candidates.size());
+        SpawnPoint fallback = null;
+        for (int i = 0; i < candidates.size(); i++) {
+            SpawnPoint spawn = candidates.get((start + i) % candidates.size());
+            if (fallback == null && TeleportHelper.resolveLevel(server, spawn.dimension()) != null) {
+                fallback = spawn;
+            }
+            if (isSpawnClear(spawn, player.getUUID())) {
+                return spawn;
+            }
+        }
+        return fallback != null ? fallback : candidates.get(start);
+    }
+
+    private boolean isSpawnClear(SpawnPoint spawn, UUID self) {
+        ServerLevel level = TeleportHelper.resolveLevel(server, spawn.dimension());
+        if (level == null) {
+            return false;
+        }
+        double radiusSq = RESPAWN_CLEAR_RADIUS * RESPAWN_CLEAR_RADIUS;
+        for (ServerPlayer other : server.getPlayerList().getPlayers()) {
+            if (other.getUUID().equals(self) || other.level() != level || !other.isAlive()) {
+                continue;
+            }
+            double dx = other.getX() - spawn.x();
+            double dy = other.getY() - spawn.y();
+            double dz = other.getZ() - spawn.z();
+            if (dx * dx + dy * dy + dz * dz <= radiusSq) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private SpawnPoint livingTeammateSpawn(UUID self, int side) {
@@ -1101,6 +1149,10 @@ public final class ArcadeMatch {
 
     /** 刷新 Boss 血条的标题、颜色与进度（倒计时按时间、战斗按比分）。 */
     private void updateBossBar() {
+        if (usesPersonalBossBars()) {
+            updatePersonalBossBars();
+            return;
+        }
         if (!bossBar.isVisible()) {
             return;
         }
@@ -1117,6 +1169,89 @@ public final class ArcadeMatch {
             }
             default -> {
             }
+        }
+    }
+
+    private boolean usesPersonalBossBars() {
+        return settings.scoringMode() == ScoringMode.KILL_COUNT && settings.teamSize() == 1;
+    }
+
+    private void addBossBarPlayer(ServerPlayer player) {
+        if (usesPersonalBossBars()) {
+            personalBossBar(player.getUUID()).addPlayer(player);
+        } else {
+            bossBar.addPlayer(player);
+        }
+    }
+
+    private void removeBossBarPlayer(ServerPlayer player) {
+        ServerBossEvent personal = personalBossBars.get(player.getUUID());
+        if (personal != null) {
+            personal.removePlayer(player);
+        }
+        bossBar.removePlayer(player);
+    }
+
+    private ServerBossEvent personalBossBar(UUID id) {
+        return personalBossBars.computeIfAbsent(id, ignored -> {
+            ServerBossEvent bar = new ServerBossEvent(
+                    Component.literal("§6" + settings.displayName()),
+                    BossEvent.BossBarColor.YELLOW,
+                    BossEvent.BossBarOverlay.PROGRESS);
+            bar.setVisible(true);
+            return bar;
+        });
+    }
+
+    private void updatePersonalBossBars() {
+        for (UUID id : sideOf.keySet()) {
+            ServerBossEvent bar = personalBossBars.get(id);
+            if (bar == null) {
+                continue;
+            }
+            switch (phase) {
+                case COUNTDOWN -> {
+                    bar.setName(Component.literal("§e击杀战 · 即将开始"));
+                    bar.setColor(BossEvent.BossBarColor.YELLOW);
+                    bar.setProgress(clamp01((float) timer.remainingTicks() / phaseTotalTicks));
+                }
+                case COMBAT -> {
+                    int own = kills.getOrDefault(id, 0);
+                    int leader = leadingScore();
+                    int target = Math.max(1, score.pointsToWin());
+                    bar.setName(Component.literal("§a击杀战 §7| 你的击杀 §f" + own + "/" + target
+                            + " §7| 领先 §e" + leader));
+                    bar.setColor(BossEvent.BossBarColor.GREEN);
+                    bar.setProgress(clamp01((float) own / target));
+                }
+                default -> {
+                }
+            }
+        }
+    }
+
+    private void showPersonalResultBars(int winningSide) {
+        if (!usesPersonalBossBars()) {
+            return;
+        }
+        for (Map.Entry<UUID, ServerBossEvent> e : personalBossBars.entrySet()) {
+            UUID id = e.getKey();
+            ServerBossEvent bar = e.getValue();
+            boolean won = sideOf.getOrDefault(id, -1) == winningSide;
+            bar.setName(Component.literal(won ? "§6§l胜利" : "§7对局结束"));
+            bar.setColor(won ? BossEvent.BossBarColor.GREEN : BossEvent.BossBarColor.RED);
+            bar.setProgress(1.0f);
+        }
+    }
+
+    private void showPersonalDrawBars() {
+        if (!usesPersonalBossBars()) {
+            return;
+        }
+        for (ServerBossEvent bar : personalBossBars.values()) {
+            bar.setName(Component.literal("§7§l平局"));
+            bar.setColor(BossEvent.BossBarColor.WHITE);
+            bar.setProgress(1.0f);
         }
     }
 

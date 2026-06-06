@@ -6,15 +6,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-import java.util.Random;
 
 /**
- * 竞技场：一张地图上各参战方的出生点、个人乱斗的随机复活候选点，以及离场返回点。MC-free 纯数据。
+ * 竞技场：一张地图上各参战方的出生点、个人乱斗的手动复活候选点，以及离场返回点。MC-free 纯数据。
  *
  * <p>设计为"方索引 → 出生点"，与 {@link org.shee33.act0.arcade.mode.MatchSettings#sideCount()} 对应：
  * <ul>
  *   <li>决斗/团队：每方一个固定出生点（{@code sideSpawns.get(sideIndex)}）。</li>
- *   <li>个人乱斗：使用 {@link #randomSpawns} 候选池随机取点。</li>
+ *   <li>个人乱斗：使用 {@link #randomSpawns} 手动候选池取点。</li>
  * </ul>
  */
 public final class ArcadeArena {
@@ -31,7 +30,7 @@ public final class ArcadeArena {
         this.arenaId = Objects.requireNonNull(arenaId, "arenaId");
         this.sideSpawns = List.copyOf(Objects.requireNonNull(sideSpawns, "sideSpawns"));
         this.randomSpawns = randomSpawns == null ? List.of() : List.copyOf(randomSpawns);
-        this.returnSpawn = Objects.requireNonNull(returnSpawn, "returnSpawn");
+        this.returnSpawn = returnSpawn;
     }
 
     public String arenaId() {
@@ -51,15 +50,6 @@ public final class ArcadeArena {
         return Collections.unmodifiableList(sideSpawns);
     }
 
-    /** 随机复活点（个人乱斗）；若未配置随机池则回退到任一方出生点。 */
-    public SpawnPoint randomSpawn(Random random) {
-        List<SpawnPoint> pool = randomSpawns.isEmpty() ? sideSpawns : randomSpawns;
-        if (pool.isEmpty()) {
-            return returnSpawn;
-        }
-        return pool.get(random.nextInt(pool.size()));
-    }
-
     public List<SpawnPoint> randomSpawns() {
         return Collections.unmodifiableList(randomSpawns);
     }
@@ -67,6 +57,10 @@ public final class ArcadeArena {
     /** 离场返回点（大厅/出生岛）。 */
     public SpawnPoint returnSpawn() {
         return returnSpawn;
+    }
+
+    public boolean hasReturnSpawn() {
+        return returnSpawn != null;
     }
 
     /**
@@ -77,10 +71,12 @@ public final class ArcadeArena {
      * @return 校验结果（含失败原因）
      */
     public Validation validateFor(RespawnPolicy policy, int sideCount) {
+        if (returnSpawn == null) {
+            return Validation.fail("需要先手动设置对局结束返回点");
+        }
         if (policy == RespawnPolicy.RANDOM) {
-            int pool = randomSpawns.isEmpty() ? sideSpawns.size() : randomSpawns.size();
-            if (pool < 1) {
-                return Validation.fail("个人乱斗需要至少 1 个随机复活点");
+            if (randomSpawns.isEmpty()) {
+                return Validation.fail("个人乱斗需要至少 1 个手动复活点");
             }
             return Validation.ok();
         }
@@ -144,9 +140,7 @@ public final class ArcadeArena {
         }
 
         public ArcadeArena build() {
-            return new ArcadeArena(arenaId, sideSpawns, randomSpawns,
-                    returnSpawn != null ? returnSpawn
-                            : (sideSpawns.isEmpty() ? null : sideSpawns.get(0)));
+            return new ArcadeArena(arenaId, sideSpawns, randomSpawns, returnSpawn);
         }
     }
 }
