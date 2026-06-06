@@ -11,6 +11,9 @@ public final class ClientDeathCam {
     private static volatile boolean active = false;
     private static volatile long activatedAtMs = 0L;
     private static volatile String killerName = "";
+    private static volatile boolean angleLocked = false;
+    private static volatile float lockedYaw = 0f;
+    private static volatile float lockedPitch = 0f;
 
     private ClientDeathCam() {
     }
@@ -21,10 +24,34 @@ public final class ClientDeathCam {
         }
         ClientDeathCam.active = active;
         ClientDeathCam.killerName = killerName != null ? killerName : "";
+        if (!active) {
+            angleLocked = false;
+        }
     }
 
     public static boolean isActive() {
         return active;
+    }
+
+    public static void lockAnglesIfNeeded(float yaw, float pitch) {
+        if (!active || angleLocked) {
+            return;
+        }
+        lockedYaw = yaw;
+        lockedPitch = pitch;
+        angleLocked = true;
+    }
+
+    public static boolean hasLockedAngles() {
+        return active && angleLocked;
+    }
+
+    public static float lockedYaw() {
+        return lockedYaw;
+    }
+
+    public static float lockedPitch() {
+        return lockedPitch;
     }
 
     /** 击杀者名（可能为空，表示自杀/环境死亡）。 */
