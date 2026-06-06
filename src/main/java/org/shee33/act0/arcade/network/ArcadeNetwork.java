@@ -147,7 +147,12 @@ public final class ArcadeNetwork {
     public static void sendRoomList(ServerPlayer player, boolean open) {
         RoomManager rooms = Act0Arcade.services().rooms();
         boolean canManage = true;
-        List<String> arenaIds = new ArrayList<>(ArenaRegistry.get(player.getServer()).ids());
+                List<String> arenaIds = new ArrayList<>();
+                for (String arenaId : ArenaRegistry.get(player.getServer()).ids()) {
+                        if (!rooms.isArenaReserved(arenaId)) {
+                                arenaIds.add(arenaId);
+                        }
+                }
         List<RoomDto> dtos = new ArrayList<>();
         for (ArcadeRoom room : rooms.all()) {
             dtos.add(new RoomDto(

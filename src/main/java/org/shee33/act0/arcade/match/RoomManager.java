@@ -177,7 +177,7 @@ public final class RoomManager {
         return new MatchOptions(room.winTarget(), room.timeLimitSeconds(), room.randomWeapons());
     }
 
-    private boolean isArenaReserved(String arenaId) {
+    public boolean isArenaReserved(String arenaId) {
         if (services.matches().isArenaInUse(arenaId)) {
             return true;
         }

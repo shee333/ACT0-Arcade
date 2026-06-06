@@ -226,7 +226,7 @@ public final class CreateRoomScreen extends Screen {
         // 竞技场
         gg.drawString(font, "§7竞技场", rx, top + 44, PixelTheme.TEXT_DIM, false);
         String arenaText = arenas().isEmpty()
-                ? "§c暂无战场"
+            ? "§c暂无可用战场"
                 : "§e" + arenas().get(Math.min(selectedArena, arenas().size() - 1))
                         + " §7(" + (selectedArena + 1) + "/" + arenas().size() + ")";
         gg.drawCenteredString(font, arenaText, rx + 64, top + 61, PixelTheme.TEXT);
