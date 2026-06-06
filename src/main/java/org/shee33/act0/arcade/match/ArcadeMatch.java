@@ -570,12 +570,10 @@ public final class ArcadeMatch {
         respawnLastSecond.remove(playerId);
         countdownLock.remove(playerId);
         deathCamView.remove(playerId);
-        clearKillerGlow(playerId);
         boolean wasAlive = alive.remove(playerId);
         ServerPlayer p = player(playerId);
         if (p != null) {
-            // 若该掉线者正被别的死者高亮，关掉他的发光，避免残留。
-            p.setGlowingTag(false);
+            clearKillerGlow(p);
             exitSpectator(p);
             bossBar.removePlayer(p);
             sidebar.hideFrom(p);
@@ -772,8 +770,8 @@ public final class ArcadeMatch {
             float[] look = lookAt(camX, camY, camZ, killer.getX(), killer.getEyeY(), killer.getZ());
             yaw = look[0];
             pitch = look[1];
-            // 击杀者对死者高亮发光（仅死者客户端可见，复活时关闭）。
-            killer.setGlowingTag(true);
+            // 击杀者高亮：只对死者一人发"发光"数据包，其他玩家完全看不到（不泄露击杀者位置）。
+            GlowSync.showGlowTo(player, killer);
             deathCamKiller.put(player.getUUID(), killerId);
         }
         deathCamView.put(player.getUUID(), new DeathView(camX, camY, camZ, yaw, pitch));
@@ -786,7 +784,7 @@ public final class ArcadeMatch {
     /** 退出观察者视角，还原至记录的原始游戏模式（默认生存），清除死亡相机与击杀者高亮。 */
     private void exitSpectator(ServerPlayer player) {
         deathCamView.remove(player.getUUID());
-        clearKillerGlow(player.getUUID());
+        clearKillerGlow(player);
         ArcadeNetwork.sendDeathCam(player, false, "");
         if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
             return;
@@ -795,27 +793,25 @@ public final class ArcadeMatch {
         player.setGameMode(original);
     }
 
-    /** 关闭某死者所盯击杀者的高亮（若该击杀者未被别的死者同时盯着）。 */
-    private void clearKillerGlow(UUID viewerId) {
-        UUID killerId = deathCamKiller.remove(viewerId);
+    /** 只对该死者关闭其所盯击杀者的发光（发光本就只对他自己可见）。 */
+    private void clearKillerGlow(ServerPlayer viewer) {
+        UUID killerId = deathCamKiller.remove(viewer.getUUID());
         if (killerId == null) {
             return;
         }
-        if (deathCamKiller.containsValue(killerId)) {
-            return; // 仍被其他死者盯着，保持发光
-        }
         ServerPlayer killer = player(killerId);
         if (killer != null) {
-            killer.setGlowingTag(false);
+            GlowSync.hideGlowFrom(viewer, killer);
         }
     }
 
-    /** 清除所有击杀者高亮（对局结束/中止时）。 */
+    /** 清除所有死者各自看到的击杀者发光（对局结束/中止时）。 */
     private void clearAllKillerGlow() {
-        for (UUID killerId : deathCamKiller.values()) {
-            ServerPlayer killer = player(killerId);
-            if (killer != null) {
-                killer.setGlowingTag(false);
+        for (Map.Entry<UUID, UUID> e : deathCamKiller.entrySet()) {
+            ServerPlayer viewer = player(e.getKey());
+            ServerPlayer killer = player(e.getValue());
+            if (viewer != null && killer != null) {
+                GlowSync.hideGlowFrom(viewer, killer);
             }
         }
         deathCamKiller.clear();
