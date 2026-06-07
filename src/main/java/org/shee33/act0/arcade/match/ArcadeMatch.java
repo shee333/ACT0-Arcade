@@ -126,6 +126,11 @@ public final class ArcadeMatch {
     /** 死亡补给箱标记 NBT 键：拾取后补满虚拟弹药。 */
     public static final String AMMO_CRATE_KEY = "Act0AmmoCrate";
     private static final double RESPAWN_CLEAR_RADIUS = 10.0;
+    private static final double TEAMMATE_RESPAWN_MIN_RADIUS = 3.0;
+    private static final double TEAMMATE_RESPAWN_MAX_RADIUS = 5.0;
+    private static final double TEAMMATE_COMBAT_RADIUS = 12.0;
+    private static final double TEAMMATE_RESPAWN_ENEMY_CLEAR_RADIUS = 8.0;
+    private static final int TEAMMATE_RECENT_COMBAT_TICKS = 5 * 20;
         private static final ChatFormatting[] FFA_COLORS = new ChatFormatting[]{
             ChatFormatting.RED,
             ChatFormatting.BLUE,
@@ -1140,7 +1145,7 @@ public final class ArcadeMatch {
         switch (settings.respawnPolicy()) {
             case FIXED_SPAWN -> TeleportHelper.teleport(player, arena.sideSpawn(side));
             case NEAR_TEAMMATE -> {
-                SpawnPoint near = livingTeammateSpawn(player.getUUID(), side);
+                SpawnPoint near = livingTeammateSpawn(player, side);
                 TeleportHelper.teleport(player, near != null ? near : arena.sideSpawn(side));
             }
             case RANDOM -> TeleportHelper.teleport(player, manualFreeForAllSpawn(player));
@@ -1186,19 +1191,91 @@ public final class ArcadeMatch {
         return true;
     }
 
-    private SpawnPoint livingTeammateSpawn(UUID self, int side) {
+    private SpawnPoint livingTeammateSpawn(ServerPlayer respawning, int side) {
+        UUID self = respawning.getUUID();
         for (UUID mate : sides.get(side)) {
             if (mate.equals(self)) {
                 continue;
             }
             ServerPlayer mp = player(mate);
-            if (mp != null && mp.isAlive()) {
-                String dim = mp.level().dimension().location().toString();
-                return new SpawnPoint(dim, mp.getX(), mp.getY(), mp.getZ(),
-                        mp.getYRot(), mp.getXRot());
+            if (mp == null || !mp.isAlive() || mp.isSpectator() || deathCamView.containsKey(mate)) {
+                continue;
+            }
+            if (isTeammateInCombat(mp, side)) {
+                continue;
+            }
+            SpawnPoint safe = safeSpawnNearTeammate(respawning, mp, side);
+            if (safe != null) {
+                return safe;
             }
         }
         return null;
+    }
+
+    private boolean isTeammateInCombat(ServerPlayer teammate, int side) {
+        long now = server.getTickCount();
+        long lastHurt = lastHurtTick.getOrDefault(teammate.getUUID(), Long.MIN_VALUE / 4);
+        if (now - lastHurt <= TEAMMATE_RECENT_COMBAT_TICKS) {
+            return true;
+        }
+        double radiusSq = TEAMMATE_COMBAT_RADIUS * TEAMMATE_COMBAT_RADIUS;
+        for (UUID id : sideOf.keySet()) {
+            if (sideOf.getOrDefault(id, -1) == side) {
+                continue;
+            }
+            ServerPlayer enemy = player(id);
+            if (enemy == null || enemy.level() != teammate.level() || !enemy.isAlive() || enemy.isSpectator()
+                    || deathCamView.containsKey(id)) {
+                continue;
+            }
+            if (enemy.distanceToSqr(teammate) <= radiusSq) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private SpawnPoint safeSpawnNearTeammate(ServerPlayer respawning, ServerPlayer teammate, int side) {
+        ServerLevel level = teammate.serverLevel();
+        int angleOffset = random.nextInt(12);
+        for (double radius = TEAMMATE_RESPAWN_MIN_RADIUS; radius <= TEAMMATE_RESPAWN_MAX_RADIUS; radius += 1.0D) {
+            for (int i = 0; i < 12; i++) {
+                double angle = ((angleOffset + i) / 12.0D) * Math.PI * 2.0D;
+                double x = teammate.getX() + Math.cos(angle) * radius;
+                double y = teammate.getY();
+                double z = teammate.getZ() + Math.sin(angle) * radius;
+                if (isTeamRespawnSpotSafe(respawning, level, x, y, z, side)) {
+                    String dim = level.dimension().location().toString();
+                    return new SpawnPoint(dim, x, y, z, teammate.getYRot(), teammate.getXRot());
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean isTeamRespawnSpotSafe(ServerPlayer respawning, ServerLevel level, double x, double y, double z, int side) {
+        if (!level.noCollision(respawning, respawning.getBoundingBox().move(
+                x - respawning.getX(), y - respawning.getY(), z - respawning.getZ()))) {
+            return false;
+        }
+        double clearSq = TEAMMATE_RESPAWN_ENEMY_CLEAR_RADIUS * TEAMMATE_RESPAWN_ENEMY_CLEAR_RADIUS;
+        for (UUID id : sideOf.keySet()) {
+            if (sideOf.getOrDefault(id, -1) == side) {
+                continue;
+            }
+            ServerPlayer enemy = player(id);
+            if (enemy == null || enemy.level() != level || !enemy.isAlive() || enemy.isSpectator()
+                    || deathCamView.containsKey(id)) {
+                continue;
+            }
+            double dx = enemy.getX() - x;
+            double dy = enemy.getY() - y;
+            double dz = enemy.getZ() - z;
+            if (dx * dx + dy * dy + dz * dz <= clearSq) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void scheduleTeammateSpectate(UUID victimId) {
