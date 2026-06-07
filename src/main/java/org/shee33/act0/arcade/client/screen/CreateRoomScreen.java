@@ -196,9 +196,13 @@ public final class CreateRoomScreen extends Screen {
         String arena = arenas().get(Math.min(selectedArena, arenas().size() - 1));
         int cap = capacityEditable() ? capacity : defaultCapacity();
         minecraft.player.connection.sendCommand(
-                "arcade room create " + mode().id() + " " + arena + " " + target
+                "arcade room create " + mode().id() + " " + quoteArg(arena) + " " + target
                 + " " + timeLimitSeconds + " " + randomWeapons + " " + cap);
         onClose();
+    }
+
+    private static String quoteArg(String text) {
+        return "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
     @Override

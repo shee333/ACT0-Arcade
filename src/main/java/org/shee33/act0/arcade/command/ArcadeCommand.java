@@ -193,7 +193,7 @@ public final class ArcadeCommand {
         LiteralArgumentBuilder<CommandSourceStack> join = Commands.literal("join");
         for (String mode : List.of("duel_1v1", "duel_2v2", "team_deathmatch", "free_for_all")) {
             join.then(Commands.literal(mode)
-                    .then(Commands.argument("arena", StringArgumentType.word()).suggests(ARENA_IDS)
+                    .then(Commands.argument("arena", StringArgumentType.string()).suggests(ARENA_IDS)
                             .executes(ctx -> queueJoin(ctx, mode))));
         }
         return Commands.literal("queue")
@@ -237,7 +237,7 @@ public final class ArcadeCommand {
         LiteralArgumentBuilder<CommandSourceStack> create = Commands.literal("create");
         for (String mode : List.of("duel_1v1", "duel_2v2", "team_deathmatch", "free_for_all")) {
             create.then(Commands.literal(mode)
-                    .then(Commands.argument("arena", StringArgumentType.word()).suggests(ARENA_IDS)
+                    .then(Commands.argument("arena", StringArgumentType.string()).suggests(ARENA_IDS)
                             .executes(ctx -> roomCreate(ctx, mode))
                             .then(Commands.argument("target", IntegerArgumentType.integer(1, 99))
                                     .executes(ctx -> roomCreate(ctx, mode))
@@ -370,27 +370,27 @@ public final class ArcadeCommand {
         return Commands.literal("arena")
                 .requires(src -> src.hasPermission(2))
                 .then(Commands.literal("create")
-                        .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("id", StringArgumentType.string())
                                 .executes(ArcadeCommand::arenaCreate)))
                 .then(Commands.literal("addspawn")
-                        .then(Commands.argument("id", StringArgumentType.word()).suggests(ARENA_IDS)
+                        .then(Commands.argument("id", StringArgumentType.string()).suggests(ARENA_IDS)
                                 .executes(ArcadeCommand::arenaAddSideSpawn)))
                 .then(Commands.literal("setreturn")
-                    .then(Commands.argument("id", StringArgumentType.word()).suggests(ARENA_IDS)
+                    .then(Commands.argument("id", StringArgumentType.string()).suggests(ARENA_IDS)
                         .executes(ArcadeCommand::arenaSetReturnSpawn)))
                 .then(Commands.literal("addrespawn")
-                    .then(Commands.argument("id", StringArgumentType.word()).suggests(ARENA_IDS)
+                    .then(Commands.argument("id", StringArgumentType.string()).suggests(ARENA_IDS)
                         .executes(ArcadeCommand::arenaAddRandomSpawn)))
                 .then(Commands.literal("addrandom")
-                        .then(Commands.argument("id", StringArgumentType.word()).suggests(ARENA_IDS)
+                        .then(Commands.argument("id", StringArgumentType.string()).suggests(ARENA_IDS)
                                 .executes(ArcadeCommand::arenaAddRandomSpawn)))
                 .then(Commands.literal("list")
                         .executes(ArcadeCommand::arenaList))
                 .then(Commands.literal("info")
-                        .then(Commands.argument("id", StringArgumentType.word()).suggests(ARENA_IDS)
+                        .then(Commands.argument("id", StringArgumentType.string()).suggests(ARENA_IDS)
                                 .executes(ArcadeCommand::arenaInfo)))
                 .then(Commands.literal("remove")
-                        .then(Commands.argument("id", StringArgumentType.word()).suggests(ARENA_IDS)
+                        .then(Commands.argument("id", StringArgumentType.string()).suggests(ARENA_IDS)
                                 .executes(ArcadeCommand::arenaRemove)));
     }
 
@@ -629,7 +629,7 @@ public final class ArcadeCommand {
                 .requires(src -> src.hasPermission(2));
         for (String mode : List.of("duel_1v1", "duel_2v2", "team_deathmatch", "free_for_all")) {
             start.then(Commands.literal(mode)
-                    .then(Commands.argument("arena", StringArgumentType.word()).suggests(ARENA_IDS)
+                    .then(Commands.argument("arena", StringArgumentType.string()).suggests(ARENA_IDS)
                             .then(Commands.argument("players", EntityArgument.players())
                                     .executes(ctx -> matchStart(ctx, mode)))));
         }
