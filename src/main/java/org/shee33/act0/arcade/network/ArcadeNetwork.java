@@ -181,9 +181,39 @@ public final class ArcadeNetwork {
                                         match.contains(player.getUUID()), true,
                                         match.participantNames(), match.elapsedSeconds()));
         }
+                appendBattlefieldRows(player, dtos);
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
                 new SyncRoomListPacket(canManage, open, arenaIds, dtos));
     }
+
+        @SuppressWarnings("unchecked")
+        private static void appendBattlefieldRows(ServerPlayer player, List<RoomDto> dtos) {
+                try {
+                        Class<?> mod = Class.forName("org.shee33.act0.battlefield.Act0Battlefield");
+                        Object manager = mod.getMethod("manager").invoke(null);
+                        Object rows = manager.getClass().getMethod("browserRows", ServerPlayer.class).invoke(manager, player);
+                        if (!(rows instanceof List<?> list)) {
+                                return;
+                        }
+                        for (Object rowObj : list) {
+                                if (!(rowObj instanceof String[] row) || row.length < 11) {
+                                        continue;
+                                }
+                                dtos.add(new RoomDto(row[0], row[1], row[2], row[3],
+                                                parseInt(row[4]), parseInt(row[5]), row[6], Boolean.parseBoolean(row[7]),
+                                                Boolean.parseBoolean(row[8]), row[9], parseInt(row[10])));
+                        }
+                } catch (ReflectiveOperationException ignored) {
+                }
+        }
+
+        private static int parseInt(String raw) {
+                try {
+                        return Integer.parseInt(raw);
+                } catch (NumberFormatException e) {
+                        return 0;
+                }
+        }
 
         private static String participantNames(net.minecraft.server.MinecraftServer server, Set<UUID> ids) {
                 List<String> names = new ArrayList<>();

@@ -142,6 +142,11 @@ public final class RoomBrowserScreen extends Screen {
         if (minecraft == null || minecraft.player == null) {
             return;
         }
+        if (room.roomId().startsWith("bf@")) {
+            minecraft.player.connection.sendCommand("battlefield quickjoin " + room.roomId());
+            onClose();
+            return;
+        }
         if (room.youAreMember()) {
             minecraft.player.connection.sendCommand("arcade room leave");
         } else {
@@ -198,7 +203,10 @@ public final class RoomBrowserScreen extends Screen {
         String label;
         int color;
         boolean hovered = mouseX >= ax && mouseX <= ax + ACTION_W && mouseY >= ay && mouseY <= ay + ah;
-        if (room.youAreMember()) {
+        if (room.roomId().startsWith("bf@") && room.youAreMember()) {
+            label = "已在";
+            color = PixelTheme.TEXT_DIM;
+        } else if (room.youAreMember()) {
             label = "离开";
             color = 0xFFE0C060;
         } else if (room.isFull()) {
