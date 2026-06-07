@@ -15,6 +15,7 @@ import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.shee33.act0.arcade.command.ArcadeCommand;
+import org.shee33.act0.arcade.hologram.ArcadeEntranceHolograms;
 import org.shee33.act0.arcade.match.ArcadeServices;
 import org.shee33.act0.arcade.network.ArcadeNetwork;
 import org.shee33.act0.arcade.storage.ArcadeGlobalSettings;
@@ -50,6 +51,7 @@ public final class Act0Arcade {
 
         MinecraftForge.EVENT_BUS.register(this);
         MinecraftForge.EVENT_BUS.register(SERVICES.matches());
+    MinecraftForge.EVENT_BUS.register(ArcadeEntranceHolograms.INSTANCE);
 
         ArcadeNetwork.register();
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, ArcadeConfig.SPEC);

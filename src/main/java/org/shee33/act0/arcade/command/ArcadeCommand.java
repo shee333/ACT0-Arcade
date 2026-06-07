@@ -25,6 +25,7 @@ import org.shee33.act0.arcade.arena.SpawnPoint;
 import org.shee33.act0.arcade.economy.ArcadeEconomy;
 import org.shee33.act0.arcade.economy.BuyOutcome;
 import org.shee33.act0.arcade.economy.EconomyManager;
+import org.shee33.act0.arcade.hologram.ArcadeEntranceHolograms;
 import org.shee33.act0.arcade.integration.TaczBridge;
 import org.shee33.act0.arcade.loadout.AttachmentSlotType;
 import org.shee33.act0.arcade.loadout.DefaultLoadoutCatalog;
@@ -114,6 +115,7 @@ public final class ArcadeCommand {
         root.then(buildArmoryBranch());
         root.then(buildMoneyBranch());
         root.then(buildSettingsBranch());
+        root.then(buildHologramBranch());
         root.then(Commands.literal("buy")
                 .then(Commands.argument("item", StringArgumentType.word()).suggests(ITEM_KEYS)
                         .executes(ArcadeCommand::buy)));
@@ -129,6 +131,39 @@ public final class ArcadeCommand {
 
         dispatcher.register(root);
         dispatcher.register(Commands.literal("suicide").executes(ArcadeCommand::suicide));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildHologramBranch() {
+        return Commands.literal("hologram")
+            .requires(src -> src.hasPermission(2))
+            .then(Commands.literal("browser")
+                .executes(ctx -> createHologram(ctx, ArcadeEntranceHolograms.EntryType.BROWSER)))
+            .then(Commands.literal("loadout")
+                .executes(ctx -> createHologram(ctx, ArcadeEntranceHolograms.EntryType.LOADOUT)))
+            .then(Commands.literal("battlefield")
+                .executes(ctx -> createHologram(ctx, ArcadeEntranceHolograms.EntryType.BATTLEFIELD)))
+            .then(Commands.literal("all")
+                .executes(ArcadeCommand::createAllHolograms))
+            .then(Commands.literal("clear")
+                .executes(ctx -> clearHolograms(ctx, 6.0D))
+                .then(Commands.argument("radius", DoubleArgumentType.doubleArg(1.0D, 64.0D))
+                    .executes(ctx -> clearHolograms(ctx, DoubleArgumentType.getDouble(ctx, "radius")))));
+    }
+
+    private static int createHologram(CommandContext<CommandSourceStack> ctx,
+                                      ArcadeEntranceHolograms.EntryType type)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        return ArcadeEntranceHolograms.create(ctx.getSource().getPlayerOrException(), type);
+    }
+
+    private static int createAllHolograms(CommandContext<CommandSourceStack> ctx)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        return ArcadeEntranceHolograms.createAll(ctx.getSource().getPlayerOrException());
+    }
+
+    private static int clearHolograms(CommandContext<CommandSourceStack> ctx, double radius)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        return ArcadeEntranceHolograms.clear(ctx.getSource().getPlayerOrException(), radius);
     }
 
     private static int leaveActiveMatch(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
