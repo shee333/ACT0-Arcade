@@ -143,7 +143,7 @@ public final class RoomBrowserScreen extends Screen {
             return;
         }
         if (room.roomId().startsWith("bf@")) {
-            minecraft.player.connection.sendCommand("battlefield quickjoin " + room.roomId());
+            minecraft.player.connection.sendCommand("battlefield quickjoin \"" + room.roomId() + "\"");
             onClose();
             return;
         }
