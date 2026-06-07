@@ -33,7 +33,13 @@ public enum WeaponCategory {
     MELEE("近战", LoadoutSlot.MELEE),
 
     /** 投掷物。 */
-    THROWABLE("投掷物", LoadoutSlot.THROWABLE);
+    THROWABLE("投掷物", LoadoutSlot.THROWABLE),
+
+    /** 装置 1。 */
+    GADGET_1("装置 1", LoadoutSlot.GADGET_1),
+
+    /** 装置 2。 */
+    GADGET_2("装置 2", LoadoutSlot.GADGET_2);
 
     private final String displayName;
     private final LoadoutSlot slot;

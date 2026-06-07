@@ -35,7 +35,7 @@ import java.util.regex.Pattern;
  *     {
  *       "key": "rifle.ak47",
  *       "name": "AK-47",
- *       "category": "RIFLE",            // 武器分类，槽位由分类推导
+ *       "category": "RIFLE",            // 武器/装置分类，槽位由分类推导；装置用 GADGET_1 / GADGET_2
  *       "classes": ["ASSAULT"],          // 省略或为空表示全职业可用
  *       "price": 1500,                    // 解锁价格（默认武器为 0）
  *       "ammo": 90,                       // 初始备弹（元子弹）
