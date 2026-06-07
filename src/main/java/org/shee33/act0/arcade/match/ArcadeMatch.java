@@ -708,6 +708,42 @@ public final class ArcadeMatch {
         checkLiveness();
     }
 
+    public boolean quitPlayer(ServerPlayer player) {
+        UUID id = player.getUUID();
+        if (!sideOf.containsKey(id) || phase == MatchPhase.ENDED) {
+            return false;
+        }
+        int side = sideOf.getOrDefault(id, 0);
+        sides.get(side).remove(id);
+        sideOf.remove(id);
+        disconnected.remove(id);
+        alive.remove(id);
+        respawnTimers.remove(id);
+        respawnLastSecond.remove(id);
+        countdownLock.remove(id);
+        deathCamView.remove(id);
+        teammateSpectateSwitchTick.remove(id);
+        teammateSpectateTarget.remove(id);
+        lastHurtTick.remove(id);
+        kills.remove(id);
+        clearKillerGlow(player);
+        clearTeamHighlightFor(player);
+        clearTeamHighlightTarget(player);
+        exitSpectator(player);
+        restorePreMatchMode(player);
+        TeleportHelper.teleport(player, arena.returnSpawn());
+        player.getInventory().clearContent();
+        sidebar.hideFrom(player);
+        removeBossBarPlayer(player);
+        ArcadeNetwork.sendFireLock(player, false);
+        broadcast("§e" + player.getGameProfile().getName() + " §7退出了本对局。");
+        player.sendSystemMessage(Component.literal("§7已退出对局，返回大厅。"));
+        setupNameTagTeams();
+        updateSidebar();
+        checkLiveness();
+        return true;
+    }
+
     /**
      * 玩家重连归位：清除掉线标记，恢复血条/计分板，传送回战场并补发装备。
      *

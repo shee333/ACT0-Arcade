@@ -406,6 +406,17 @@ public final class RoomManager {
         rooms.remove(found.roomId());
     }
 
+    public void onMatchPlayerQuit(UUID id) {
+        String roomId = roomOf.remove(id);
+        if (roomId == null) {
+            return;
+        }
+        ArcadeRoom room = rooms.get(roomId);
+        if (room != null) {
+            room.removeMember(id);
+        }
+    }
+
     private void notifyRoom(MinecraftServer server, ArcadeRoom room, String message) {
         notifyAll(server, room.members(), message);
     }

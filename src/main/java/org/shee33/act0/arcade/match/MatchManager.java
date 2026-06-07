@@ -82,6 +82,23 @@ public final class MatchManager {
         return matchByPlayer.containsKey(playerId);
     }
 
+    public boolean leaveMatch(ServerPlayer player) {
+        String matchId = matchByPlayer.get(player.getUUID());
+        if (matchId == null) {
+            return false;
+        }
+        ArcadeMatch match = matches.get(matchId);
+        if (match == null) {
+            matchByPlayer.remove(player.getUUID());
+            return false;
+        }
+        boolean ok = match.quitPlayer(player);
+        if (ok) {
+            matchByPlayer.remove(player.getUUID());
+        }
+        return ok;
+    }
+
     public boolean canChangeLoadout(UUID playerId) {
         String matchId = matchByPlayer.get(playerId);
         if (matchId == null) {

@@ -2,6 +2,7 @@ package org.shee33.act0.arcade;
 
 import com.mojang.logging.LogUtils;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.CommandEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerAboutToStartEvent;
@@ -61,6 +62,23 @@ public final class Act0Arcade {
 
     private void commonSetup(final FMLCommonSetupEvent event) {
         LOGGER.info("{}common setup", LOG_PREFIX);
+    }
+
+    @SubscribeEvent
+    public void onCommand(final CommandEvent event) {
+        if (!(event.getParseResults().getContext().getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
+            return;
+        }
+        if (player.hasPermissions(2) || !SERVICES.matches().isInMatch(player.getUUID())) {
+            return;
+        }
+        String raw = event.getParseResults().getReader().getString().trim();
+        String cmd = raw.startsWith("/") ? raw.substring(1) : raw;
+        if (cmd.equals("suicide") || cmd.startsWith("arcade leave") || cmd.startsWith("arcade quit")) {
+            return;
+        }
+        event.setCanceled(true);
+        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§c对局中只能使用 /arcade leave 或 /suicide。"));
     }
 
     @SubscribeEvent

@@ -118,6 +118,8 @@ public final class ArcadeCommand {
                 .then(Commands.argument("item", StringArgumentType.word()).suggests(ITEM_KEYS)
                         .executes(ArcadeCommand::buy)));
         root.then(Commands.literal("browse").executes(ArcadeCommand::openBrowser));
+        root.then(Commands.literal("leave").executes(ArcadeCommand::leaveActiveMatch));
+        root.then(Commands.literal("quit").executes(ArcadeCommand::leaveActiveMatch));
         root.then(Commands.literal("reload")
                 .requires(src -> src.hasPermission(2))
                 .executes(ArcadeCommand::reloadCatalog));
@@ -126,6 +128,25 @@ public final class ArcadeCommand {
             .executes(ArcadeCommand::cleanDrops));
 
         dispatcher.register(root);
+        dispatcher.register(Commands.literal("suicide").executes(ArcadeCommand::suicide));
+    }
+
+    private static int leaveActiveMatch(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        boolean ok = services().matches().leaveMatch(player);
+        if (ok) {
+            services().rooms().onMatchPlayerQuit(player.getUUID());
+            ArcadeNetwork.broadcastRoomList(ctx.getSource().getServer());
+            return 1;
+        }
+        ctx.getSource().sendFailure(Component.literal("§7你当前不在进行中的对局。"));
+        return 0;
+    }
+
+    private static int suicide(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        player.kill();
+        return 1;
     }
 
     private static int cleanDrops(CommandContext<CommandSourceStack> ctx) {
