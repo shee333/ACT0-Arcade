@@ -1,6 +1,9 @@
 package org.shee33.act0.arcade.match;
 
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import org.shee33.act0.arcade.mode.MatchOptions;
@@ -142,9 +145,25 @@ public final class RoomManager {
         roomOf.put(id, roomId);
         String extra = (timeLimit > 0 ? " §7限时 §e" + (timeLimit / 60) + "分" + (timeLimit % 60) + "秒" : "")
                 + (randomWeapons ? " §7随机武器" : "");
+        broadcastRoomCreated(server, room, extra);
         return "§a已创建房间 §e" + modeName(room) + " §7@ §e" + arenaId
                 + " §7(1/" + capacity + ")" + extra;
     }
+
+        private void broadcastRoomCreated(MinecraftServer server, ArcadeRoom room, String extra) {
+        String joinCommand = "/arcade room join " + room.roomId();
+        MutableComponent message = Component.literal("§6[ACT0] §e" + room.hostName() + " §a创建了房间 §f"
+                + modeName(room) + " §7@ §e" + room.arenaId()
+                + " §7(1/" + room.capacity() + ")" + extra + " ")
+            .append(Component.literal("§a§l[点击加入]")
+                .withStyle(style -> style
+                    .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, joinCommand))
+                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                        Component.literal("§a点击快速加入房间 §e" + room.roomId())))));
+        for (ServerPlayer online : server.getPlayerList().getPlayers()) {
+            online.sendSystemMessage(message);
+        }
+        }
 
     public String resize(MinecraftServer server, ServerPlayer player, String roomId, int requestedCapacity, boolean privileged) {
         ArcadeRoom room = roomId != null ? rooms.get(roomId) : rooms.get(roomOf.get(player.getUUID()));

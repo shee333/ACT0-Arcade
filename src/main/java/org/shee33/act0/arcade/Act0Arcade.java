@@ -76,7 +76,8 @@ public final class Act0Arcade {
         }
         String raw = event.getParseResults().getReader().getString().trim();
         String cmd = raw.startsWith("/") ? raw.substring(1) : raw;
-        if (cmd.equals("suicide") || cmd.startsWith("arcade leave") || cmd.startsWith("arcade quit")) {
+        if (cmd.equals("suicide") || cmd.startsWith("arcade leave") || cmd.startsWith("arcade quit")
+            || cmd.startsWith("arcade room join")) {
             return;
         }
         event.setCanceled(true);
