@@ -31,7 +31,7 @@ import java.util.UUID;
  */
 public final class ArcadeNetwork {
 
-        private static final String PROTOCOL = "5";
+        private static final String PROTOCOL = "6";
 
     @SuppressWarnings("removal")
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
@@ -80,6 +80,8 @@ public final class ArcadeNetwork {
                 RequestLoadoutPacket::encode, RequestLoadoutPacket::decode, RequestLoadoutPacket::handle);
         CHANNEL.registerMessage(id++, SelectLoadoutPacket.class,
                 SelectLoadoutPacket::encode, SelectLoadoutPacket::decode, SelectLoadoutPacket::handle);
+        CHANNEL.registerMessage(id++, SyncFireLockPacket.class,
+                SyncFireLockPacket::encode, SyncFireLockPacket::decode, SyncFireLockPacket::handle);
     }
 
     /** 把服务端当前装备目录下发给指定玩家。 */
@@ -92,6 +94,10 @@ public final class ArcadeNetwork {
     public static void sendDeathCam(ServerPlayer player, boolean active, String killerName) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new DeathCamPacket(active, killerName));
     }
+
+        public static void sendFireLock(ServerPlayer player, boolean locked) {
+                CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new SyncFireLockPacket(locked));
+        }
 
         public static void openLoadout(ServerPlayer player) {
                 LoadoutSet set = ArcadeLoadoutStore.get(player.server).getOrCreateSet(player.getUUID(),

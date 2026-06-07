@@ -253,6 +253,7 @@ public final class ArcadeMatch {
         phaseTotalTicks = Math.max(1, settings.countdownSeconds() * 20);
         lastCountdownSecond = -1;
         timer.startSeconds(settings.countdownSeconds());
+        sendFireLockToAll(true);
         showTitle("§e准备", "§7" + roundLabel() + " · 倒计时 " + settings.countdownSeconds() + " 秒", 5, 30, 10);
         updateBossBar();
         updateSidebar();
@@ -276,6 +277,7 @@ public final class ArcadeMatch {
                 if (timer.tick()) {
                     phase = MatchPhase.COMBAT;
                     releaseCountdownLock();
+                    sendFireLockToAll(false);
                     showTitle("§a§l战斗开始！", "", 2, 20, 8);
                     playToAll(SoundEvents.PLAYER_LEVELUP, 1.0f);
                     broadcast("§a战斗开始！");
@@ -618,6 +620,7 @@ public final class ArcadeMatch {
 
     private void finish() {
         releaseCountdownLock();
+        sendFireLockToAll(false);
         cleanupAmmoCrates();
         clearAllTeamHighlights();
         clearNameTagTeams();
@@ -728,6 +731,9 @@ public final class ArcadeMatch {
             alive.add(id);
             if (phase == MatchPhase.COUNTDOWN) {
                 applyCountdownLock(player);
+                ArcadeNetwork.sendFireLock(player, true);
+            } else {
+                ArcadeNetwork.sendFireLock(player, false);
             }
         } else {
             TeleportHelper.teleport(player, arena.returnSpawn());
@@ -770,6 +776,7 @@ public final class ArcadeMatch {
             equip(player);
             player.setHealth(player.getMaxHealth());
             alive.add(id);
+            ArcadeNetwork.sendFireLock(player, phase == MatchPhase.COUNTDOWN);
         }
         updateSidebar();
         broadcast("§b" + player.getGameProfile().getName() + " §7中途加入了对局！");
@@ -1421,6 +1428,15 @@ public final class ArcadeMatch {
             ServerPlayer p = player(id);
             if (p != null) {
                 p.sendSystemMessage(component);
+            }
+        }
+    }
+
+    private void sendFireLockToAll(boolean locked) {
+        for (UUID id : sideOf.keySet()) {
+            ServerPlayer p = player(id);
+            if (p != null) {
+                ArcadeNetwork.sendFireLock(p, locked);
             }
         }
     }
