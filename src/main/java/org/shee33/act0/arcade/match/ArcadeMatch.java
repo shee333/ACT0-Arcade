@@ -592,12 +592,13 @@ public final class ArcadeMatch {
         phase = MatchPhase.MATCH_RESULT;
         phaseTotalTicks = 5 * 20;
         timer.startSeconds(5);
-        showTitle("§6§l胜利", "§e" + sideLabel(side) + " §7获胜！", 5, 60, 15);
-        bossBar.setName(Component.literal("§6§l" + sideLabel(side) + " 获胜！"));
+        showMatchResultTitles(side);
+        sendMatchResultSummary(side);
+        bossBar.setName(Component.literal("§6§l对局结束 · " + sideLabel(side) + " 胜出"));
         bossBar.setProgress(1.0f);
         bossBar.setColor(BossEvent.BossBarColor.GREEN);
         showPersonalResultBars(side);
-        broadcast("§6§l胜利：" + sideLabel(side) + "！");
+        broadcast("§6§l对局结束：" + sideLabel(side) + " §6§l胜出。");
         playToAll(SoundEvents.PLAYER_LEVELUP, 1.0f);
         updateSidebar();
     }
@@ -610,12 +611,42 @@ public final class ArcadeMatch {
         phaseTotalTicks = 5 * 20;
         timer.startSeconds(5);
         showTitle("§7§l平局", "", 5, 60, 15);
+        sendMatchResultSummary(-1);
         bossBar.setName(Component.literal("§7§l平局"));
         bossBar.setProgress(1.0f);
         bossBar.setColor(BossEvent.BossBarColor.WHITE);
         showPersonalDrawBars();
         broadcast("§7§l平局！");
         updateSidebar();
+    }
+
+    private void showMatchResultTitles(int winningSide) {
+        String subtitle = "§7" + sideLabel(winningSide) + " 胜出 · " + scoreLine();
+        for (UUID id : sideOf.keySet()) {
+            Integer side = sideOf.get(id);
+            if (side != null && side == winningSide) {
+                showTitleTo(id, "§a§l胜利", subtitle, 5, 60, 15);
+            } else {
+                showTitleTo(id, "§c§l失败", subtitle, 5, 60, 15);
+            }
+        }
+    }
+
+    private void sendMatchResultSummary(int winningSide) {
+        for (UUID id : sideOf.keySet()) {
+            ServerPlayer p = player(id);
+            if (p == null) {
+                continue;
+            }
+            boolean isDraw = winningSide < 0;
+            boolean won = !isDraw && sideOf.getOrDefault(id, -1) == winningSide;
+            String outcome = isDraw ? "§7平局" : (won ? "§a胜利" : "§c失败");
+            String extra = settings.scoringMode() == ScoringMode.KILL_COUNT
+                    ? " §7你的击杀 §e" + kills.getOrDefault(id, 0)
+                    : "";
+            p.sendSystemMessage(Component.literal("§6赛后结算 §8| " + outcome
+                    + " §8| §7比分 §f" + scoreLine() + extra));
+        }
     }
 
     private void finish() {
