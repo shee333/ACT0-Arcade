@@ -26,6 +26,7 @@ import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.Team;
 import org.shee33.act0.arcade.arena.ArcadeArena;
 import org.shee33.act0.arcade.arena.SpawnPoint;
+import org.shee33.act0.arcade.integration.MatchResultBroadcaster;
 import org.shee33.act0.arcade.loadout.Loadout;
 import org.shee33.act0.arcade.loadout.LoadoutItem;
 import org.shee33.act0.arcade.loadout.LoadoutRegistry;
@@ -599,6 +600,7 @@ public final class ArcadeMatch {
         bossBar.setColor(BossEvent.BossBarColor.GREEN);
         showPersonalResultBars(side);
         broadcast("§6§l对局结束：" + sideLabel(side) + " §6§l胜出。");
+        broadcastMatchResult(side, false);
         playToAll(SoundEvents.PLAYER_LEVELUP, 1.0f);
         updateSidebar();
     }
@@ -617,6 +619,7 @@ public final class ArcadeMatch {
         bossBar.setColor(BossEvent.BossBarColor.WHITE);
         showPersonalDrawBars();
         broadcast("§7§l平局！");
+        broadcastMatchResult(-1, true);
         updateSidebar();
     }
 
@@ -647,6 +650,29 @@ public final class ArcadeMatch {
             p.sendSystemMessage(Component.literal("§6赛后结算 §8| " + outcome
                     + " §8| §7比分 §f" + scoreLine() + extra));
         }
+    }
+
+    private void broadcastMatchResult(int winningSide, boolean isDraw) {
+        TopKiller top = topKiller();
+        List<String> winners = winningSide >= 0 ? sideMemberNames(winningSide) : List.of();
+        String winnerDisplay;
+        if (isDraw) {
+            winnerDisplay = "平局";
+        } else if (settings.scoringMode() == ScoringMode.KILL_COUNT && settings.teamSize() > 1) {
+            winnerDisplay = "队伍 " + (winningSide + 1);
+        } else {
+            winnerDisplay = winners.isEmpty() ? "胜利方" : String.join("、", winners);
+        }
+        MatchResultBroadcaster.sendArcadeResult(
+                matchId,
+                settings.displayName(),
+                matchDurationSeconds(),
+                isDraw,
+                winnerDisplay,
+                winners,
+                top.name(),
+                top.kills(),
+                plainScoreLine());
     }
 
     private void finish() {
@@ -1738,6 +1764,53 @@ public final class ArcadeMatch {
         }
         sb.append(" §7/ ").append(score.pointsToWin());
         return sb.toString();
+    }
+
+    private String plainScoreLine() {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < settings.sideCount(); i++) {
+            if (i > 0) {
+                sb.append(" - ");
+            }
+            sb.append(score.score(sideId(i)));
+        }
+        sb.append(" / ").append(score.pointsToWin());
+        return sb.toString();
+    }
+
+    private int matchDurationSeconds() {
+        return (int) Math.max(0L, (server.getTickCount() - startedTick) / 20L);
+    }
+
+    private List<String> sideMemberNames(int side) {
+        List<String> names = new ArrayList<>();
+        if (side < 0 || side >= sides.size()) {
+            return names;
+        }
+        for (UUID id : sides.get(side)) {
+            names.add(nameOf(id));
+        }
+        return names;
+    }
+
+    private TopKiller topKiller() {
+        UUID topId = null;
+        int topKills = -1;
+        for (Map.Entry<UUID, Integer> e : kills.entrySet()) {
+            int value = e.getValue() == null ? 0 : e.getValue();
+            if (topId == null || value > topKills
+                    || (value == topKills && nameOf(e.getKey()).compareToIgnoreCase(nameOf(topId)) < 0)) {
+                topId = e.getKey();
+                topKills = value;
+            }
+        }
+        if (topId == null) {
+            return new TopKiller("暂无击杀王", 0);
+        }
+        return new TopKiller(nameOf(topId), Math.max(0, topKills));
+    }
+
+    private record TopKiller(String name, int kills) {
     }
 
     private int leadingScore() {
