@@ -221,11 +221,10 @@ public final class ArcadeCommand {
         double value = DoubleArgumentType.getDouble(ctx, "value");
         ArcadeGlobalSettings settings = ArcadeGlobalSettings.get(ctx.getSource().getServer());
             settings.setMaxHealth(value);
-            for (ServerPlayer online : ctx.getSource().getServer().getPlayerList().getPlayers()) {
-                settings.applyHealth(online);
-            }
+            int applied = settings.applyHealthToAll(ctx.getSource().getServer());
         ctx.getSource().sendSuccess(() -> Component.literal(
-                "§a已将全体玩家默认血量设为 §e" + fmt(value)), true);
+                "§a已将全体玩家默认血量设为 §e" + fmt(value)
+                    + " §7(已立即应用给 " + applied + " 名在线玩家，之后进服/进对局会再次校验)"), true);
         return 1;
         }
 

@@ -10,6 +10,7 @@ import org.shee33.act0.arcade.mode.MatchOptions;
 import org.shee33.act0.arcade.mode.MatchSettings;
 import org.shee33.act0.arcade.mode.ScoringMode;
 import org.shee33.act0.arcade.network.ArcadeNetwork;
+import org.shee33.act0.arcade.storage.ArcadeGlobalSettings;
 import org.shee33.act0.arcade.storage.ArenaRegistry;
 
 import java.util.ArrayList;
@@ -143,6 +144,7 @@ public final class RoomManager {
                 mode, arenaId, target, capacity, timeLimit, randomWeapons);
         rooms.put(roomId, room);
         roomOf.put(id, roomId);
+        ArcadeGlobalSettings.get(server).applyHealth(host);
         String extra = (timeLimit > 0 ? " §7限时 §e" + (timeLimit / 60) + "分" + (timeLimit % 60) + "秒" : "")
                 + (randomWeapons ? " §7随机武器" : "");
         broadcastRoomCreated(server, room, extra);
@@ -261,6 +263,7 @@ public final class RoomManager {
         }
         room.addMember(id);
         roomOf.put(id, roomId);
+        ArcadeGlobalSettings.get(server).applyHealth(player);
         notifyRoom(server, room, "§b" + player.getGameProfile().getName()
                 + " §7加入房间 §7(" + room.size() + "/" + room.capacity() + ")");
 

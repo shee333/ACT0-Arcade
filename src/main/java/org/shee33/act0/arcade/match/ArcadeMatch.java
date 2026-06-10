@@ -253,7 +253,7 @@ public final class ArcadeMatch {
             enterAdventureMode(player);
             spawnForRound(player, id, sideOf.get(id));
             equip(player);
-            player.setHealth(player.getMaxHealth());
+            applyGlobalHealth(player);
             applyCountdownLock(player);
         }
         phase = MatchPhase.COUNTDOWN;
@@ -359,7 +359,7 @@ public final class ArcadeMatch {
             setupNameTagTeams();
             respawn(player, sideOf.getOrDefault(id, 0));
             equip(player);
-            player.setHealth(player.getMaxHealth());
+            applyGlobalHealth(player);
             showTitleTo(id, "§a§l重生", "", 0, 12, 6);
             playTo(id, SoundEvents.PLAYER_LEVELUP, 1.2f);
         }
@@ -447,7 +447,7 @@ public final class ArcadeMatch {
         }
         // 立即复活以阻止原版死亡：保持同一 ServerPlayer 实例，血条/计分引用始终有效。
         if (victim != null) {
-            victim.setHealth(victim.getMaxHealth());
+            applyGlobalHealth(victim);
             victim.removeAllEffects();
             victim.clearFire();
             victim.getFoodData().setFoodLevel(20);
@@ -875,7 +875,7 @@ public final class ArcadeMatch {
             enterAdventureMode(player);
             spawnForRound(player, id, side);
             equip(player);
-            player.setHealth(player.getMaxHealth());
+            applyGlobalHealth(player);
             alive.add(id);
             if (phase == MatchPhase.COUNTDOWN) {
                 applyCountdownLock(player);
@@ -922,7 +922,7 @@ public final class ArcadeMatch {
             enterAdventureMode(player);
             spawnForRound(player, id, side);
             equip(player);
-            player.setHealth(player.getMaxHealth());
+            applyGlobalHealth(player);
             alive.add(id);
             ArcadeNetwork.sendFireLock(player, phase == MatchPhase.COUNTDOWN);
         }
@@ -1578,6 +1578,10 @@ public final class ArcadeMatch {
         Set<String> unlocked = unlocksProvider.apply(player.getUUID());
         applier.apply(player, loadout, settings.ruleset(), unlocked, true);
         applyApparel(player);
+    }
+
+    private void applyGlobalHealth(ServerPlayer player) {
+        ArcadeGlobalSettings.get(server).applyHealth(player);
     }
 
     private void applyApparel(ServerPlayer player) {

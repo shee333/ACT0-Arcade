@@ -61,6 +61,16 @@ public final class ArcadeGlobalSettings extends SavedData {
         player.setHealth((float) max);
     }
 
+    /** 立即把当前全局血量应用给所有在线玩家。 */
+    public int applyHealthToAll(MinecraftServer server) {
+        int count = 0;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            applyHealth(player);
+            count++;
+        }
+        return count;
+    }
+
     private static double clampHealth(double health) {
         return Math.max(1.0, Math.min(200.0, health));
     }
