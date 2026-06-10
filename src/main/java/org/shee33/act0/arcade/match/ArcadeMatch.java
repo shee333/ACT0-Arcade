@@ -126,6 +126,7 @@ public final class ArcadeMatch {
 
     /** 死亡补给箱标记 NBT 键：拾取后补满虚拟弹药。 */
     public static final String AMMO_CRATE_KEY = "Act0AmmoCrate";
+    private static final double AMMO_CRATE_DROP_CHANCE = 0.25D;
     private static final double RESPAWN_CLEAR_RADIUS = 10.0;
     private static final double TEAMMATE_RESPAWN_MIN_RADIUS = 3.0;
     private static final double TEAMMATE_RESPAWN_MAX_RADIUS = 5.0;
@@ -441,7 +442,7 @@ public final class ArcadeMatch {
         }
         lastHurtTick.put(victimId, (long) server.getTickCount());
         ServerPlayer victim = player(victimId);
-        // 仅对局战斗阶段：在死亡点掉落补给箱（拾取恢复弹药），且必须在传送前掉落。
+        // 仅对局战斗阶段：25% 概率在死亡点掉落补给箱（拾取恢复弹药），且必须在传送前掉落。
         if (victim != null && phase == MatchPhase.COMBAT) {
             dropAmmoCrate(victim);
         }
@@ -515,6 +516,9 @@ public final class ArcadeMatch {
 
     /** 在玩家死亡点掉落一个补给箱（箱子物品 + 标记 NBT），拾取后补满虚拟弹药。 */
     private void dropAmmoCrate(ServerPlayer victim) {
+        if (random.nextDouble() >= AMMO_CRATE_DROP_CHANCE) {
+            return;
+        }
         ItemStack crate = new ItemStack(Items.CHEST);
         crate.getOrCreateTag().putBoolean(AMMO_CRATE_KEY, true);
         crate.setHoverName(Component.literal("§b补给箱 §7(拾取恢复弹药)"));
