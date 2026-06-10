@@ -198,6 +198,7 @@ public final class CreateRoomScreen extends Screen {
         minecraft.player.connection.sendCommand(
                 "arcade room create " + mode().id() + " " + quoteArg(arena) + " " + target
                 + " " + timeLimitSeconds + " " + randomWeapons + " " + cap);
+        minecraft.player.connection.sendCommand("arcade browse");
         onClose();
     }
 

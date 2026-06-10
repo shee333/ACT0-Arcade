@@ -1,6 +1,7 @@
 package org.shee33.act0.arcade.client;
 
 import net.minecraft.client.Minecraft;
+import org.shee33.act0.arcade.client.screen.RoomLobbyScreen;
 import org.shee33.act0.arcade.client.screen.RoomBrowserScreen;
 import org.shee33.act0.arcade.network.RoomDto;
 
@@ -42,9 +43,20 @@ public final class ClientRoomList {
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen instanceof RoomBrowserScreen browser) {
             browser.onRoomsUpdated();
+        } else if (mc.screen instanceof RoomLobbyScreen lobby) {
+            lobby.onRoomsUpdated();
         } else if (open) {
-            mc.setScreen(new RoomBrowserScreen());
+            mc.setScreen(hasOwnArcadeRoom() ? new RoomLobbyScreen() : new RoomBrowserScreen());
         }
+    }
+
+    private static boolean hasOwnArcadeRoom() {
+        for (RoomDto room : rooms) {
+            if (room.youAreMember() && !room.roomId().startsWith("bf@")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static void closeBrowser() {
