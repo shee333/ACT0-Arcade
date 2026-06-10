@@ -93,6 +93,7 @@ public final class Act0Arcade {
     @SubscribeEvent
     public void onServerAboutToStart(final ServerAboutToStartEvent event) {
         SERVICES.reloadCatalog();
+        SERVICES.reloadApparel();
         SERVICES.reloadAttachments();
     }
 
@@ -101,6 +102,7 @@ public final class Act0Arcade {
         if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player) {
             ArcadeGlobalSettings.get(player.server).applyHealth(player);
             ArcadeNetwork.syncCatalog(player, SERVICES.registry());
+            ArcadeNetwork.syncApparel(player);
             ArcadeNetwork.syncAttachmentCatalog(player);
             // 若属于某进行中的对局，则重连归位
             SERVICES.matches().onPlayerLogin(player);

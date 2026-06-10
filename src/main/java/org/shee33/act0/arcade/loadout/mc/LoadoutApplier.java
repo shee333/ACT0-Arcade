@@ -3,7 +3,12 @@ package org.shee33.act0.arcade.loadout.mc;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.TagParser;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
+import org.shee33.act0.arcade.loadout.ApparelItem;
+import org.shee33.act0.arcade.loadout.ApparelRegistry;
+import org.shee33.act0.arcade.loadout.ApparelSelection;
+import org.shee33.act0.arcade.loadout.ApparelSlot;
 import org.shee33.act0.arcade.loadout.Loadout;
 import org.shee33.act0.arcade.loadout.LoadoutItem;
 import org.shee33.act0.arcade.loadout.LoadoutRegistry;
@@ -94,6 +99,36 @@ public final class LoadoutApplier {
         }
         player.getInventory().setChanged();
         return resolution;
+    }
+
+    /** 穿戴玩家全配装共享服饰。 */
+    public void applyApparel(ServerPlayer player,
+                             ApparelSelection selection,
+                             ApparelRegistry apparel,
+                             Set<String> unlocked) {
+        if (player == null || selection == null || apparel == null) {
+            return;
+        }
+        for (ApparelSlot slot : ApparelSlot.values()) {
+            String key = selection.selectedKey(slot).orElse(null);
+            ApparelItem item = key == null ? null : apparel.find(key).orElse(null);
+            if (item == null || item.slot() != slot || !item.isUnlockedBy(unlocked)) {
+                player.setItemSlot(equipmentSlot(slot), ItemStack.EMPTY);
+                continue;
+            }
+            ItemStack stack = fromSnbt(item.itemSnbt());
+            player.setItemSlot(equipmentSlot(slot), stack);
+        }
+        player.getInventory().setChanged();
+    }
+
+    private static EquipmentSlot equipmentSlot(ApparelSlot slot) {
+        return switch (slot) {
+            case HELMET -> EquipmentSlot.HEAD;
+            case CHESTPLATE -> EquipmentSlot.CHEST;
+            case LEGGINGS -> EquipmentSlot.LEGS;
+            case BOOTS -> EquipmentSlot.FEET;
+        };
     }
 
     /**

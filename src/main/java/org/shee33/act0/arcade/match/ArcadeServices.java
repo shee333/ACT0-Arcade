@@ -3,11 +3,13 @@ package org.shee33.act0.arcade.match;
 import com.mojang.logging.LogUtils;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.shee33.act0.arcade.Act0Arcade;
+import org.shee33.act0.arcade.loadout.ApparelRegistry;
 import org.shee33.act0.arcade.loadout.AttachmentRegistry;
 import org.shee33.act0.arcade.loadout.DefaultLoadoutCatalog;
 import org.shee33.act0.arcade.loadout.LoadoutRegistry;
 import org.shee33.act0.arcade.loadout.mc.GunModService;
 import org.shee33.act0.arcade.loadout.mc.LoadoutApplier;
+import org.shee33.act0.arcade.storage.ApparelCatalogIO;
 import org.shee33.act0.arcade.storage.AttachmentCatalogIO;
 import org.shee33.act0.arcade.storage.LoadoutCatalogIO;
 import org.slf4j.Logger;
@@ -27,6 +29,7 @@ public final class ArcadeServices {
     private static final Logger LOGGER = LogUtils.getLogger();
 
     private final LoadoutRegistry registry;
+    private final ApparelRegistry apparel;
     private final AttachmentRegistry attachments;
     private final GunModService gunMod;
     private final LoadoutApplier applier;
@@ -37,6 +40,7 @@ public final class ArcadeServices {
     public ArcadeServices() {
         this.registry = new LoadoutRegistry();
         DefaultLoadoutCatalog.register(registry);
+        this.apparel = new ApparelRegistry();
         this.attachments = new AttachmentRegistry();
         this.gunMod = new GunModService(registry, attachments);
         this.applier = new LoadoutApplier(registry, gunMod);
@@ -52,6 +56,10 @@ public final class ArcadeServices {
 
     public AttachmentRegistry attachments() {
         return attachments;
+    }
+
+    public ApparelRegistry apparel() {
+        return apparel;
     }
 
     public GunModService gunMod() {
@@ -82,6 +90,24 @@ public final class ArcadeServices {
     /** {@code config/act0_arcade/attachment} 目录。 */
     public Path attachmentConfigDir() {
         return FMLPaths.CONFIGDIR.get().resolve(Act0Arcade.MODID).resolve("attachment");
+    }
+
+    /** {@code config/act0_arcade/apparel} 目录。 */
+    public Path apparelConfigDir() {
+        return FMLPaths.CONFIGDIR.get().resolve(Act0Arcade.MODID).resolve("apparel");
+    }
+
+    /** 从配置目录重新加载服饰目录。 */
+    public int reloadApparel() {
+        try {
+            int count = ApparelCatalogIO.loadInto(apparel, apparelConfigDir());
+            LOGGER.info("{}loaded {} apparel entries from {}",
+                    Act0Arcade.LOG_PREFIX, count, apparelConfigDir());
+            return count;
+        } catch (IOException e) {
+            LOGGER.error("{}failed to load apparel catalog: {}", Act0Arcade.LOG_PREFIX, e.toString());
+            return -1;
+        }
     }
 
     /**

@@ -27,6 +27,8 @@ import org.shee33.act0.arcade.economy.BuyOutcome;
 import org.shee33.act0.arcade.economy.EconomyManager;
 import org.shee33.act0.arcade.hologram.ArcadeEntranceHolograms;
 import org.shee33.act0.arcade.integration.TaczBridge;
+import org.shee33.act0.arcade.loadout.ApparelItem;
+import org.shee33.act0.arcade.loadout.ApparelSlot;
 import org.shee33.act0.arcade.loadout.AttachmentSlotType;
 import org.shee33.act0.arcade.loadout.DefaultLoadoutCatalog;
 import org.shee33.act0.arcade.loadout.Loadout;
@@ -43,6 +45,7 @@ import org.shee33.act0.arcade.network.ArcadeNetwork;
 import org.shee33.act0.arcade.storage.ArcadeLoadoutStore;
 import org.shee33.act0.arcade.storage.ArcadeGlobalSettings;
 import org.shee33.act0.arcade.storage.ArcadePlayerUnlocks;
+import org.shee33.act0.arcade.storage.ApparelCatalogIO;
 import org.shee33.act0.arcade.storage.ArenaRegistry;
 import org.shee33.act0.arcade.storage.AttachmentCatalogIO;
 import org.shee33.act0.arcade.storage.LoadoutCatalogIO;
@@ -103,6 +106,19 @@ public final class ArcadeCommand {
         }
         return SharedSuggestionProvider.suggest(names, builder);
     };
+
+    /** 服饰槽位补全。 */
+    private static final SuggestionProvider<CommandSourceStack> APPAREL_SLOTS = (ctx, builder) -> {
+        List<String> names = new ArrayList<>();
+        for (ApparelSlot slot : ApparelSlot.values()) {
+            names.add(slot.name().toLowerCase(java.util.Locale.ROOT));
+        }
+        return SharedSuggestionProvider.suggest(names, builder);
+    };
+
+    /** 服饰 key 补全。 */
+    private static final SuggestionProvider<CommandSourceStack> APPAREL_KEYS = (ctx, builder) ->
+            SharedSuggestionProvider.suggest(services().apparel().all().keySet(), builder);
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         LiteralArgumentBuilder<CommandSourceStack> root = Commands.literal("arcade");
@@ -399,15 +415,19 @@ public final class ArcadeCommand {
             return 0;
         }
         int attachCount = services().reloadAttachments();
+        int apparelCount = services().reloadApparel();
         // 重载后把新目录同步给所有在线玩家
         for (ServerPlayer online : ctx.getSource().getServer().getPlayerList().getPlayers()) {
             ArcadeNetwork.syncCatalog(online, services().registry());
+            ArcadeNetwork.syncApparel(online);
             ArcadeNetwork.syncAttachmentCatalog(online);
         }
         final int n = count;
         final int a = Math.max(0, attachCount);
+        final int ap = Math.max(0, apparelCount);
         ctx.getSource().sendSuccess(() -> Component.literal(
-                "§a已重载装备目录，共 §e" + n + " §a件武器、§e" + a + " §a件配件，并同步到在线玩家。"), true);
+                "§a已重载装备目录，共 §e" + n + " §a件武器、§e" + a + " §a件配件、§e" + ap
+                        + " §a件服饰，并同步到在线玩家。"), true);
         return 1;
     }
 
@@ -582,8 +602,86 @@ public final class ArcadeCommand {
                 .then(classBranch)
                 .then(setBranch)
                 .then(clearBranch)
+                .then(Commands.literal("add").requires(src -> src.hasPermission(2))
+                    .then(Commands.argument("slot", StringArgumentType.word()).suggests(APPAREL_SLOTS)
+                        .executes(ctx -> apparelAdd(ctx, false))
+                        .then(Commands.argument("price", IntegerArgumentType.integer(0))
+                            .executes(ctx -> apparelAdd(ctx, false)))))
+                .then(Commands.literal("adddefault").requires(src -> src.hasPermission(2))
+                    .then(Commands.argument("slot", StringArgumentType.word()).suggests(APPAREL_SLOTS)
+                        .executes(ctx -> apparelAdd(ctx, true))))
+                .then(Commands.literal("removeapparel").requires(src -> src.hasPermission(2))
+                    .then(Commands.argument("key", StringArgumentType.word()).suggests(APPAREL_KEYS)
+                        .executes(ArcadeCommand::apparelRemove)))
                 .then(Commands.literal("edit").executes(ArcadeCommand::loadoutEdit))
                 .then(Commands.literal("show").executes(ArcadeCommand::loadoutShow));
+    }
+
+    private static int apparelAdd(CommandContext<CommandSourceStack> ctx, boolean asDefault)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        String slotRaw = StringArgumentType.getString(ctx, "slot");
+        ApparelSlot slot = ApparelSlot.byName(slotRaw);
+        if (slot == null) {
+            ctx.getSource().sendFailure(Component.literal("§c未知服饰槽位：" + slotRaw));
+            return 0;
+        }
+        int price = asDefault ? 0 : optIntOr(ctx, "price", 0);
+        ItemStack stack = player.getMainHandItem();
+        if (stack.isEmpty()) {
+            ctx.getSource().sendFailure(Component.literal("§c请手持要上架的服饰。"));
+            return 0;
+        }
+        String key = "apparel." + slot.name().toLowerCase(java.util.Locale.ROOT) + "." + deriveKey(stack);
+        CompoundTag full = new CompoundTag();
+        stack.save(full);
+
+        ApparelCatalogIO.ApparelEntryDto dto = new ApparelCatalogIO.ApparelEntryDto();
+        dto.key = key;
+        dto.name = stack.getHoverName().getString();
+        dto.slot = slot.name();
+        dto.price = price;
+        dto.isDefault = asDefault;
+        dto.snbt = full.toString();
+        try {
+            ApparelCatalogIO.appendEntry(services().apparelConfigDir(), dto);
+        } catch (IOException e) {
+            ctx.getSource().sendFailure(Component.literal("§c写入服饰库失败：" + e.getMessage()));
+            return 0;
+        }
+        int count = services().reloadApparel();
+        if (count >= 0) {
+            for (ServerPlayer online : ctx.getSource().getServer().getPlayerList().getPlayers()) {
+                ArcadeNetwork.syncApparel(online);
+            }
+        }
+        String tag = asDefault ? "§b默认服饰" : "§e售价 " + price;
+        ctx.getSource().sendSuccess(() -> Component.literal(
+                "§a已上架服饰 §f" + dto.name + " §7(" + key + ") §7[" + slot.displayName() + "] " + tag), true);
+        return 1;
+    }
+
+    private static int apparelRemove(CommandContext<CommandSourceStack> ctx) {
+        String key = StringArgumentType.getString(ctx, "key");
+        boolean removed;
+        try {
+            removed = ApparelCatalogIO.removeEntry(services().apparelConfigDir(), key);
+        } catch (IOException e) {
+            ctx.getSource().sendFailure(Component.literal("§c删除失败：" + e.getMessage()));
+            return 0;
+        }
+        if (!removed) {
+            ctx.getSource().sendFailure(Component.literal("§c服饰库中没有该条目：" + key));
+            return 0;
+        }
+        int count = services().reloadApparel();
+        if (count >= 0) {
+            for (ServerPlayer online : ctx.getSource().getServer().getPlayerList().getPlayers()) {
+                ArcadeNetwork.syncApparel(online);
+            }
+        }
+        ctx.getSource().sendSuccess(() -> Component.literal("§a已下架服饰：" + key), true);
+        return 1;
     }
 
     private static Loadout ownLoadout(CommandSourceStack source, ServerPlayer player) {
@@ -964,7 +1062,11 @@ public final class ArcadeCommand {
 
         Optional<LoadoutItem> found = registry.find(key);
         if (found.isEmpty()) {
-            ctx.getSource().sendFailure(Component.literal("§c没有这件武器。"));
+            Optional<ApparelItem> apparel = services().apparel().find(key);
+            if (apparel.isPresent()) {
+                return buyApparel(ctx, player, apparel.get(), key, economy, uuid, server);
+            }
+            ctx.getSource().sendFailure(Component.literal("§c没有这件武器或服饰。"));
             ArcadeNetwork.sendBuyResult(player, key, BuyOutcome.ERROR, economy.balance(uuid));
             return 0;
         }
@@ -992,6 +1094,33 @@ public final class ArcadeCommand {
         ArcadeNetwork.syncUnlocks(player);
         ArcadeNetwork.sendBuyResult(player, key, BuyOutcome.SUCCESS, economy.balance(uuid));
         ctx.getSource().sendSuccess(() -> Component.literal("§a已解锁 §f" + item.displayName()), false);
+        return 1;
+    }
+
+    private static int buyApparel(CommandContext<CommandSourceStack> ctx, ServerPlayer player, ApparelItem item,
+                                  String key, ArcadeEconomy economy, UUID uuid, MinecraftServer server) {
+        ArcadePlayerUnlocks unlocks = ArcadePlayerUnlocks.get(server);
+        if (item.isDefault() || unlocks.isUnlocked(uuid, key)) {
+            ctx.getSource().sendSuccess(() -> Component.literal("§a你已拥有服饰 §f" + item.displayName()), false);
+            ArcadeNetwork.sendBuyResult(player, key, BuyOutcome.ALREADY_OWNED, economy.balance(uuid));
+            return 1;
+        }
+        int price = item.price();
+        if (!economy.isAvailable()) {
+            ctx.getSource().sendFailure(Component.literal("§c当前无法购买。"));
+            ArcadeNetwork.sendBuyResult(player, key, BuyOutcome.UNAVAILABLE, 0);
+            return 0;
+        }
+        if (!economy.has(uuid, price) || !economy.withdraw(uuid, price)) {
+            ctx.getSource().sendFailure(Component.literal("§c余额不足，需要 §e" + price));
+            ArcadeNetwork.sendBuyResult(player, key, BuyOutcome.INSUFFICIENT, economy.balance(uuid));
+            return 0;
+        }
+        unlocks.unlock(uuid, key);
+        ArcadeNetwork.syncUnlocks(player);
+        ArcadeNetwork.syncApparel(player);
+        ArcadeNetwork.sendBuyResult(player, key, BuyOutcome.SUCCESS, economy.balance(uuid));
+        ctx.getSource().sendSuccess(() -> Component.literal("§a已解锁服饰 §f" + item.displayName()), false);
         return 1;
     }
 

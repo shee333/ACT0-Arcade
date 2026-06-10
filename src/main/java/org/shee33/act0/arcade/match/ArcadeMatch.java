@@ -40,6 +40,7 @@ import org.shee33.act0.arcade.round.MatchPhase;
 import org.shee33.act0.arcade.round.MatchScore;
 import org.shee33.act0.arcade.round.PhaseTimer;
 import org.shee33.act0.arcade.round.RespawnPolicy;
+import org.shee33.act0.arcade.storage.ArcadeApparelStore;
 import org.shee33.act0.arcade.storage.ArcadeGlobalSettings;
 
 import java.util.ArrayList;
@@ -1567,6 +1568,7 @@ public final class ArcadeMatch {
     private void equip(ServerPlayer player) {
         if (settings.randomWeapons()) {
             equipRandom(player);
+            applyApparel(player);
             return;
         }
         Loadout loadout = loadoutProvider.apply(player.getUUID());
@@ -1575,6 +1577,13 @@ public final class ArcadeMatch {
         }
         Set<String> unlocked = unlocksProvider.apply(player.getUUID());
         applier.apply(player, loadout, settings.ruleset(), unlocked, true);
+        applyApparel(player);
+    }
+
+    private void applyApparel(ServerPlayer player) {
+        Set<String> unlocked = unlocksProvider.apply(player.getUUID());
+        applier.applyApparel(player, ArcadeApparelStore.get(server).getOrCreate(player.getUUID()),
+                org.shee33.act0.arcade.Act0Arcade.services().apparel(), unlocked);
     }
 
     /**

@@ -15,6 +15,8 @@ import org.shee33.act0.arcade.match.ArcadeMatch;
 import org.shee33.act0.arcade.match.ArcadeRoom;
 import org.shee33.act0.arcade.match.RoomManager;
 import org.shee33.act0.arcade.storage.AttachmentCatalogIO;
+import org.shee33.act0.arcade.storage.ApparelCatalogIO;
+import org.shee33.act0.arcade.storage.ArcadeApparelStore;
 import org.shee33.act0.arcade.storage.ArcadeLoadoutStore;
 import org.shee33.act0.arcade.storage.ArcadePlayerUnlocks;
 import org.shee33.act0.arcade.storage.ArenaRegistry;
@@ -31,7 +33,7 @@ import java.util.UUID;
  */
 public final class ArcadeNetwork {
 
-        private static final String PROTOCOL = "6";
+        private static final String PROTOCOL = "7";
 
     @SuppressWarnings("removal")
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
@@ -82,6 +84,10 @@ public final class ArcadeNetwork {
                 SelectLoadoutPacket::encode, SelectLoadoutPacket::decode, SelectLoadoutPacket::handle);
         CHANNEL.registerMessage(id++, SyncFireLockPacket.class,
                 SyncFireLockPacket::encode, SyncFireLockPacket::decode, SyncFireLockPacket::handle);
+        CHANNEL.registerMessage(id++, SyncApparelPacket.class,
+                SyncApparelPacket::encode, SyncApparelPacket::decode, SyncApparelPacket::handle);
+        CHANNEL.registerMessage(id++, SaveApparelPacket.class,
+                SaveApparelPacket::encode, SaveApparelPacket::decode, SaveApparelPacket::handle);
     }
 
     /** 把服务端当前装备目录下发给指定玩家。 */
@@ -89,6 +95,13 @@ public final class ArcadeNetwork {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
                 new SyncCatalogPacket(LoadoutCatalogIO.toDtos(registry)));
     }
+
+        /** 把服饰目录和玩家当前服饰选择下发给指定玩家。 */
+        public static void syncApparel(ServerPlayer player) {
+                CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                                new SyncApparelPacket(ApparelCatalogIO.toDtos(Act0Arcade.services().apparel()),
+                                                ArcadeApparelStore.get(player.server).getOrCreate(player.getUUID())));
+        }
 
     /** 向玩家下发死亡相机/滤镜状态。 */
     public static void sendDeathCam(ServerPlayer player, boolean active, String killerName) {
@@ -103,6 +116,7 @@ public final class ArcadeNetwork {
                 LoadoutSet set = ArcadeLoadoutStore.get(player.server).getOrCreateSet(player.getUUID(),
                                 DefaultLoadoutCatalog.defaultLoadout(Act0Arcade.services().registry()));
                 syncUnlocks(player);
+                syncApparel(player);
                 syncAttachmentCatalog(player);
                 CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenLoadoutPacket(set));
         }
@@ -111,6 +125,7 @@ public final class ArcadeNetwork {
                 LoadoutSet set = ArcadeLoadoutStore.get(player.server).getOrCreateSet(player.getUUID(),
                                 DefaultLoadoutCatalog.defaultLoadout(Act0Arcade.services().registry()));
                 syncUnlocks(player);
+                syncApparel(player);
                 CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenLoadoutPacket(set, true));
         }
 
