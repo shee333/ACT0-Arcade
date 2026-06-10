@@ -294,6 +294,9 @@ public final class ArcadeCommand {
                 .then(Commands.literal("join")
                         .then(Commands.argument("id", StringArgumentType.word()).suggests(ROOM_IDS)
                                 .executes(ArcadeCommand::roomJoin)))
+                .then(Commands.literal("team")
+                    .then(Commands.literal("blue").executes(ctx -> roomTeam(ctx, 0)))
+                    .then(Commands.literal("red").executes(ctx -> roomTeam(ctx, 1))))
                 .then(Commands.literal("leave").executes(ArcadeCommand::roomLeave))
                 .then(Commands.literal("start").executes(ArcadeCommand::roomStart))
                 .then(Commands.literal("list").executes(ArcadeCommand::roomList));
@@ -369,6 +372,15 @@ public final class ArcadeCommand {
         MinecraftServer server = ctx.getSource().getServer();
         boolean privileged = ctx.getSource().hasPermission(2);
         String feedback = services().rooms().start(server, player, privileged);
+        ctx.getSource().sendSuccess(() -> Component.literal(feedback), false);
+        ArcadeNetwork.broadcastRoomList(server);
+        return 1;
+    }
+
+    private static int roomTeam(CommandContext<CommandSourceStack> ctx, int team) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        MinecraftServer server = ctx.getSource().getServer();
+        String feedback = services().rooms().chooseTeam(server, player, team);
         ctx.getSource().sendSuccess(() -> Component.literal(feedback), false);
         ArcadeNetwork.broadcastRoomList(server);
         return 1;

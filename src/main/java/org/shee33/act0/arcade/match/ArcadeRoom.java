@@ -1,6 +1,8 @@
 package org.shee33.act0.arcade.match;
 
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -38,6 +40,8 @@ public final class ArcadeRoom {
 
     /** 成员（保持加入顺序，房主始终在首位）。 */
     private final Set<UUID> members = new LinkedHashSet<>();
+    /** 团队模式选边偏好：0=蓝队，1=红队。 */
+    private final Map<UUID, Integer> preferredTeams = new LinkedHashMap<>();
     private State state = State.WAITING;
     /** 进行中对局的 id（仅 IN_PROGRESS 态有效）。 */
     private String matchId;
@@ -143,7 +147,18 @@ public final class ArcadeRoom {
     }
 
     boolean removeMember(UUID id) {
+        preferredTeams.remove(id);
         return members.remove(id);
+    }
+
+    public Integer preferredTeam(UUID id) {
+        return preferredTeams.get(id);
+    }
+
+    void setPreferredTeam(UUID id, int team) {
+        if (members.contains(id)) {
+            preferredTeams.put(id, Math.floorMod(team, 2));
+        }
     }
 
     public boolean isEmpty() {

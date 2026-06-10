@@ -26,6 +26,7 @@ public final class RoomLobbyScreen extends Screen {
     private int leaveX, leaveY, leaveW, leaveH;
     private int minusX, plusX, adjustY, adjustW, adjustH;
     private int browserX, browserY, browserW, browserH;
+    private int blueX, redX, teamY, teamW, teamH;
 
     public RoomLobbyScreen() {
         super(Component.literal("房间大厅"));
@@ -85,18 +86,18 @@ public final class RoomLobbyScreen extends Screen {
         gg.drawString(font, "§7房主 §f" + room.hostName() + " §8/ §7目标 §f" + room.targetText(), left + 14, top + 42, PixelTheme.TEXT, false);
         gg.drawString(font, "§7人数 §f" + room.size() + "/" + room.capacity(), left + 14, top + 54, PixelTheme.TEXT, false);
 
-        renderSlots(gg, room);
+        renderSlots(gg, room, mouseX, mouseY);
         renderControls(gg, room, mouseX, mouseY);
         super.render(gg, mouseX, mouseY, partialTick);
     }
 
-    private void renderSlots(GuiGraphics gg, RoomDto room) {
+    private void renderSlots(GuiGraphics gg, RoomDto room, int mouseX, int mouseY) {
         List<String> names = splitPlayers(room.playersText());
         int cols = 2;
         int slotW = (W - 34) / cols;
         int slotH = 18;
         int startY = top + 75;
-        int count = Math.max(room.capacity(), names.size());
+        int count = Math.min(Math.max(room.capacity(), names.size()), 12);
         for (int i = 0; i < count; i++) {
             int col = i % cols;
             int row = i / cols;
@@ -107,8 +108,17 @@ public final class RoomLobbyScreen extends Screen {
             String text = filled ? "§a● §f" + trim(names.get(i), slotW - 18) : "§8空位 " + (i + 1);
             gg.drawString(font, text, x + 5, y + 5, filled ? PixelTheme.TEXT : PixelTheme.TEXT_DIM, false);
         }
+        if (room.capacity() > count) {
+            gg.drawString(font, "§8… 还有 " + (room.capacity() - count) + " 个槽位", left + 14, top + 145, PixelTheme.TEXT_DIM, false);
+        }
         if ("团队死斗".equals(room.modeName())) {
-            gg.drawString(font, "§7团队乱斗选边：下一版将加入队伍槽拖拽/点击换边。", left + 14, top + 155, PixelTheme.TEXT_DIM, false);
+            teamY = top + 154;
+            teamW = 72;
+            teamH = 18;
+            blueX = left + 14;
+            redX = blueX + teamW + 8;
+            renderButton(gg, blueX, teamY, teamW, teamH, "加入蓝队", mouseX, mouseY, true);
+            renderButton(gg, redX, teamY, teamW, teamH, "加入红队", mouseX, mouseY, true);
         }
     }
 
@@ -180,6 +190,16 @@ public final class RoomLobbyScreen extends Screen {
         }
         if (host && inRect((int) mouseX, (int) mouseY, plusX, adjustY, adjustW, adjustH)) {
             minecraft.player.connection.sendCommand("arcade room size " + Math.min(32, room.capacity() + 1));
+            requestRefresh();
+            return true;
+        }
+        if ("团队死斗".equals(room.modeName()) && inRect((int) mouseX, (int) mouseY, blueX, teamY, teamW, teamH)) {
+            minecraft.player.connection.sendCommand("arcade room team blue");
+            requestRefresh();
+            return true;
+        }
+        if ("团队死斗".equals(room.modeName()) && inRect((int) mouseX, (int) mouseY, redX, teamY, teamW, teamH)) {
+            minecraft.player.connection.sendCommand("arcade room team red");
             requestRefresh();
             return true;
         }

@@ -191,6 +191,24 @@ public final class RoomManager {
         return "§a已修改房间人数为 §e" + capacity;
     }
 
+    public String chooseTeam(MinecraftServer server, ServerPlayer player, int team) {
+        ArcadeRoom room = rooms.get(roomOf.get(player.getUUID()));
+        if (room == null) {
+            return "§c你当前不在任何房间。";
+        }
+        if (!"team_deathmatch".equals(room.modeId())) {
+            return "§c只有团队死斗房间可以选边。";
+        }
+        if (room.state() != ArcadeRoom.State.WAITING) {
+            return "§c对局已开始，无法选边。";
+        }
+        int normalized = Math.floorMod(team, 2);
+        room.setPreferredTeam(player.getUUID(), normalized);
+        notifyRoom(server, room, "§b" + player.getGameProfile().getName()
+                + " §7选择了 " + (normalized == 0 ? "§9蓝队" : "§c红队"));
+        return "§a已选择 " + (normalized == 0 ? "§9蓝队" : "§c红队");
+    }
+
     /** 由房间构建完整可配置项。 */
     private static MatchOptions optionsOf(ArcadeRoom room) {
         return new MatchOptions(room.winTarget(), room.timeLimitSeconds(), room.randomWeapons());
@@ -364,7 +382,7 @@ public final class RoomManager {
 
     private String launch(MinecraftServer server, ArcadeRoom room) {
         room.setState(ArcadeRoom.State.LAUNCHING);
-        List<UUID> members = new ArrayList<>(room.members());
+        List<UUID> members = orderedMembers(room);
 
         MatchLauncher.Result result = MatchLauncher.start(
             services, server, room.modeId(), room.arenaId(), members, optionsOf(room), room.capacity());
@@ -391,6 +409,37 @@ public final class RoomManager {
         notifyAll(server, members, "§a对局开始！祝你好运。");
         closeRoomBrowsers(server, members);
         return "§a对局开始 §7(" + result.message() + ")";
+    }
+
+    private List<UUID> orderedMembers(ArcadeRoom room) {
+        List<UUID> members = new ArrayList<>(room.members());
+        if (!"team_deathmatch".equals(room.modeId())) {
+            return members;
+        }
+        int perSide = Math.max(1, room.capacity() / 2);
+        List<UUID> blue = new ArrayList<>();
+        List<UUID> red = new ArrayList<>();
+        List<UUID> undecided = new ArrayList<>();
+        for (UUID id : members) {
+            Integer pref = room.preferredTeam(id);
+            if (pref != null && pref == 0 && blue.size() < perSide) {
+                blue.add(id);
+            } else if (pref != null && pref == 1 && red.size() < perSide) {
+                red.add(id);
+            } else {
+                undecided.add(id);
+            }
+        }
+        for (UUID id : undecided) {
+            if (blue.size() <= red.size() && blue.size() < perSide) {
+                blue.add(id);
+            } else {
+                red.add(id);
+            }
+        }
+        List<UUID> ordered = new ArrayList<>(blue);
+        ordered.addAll(red);
+        return ordered;
     }
 
     private void closeRoomBrowsers(MinecraftServer server, Collection<UUID> ids) {
