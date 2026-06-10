@@ -474,6 +474,22 @@ public final class ArcadeMatch {
         }
     }
 
+    /** 取消同方玩家之间的伤害，避免团队模式误伤。 */
+    public boolean shouldCancelDamage(UUID victimId, UUID attackerId) {
+        if (phase == MatchPhase.ENDED || !sideOf.containsKey(victimId)) {
+            return false;
+        }
+        if (phase == MatchPhase.COUNTDOWN || respawnTimers.containsKey(victimId) || deathCamView.containsKey(victimId)) {
+            return true;
+        }
+        if (attackerId == null || attackerId.equals(victimId) || !sideOf.containsKey(attackerId)) {
+            return false;
+        }
+        Integer victimSide = sideOf.get(victimId);
+        Integer attackerSide = sideOf.get(attackerId);
+        return victimSide != null && victimSide.equals(attackerSide);
+    }
+
     private void tickBreathHealing() {
         int delay = ArcadeGlobalSettings.get(server).breathHealDelayTicks();
         long now = server.getTickCount();
@@ -605,6 +621,7 @@ public final class ArcadeMatch {
         bossBar.setColor(BossEvent.BossBarColor.GREEN);
         showPersonalResultBars(side);
         broadcast("§6§l对局结束：" + sideLabel(side) + " §6§l胜出。");
+        broadcastServerResult(side, false);
         broadcastMatchResult(side, false);
         playToAll(SoundEvents.PLAYER_LEVELUP, 1.0f);
         updateSidebar();
@@ -624,6 +641,7 @@ public final class ArcadeMatch {
         bossBar.setColor(BossEvent.BossBarColor.WHITE);
         showPersonalDrawBars();
         broadcast("§7§l平局！");
+        broadcastServerResult(-1, true);
         broadcastMatchResult(-1, true);
         updateSidebar();
     }
@@ -655,6 +673,28 @@ public final class ArcadeMatch {
             p.sendSystemMessage(Component.literal("§6赛后结算 §8| " + outcome
                     + " §8| §7比分 §f" + scoreLine() + extra));
         }
+    }
+
+    private void broadcastServerResult(int winningSide, boolean isDraw) {
+        TopKiller top = topKiller();
+        String outcome = isDraw ? "§7平局" : "§a" + plainWinnerName(winningSide) + " §7胜出";
+        String mvp = top.kills() > 0 ? " §8| §7击杀王 §e" + top.name() + " §7(" + top.kills() + "杀)" : "";
+        Component message = Component.literal("§6[ACT0赛果] §f" + settings.displayName()
+                + " §8| " + outcome + " §8| §7比分 §f" + plainScoreLine() + mvp);
+        for (ServerPlayer online : server.getPlayerList().getPlayers()) {
+            online.sendSystemMessage(message);
+        }
+    }
+
+    private String plainWinnerName(int winningSide) {
+        if (winningSide < 0) {
+            return "平局";
+        }
+        List<String> names = sideMemberNames(winningSide);
+        if (settings.scoringMode() == ScoringMode.KILL_COUNT && settings.teamSize() > 1) {
+            return "队伍 " + (winningSide + 1);
+        }
+        return names.isEmpty() ? "胜利方" : String.join("、", names);
     }
 
     private void broadcastMatchResult(int winningSide, boolean isDraw) {
@@ -734,10 +774,13 @@ public final class ArcadeMatch {
         ammoCrates.clear();
     }
 
-    /**
-     * 处理一名参战玩家的掉线：<b>保留其坐位</b>（重连可归位），仅将其移出存活/复活/血条/计分板。
-     * 若掉线使决斗回合只剩一方则照常结算回合；若使整局只剩一方（或无人）则自动收尾。
-     */
+    public void forgetAmmoCrate(UUID crateId) {
+        if (crateId != null) {
+            ammoCrates.remove(crateId);
+        }
+    }
+
+    /** 处理一名参战玩家的掉线：立即移出对局，不再保留席位；重新加入视为中途加入。 */
     public void onPlayerLeft(UUID playerId) {
         if (!sideOf.containsKey(playerId)) {
             return;
@@ -745,7 +788,10 @@ public final class ArcadeMatch {
         if (phase == MatchPhase.ENDED) {
             return;
         }
-        disconnected.add(playerId);
+        int side = sideOf.getOrDefault(playerId, 0);
+        sides.get(side).remove(playerId);
+        sideOf.remove(playerId);
+        disconnected.remove(playerId);
         respawnTimers.remove(playerId);
         respawnLastSecond.remove(playerId);
         countdownLock.remove(playerId);
@@ -753,6 +799,7 @@ public final class ArcadeMatch {
         teammateSpectateSwitchTick.remove(playerId);
         teammateSpectateTarget.remove(playerId);
         lastHurtTick.remove(playerId);
+        kills.remove(playerId);
         boolean wasAlive = alive.remove(playerId);
         ServerPlayer p = player(playerId);
         if (p != null) {
@@ -766,7 +813,9 @@ public final class ArcadeMatch {
         if (settings.scoringMode() != ScoringMode.KILL_COUNT && wasAlive && phase == MatchPhase.COMBAT) {
             evaluateRoundElimination();
         }
-        broadcast("§7" + nameOf(playerId) + " 掉线（坐位保留，重连可归位）。");
+        setupNameTagTeams();
+        updateSidebar();
+        broadcast("§7" + nameOf(playerId) + " 离线，已退出本对局。重新加入将按中途加入处理。");
         checkLiveness();
     }
 
@@ -989,7 +1038,7 @@ public final class ArcadeMatch {
         if (usesPersonalBossBars()) {
             return ffaColor(side);
         }
-        return side == 0 ? ChatFormatting.RED : (side == 1 ? ChatFormatting.BLUE : ChatFormatting.GRAY);
+        return side == 0 ? ChatFormatting.BLUE : (side == 1 ? ChatFormatting.RED : ChatFormatting.GRAY);
     }
 
     private ChatFormatting ffaColor(int side) {

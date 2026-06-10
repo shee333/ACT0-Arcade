@@ -33,7 +33,7 @@ import java.util.function.Consumer;
 public final class MatchManager {
 
     private final Map<String, ArcadeMatch> matches = new ConcurrentHashMap<>();
-    /** 玩家 → 所在对局 id，便于 O(1) 路由死亡事件。掉线玩家仍保留以支持重连。 */
+    /** 玩家 → 所在对局 id，便于 O(1) 路由死亡事件。离线/退出后立即移除，不再保留席位。 */
     private final Map<UUID, String> matchByPlayer = new ConcurrentHashMap<>();
     /** 对局结束回调（用于回收对应房间）；可为 {@code null}。 */
     private Consumer<String> endListener;
@@ -113,9 +113,7 @@ public final class MatchManager {
         return matchByPlayer.get(playerId);
     }
 
-    /**
-     * 玩家登出：<b>保留</b>其与对局的绑定（以便重连归位），仅通知对局将其标记为掉线。
-     */
+    /** 玩家登出：立即退出对局，不再保留席位；重新上线后按中途加入处理。 */
     public void onPlayerLogout(UUID playerId) {
         String matchId = matchByPlayer.get(playerId);
         if (matchId == null) {
@@ -125,20 +123,11 @@ public final class MatchManager {
         if (match != null) {
             match.onPlayerLeft(playerId);
         }
+        matchByPlayer.remove(playerId);
     }
 
-    /** 玩家登入：若其属于某进行中的对局，则归位重连。 */
+    /** 玩家登入：不再自动归位；玩家可通过浏览器中途加入。 */
     public void onPlayerLogin(ServerPlayer player) {
-        String matchId = matchByPlayer.get(player.getUUID());
-        if (matchId == null) {
-            return;
-        }
-        ArcadeMatch match = matches.get(matchId);
-        if (match != null) {
-            match.onPlayerRejoin(player);
-        } else {
-            matchByPlayer.remove(player.getUUID());
-        }
     }
 
     public int activeCount() {
@@ -198,6 +187,11 @@ public final class MatchManager {
         }
         ArcadeMatch match = matches.get(matchId);
         if (match != null) {
+            UUID attacker = resolveKiller(event.getSource().getEntity(), event.getSource().getDirectEntity());
+            if (match.shouldCancelDamage(victim.getUUID(), attacker)) {
+                event.setCanceled(true);
+                return;
+            }
             match.onHurt(victim.getUUID());
         }
     }
@@ -215,7 +209,7 @@ public final class MatchManager {
         if (match == null) {
             return;
         }
-        UUID killerId = resolveKiller(event);
+        UUID killerId = resolveKiller(event.getSource().getEntity(), event.getSource().getDirectEntity());
         // 对局接管死亡：取消原版死亡流程，避免重生换 ServerPlayer 实例导致引用失效。
         if (match.onDeath(victim.getUUID(), killerId)) {
             event.setCanceled(true);
@@ -234,10 +228,15 @@ public final class MatchManager {
         }
         event.setCanceled(true); // 补给箱不进背包
         ServerPlayer player = (ServerPlayer) event.getEntity();
-        if (!matchByPlayer.containsKey(player.getUUID())) {
+        String matchId = matchByPlayer.get(player.getUUID());
+        if (matchId == null) {
             return; // 非参战玩家不能拾取
         }
         int refilled = LoadoutApplier.refillAllGuns(player);
+        ArcadeMatch match = matches.get(matchId);
+        if (match != null) {
+            match.forgetAmmoCrate(itemEntity.getUUID());
+        }
         itemEntity.discard();
         player.playNotifySound(SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, 0.8f, 1.5f);
         player.displayClientMessage(Component.literal(
@@ -248,13 +247,11 @@ public final class MatchManager {
         return stack.hasTag() && stack.getTag().getBoolean(ArcadeMatch.AMMO_CRATE_KEY);
     }
 
-    private UUID resolveKiller(LivingDeathEvent event) {
-        Entity attacker = event.getSource().getEntity();
+    private UUID resolveKiller(Entity attacker, Entity direct) {
         if (attacker instanceof ServerPlayer killer) {
             return killer.getUUID();
         }
         // 枪械/弓弩等投射物伤害：致伤实体可能是子弹本身，取其拥有者（射手）作为击杀者。
-        Entity direct = event.getSource().getDirectEntity();
         if (direct instanceof Projectile proj && proj.getOwner() instanceof ServerPlayer shooter) {
             return shooter.getUUID();
         }
