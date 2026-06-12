@@ -1064,15 +1064,16 @@ public final class ArcadeMatch {
     }
 
     private void syncTeamHighlights() {
-        if (!hasVisibleTeamMates()) {
-            return;
-        }
         for (UUID viewerId : sideOf.keySet()) {
             ServerPlayer viewer = player(viewerId);
             if (viewer == null || !viewer.isAlive() || viewer.isSpectator() || deathCamView.containsKey(viewerId)) {
                 continue;
             }
             Integer viewerSide = sideOf.get(viewerId);
+            syncRelativeTeams(viewer, viewerId, viewerSide);
+            if (!hasVisibleTeamMates()) {
+                continue;
+            }
             for (UUID targetId : sideOf.keySet()) {
                 if (targetId.equals(viewerId)) {
                     continue;
@@ -1090,6 +1091,11 @@ public final class ArcadeMatch {
                 }
             }
         }
+    }
+
+    private void syncRelativeTeams(ServerPlayer viewer, UUID viewerId, Integer viewerSide) {
+        RelativeTeamSync.sync(viewer, sideOf.keySet(), this::player,
+                id -> id.equals(viewerId) || (viewerSide != null && viewerSide.equals(sideOf.get(id))));
     }
 
     private void clearTeamHighlightFor(ServerPlayer viewer) {
