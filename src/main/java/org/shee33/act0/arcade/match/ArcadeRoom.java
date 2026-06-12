@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.shee33.act0.arcade.mode.RandomWeaponMode;
 
 /**
  * 街机房间（开局前的等待大厅）：由 OP 创建，玩家浏览并加入，满员自动开局或房主手动开局。
@@ -35,8 +36,8 @@ public final class ArcadeRoom {
     private int capacity;
     /** 对局限时（秒）；0 表示不限时。 */
     private final int timeLimitSeconds;
-    /** 是否随机武器。 */
-    private final boolean randomWeapons;
+    /** 随机武器细分模式。 */
+    private final RandomWeaponMode randomWeaponMode;
 
     /** 成员（保持加入顺序，房主始终在首位）。 */
     private final Set<UUID> members = new LinkedHashSet<>();
@@ -49,6 +50,13 @@ public final class ArcadeRoom {
     public ArcadeRoom(String roomId, UUID hostId, String hostName,
                       String modeId, String arenaId, Integer winTarget, int capacity,
                       int timeLimitSeconds, boolean randomWeapons) {
+        this(roomId, hostId, hostName, modeId, arenaId, winTarget, capacity, timeLimitSeconds,
+            randomWeapons ? RandomWeaponMode.ALL : RandomWeaponMode.OFF);
+        }
+
+        public ArcadeRoom(String roomId, UUID hostId, String hostName,
+                  String modeId, String arenaId, Integer winTarget, int capacity,
+                  int timeLimitSeconds, RandomWeaponMode randomWeaponMode) {
         this.roomId = roomId;
         this.hostId = hostId;
         this.hostName = hostName;
@@ -57,7 +65,7 @@ public final class ArcadeRoom {
         this.winTarget = winTarget;
         this.capacity = Math.max(2, capacity);
         this.timeLimitSeconds = Math.max(0, timeLimitSeconds);
-        this.randomWeapons = randomWeapons;
+        this.randomWeaponMode = randomWeaponMode != null ? randomWeaponMode : RandomWeaponMode.OFF;
         this.members.add(hostId);
     }
 
@@ -98,7 +106,11 @@ public final class ArcadeRoom {
     }
 
     public boolean randomWeapons() {
-        return randomWeapons;
+        return randomWeaponMode.enabled();
+    }
+
+    public RandomWeaponMode randomWeaponMode() {
+        return randomWeaponMode;
     }
 
     public State state() {

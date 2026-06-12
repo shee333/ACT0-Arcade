@@ -6,6 +6,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.shee33.act0.arcade.client.ClientRoomList;
 import org.shee33.act0.arcade.match.RoomManager;
+import org.shee33.act0.arcade.mode.RandomWeaponMode;
 
 import java.util.List;
 
@@ -39,8 +40,8 @@ public final class CreateRoomScreen extends Screen {
     private int target = MODES.get(0).defTarget();
     /** 限时（秒）；0 表示不限时。 */
     private int timeLimitSeconds = 0;
-    /** 是否随机武器。 */
-    private boolean randomWeapons = false;
+    /** 随机武器模式。 */
+    private RandomWeaponMode randomMode = RandomWeaponMode.OFF;
     private int capacity = 2;
     private Button randomToggle;
     private Button capacityMinus;
@@ -115,9 +116,9 @@ public final class CreateRoomScreen extends Screen {
         addRenderableWidget(capacityPlus);
         updateCapacityButtons();
 
-        // 随机武器开关
+        // 随机武器模式
         int randomY = top + 200;
-        randomToggle = Button.builder(randomLabel(), b -> toggleRandom())
+        randomToggle = Button.builder(randomLabel(), b -> cycleRandomMode())
                 .bounds(rx, randomY, 128, 18).build();
         addRenderableWidget(randomToggle);
 
@@ -132,11 +133,12 @@ public final class CreateRoomScreen extends Screen {
     }
 
     private Component randomLabel() {
-        return Component.literal(randomWeapons ? "§a随机武器: 开" : "§7随机武器: 关");
+        return Component.literal(randomMode.enabled() ? "§a" + randomMode.displayName() : "§7随机武器: 关");
     }
 
-    private void toggleRandom() {
-        randomWeapons = !randomWeapons;
+    private void cycleRandomMode() {
+        RandomWeaponMode[] modes = RandomWeaponMode.values();
+        randomMode = modes[Math.floorMod(randomMode.ordinal() + 1, modes.length)];
         if (randomToggle != null) {
             randomToggle.setMessage(randomLabel());
         }
@@ -197,7 +199,7 @@ public final class CreateRoomScreen extends Screen {
         int cap = capacityEditable() ? capacity : defaultCapacity();
         minecraft.player.connection.sendCommand(
                 "arcade room create " + mode().id() + " " + quoteArg(arena) + " " + target
-                + " " + timeLimitSeconds + " " + randomWeapons + " " + cap);
+            + " " + timeLimitSeconds + " " + randomMode.id() + " " + cap);
         minecraft.player.connection.sendCommand("arcade browse");
         onClose();
     }

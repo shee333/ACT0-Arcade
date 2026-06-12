@@ -8,6 +8,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import org.shee33.act0.arcade.mode.MatchOptions;
 import org.shee33.act0.arcade.mode.MatchSettings;
+import org.shee33.act0.arcade.mode.RandomWeaponMode;
 import org.shee33.act0.arcade.mode.ScoringMode;
 import org.shee33.act0.arcade.network.ArcadeNetwork;
 import org.shee33.act0.arcade.storage.ArcadeGlobalSettings;
@@ -119,6 +120,12 @@ public final class RoomManager {
      */
     public String create(MinecraftServer server, ServerPlayer host, String mode, String arenaId,
                          Integer winTarget, int timeLimitSeconds, boolean randomWeapons, Integer requestedCapacity) {
+        return create(server, host, mode, arenaId, winTarget, timeLimitSeconds,
+            randomWeapons ? RandomWeaponMode.ALL : RandomWeaponMode.OFF, requestedCapacity);
+        }
+
+        public String create(MinecraftServer server, ServerPlayer host, String mode, String arenaId,
+                 Integer winTarget, int timeLimitSeconds, RandomWeaponMode randomMode, Integer requestedCapacity) {
         int capacity = requestedCapacity != null ? normalizeCapacity(mode, requestedCapacity) : capacityFor(mode);
         if (capacity <= 0) {
             return "§c未知模式：" + mode;
@@ -141,12 +148,12 @@ public final class RoomManager {
 
         String roomId = nextRoomId();
         ArcadeRoom room = new ArcadeRoom(roomId, id, host.getGameProfile().getName(),
-                mode, arenaId, target, capacity, timeLimit, randomWeapons);
+            mode, arenaId, target, capacity, timeLimit, randomMode);
         rooms.put(roomId, room);
         roomOf.put(id, roomId);
         ArcadeGlobalSettings.get(server).applyHealth(host);
         String extra = (timeLimit > 0 ? " §7限时 §e" + (timeLimit / 60) + "分" + (timeLimit % 60) + "秒" : "")
-                + (randomWeapons ? " §7随机武器" : "");
+            + (room.randomWeapons() ? " §7" + room.randomWeaponMode().displayName() : "");
         broadcastRoomCreated(server, room, extra);
         return "§a已创建房间 §e" + modeName(room) + " §7@ §e" + arenaId
                 + " §7(1/" + capacity + ")" + extra;
@@ -213,7 +220,7 @@ public final class RoomManager {
 
     /** 由房间构建完整可配置项。 */
     private static MatchOptions optionsOf(ArcadeRoom room) {
-        return new MatchOptions(room.winTarget(), room.timeLimitSeconds(), room.randomWeapons());
+        return new MatchOptions(room.winTarget(), room.timeLimitSeconds(), room.randomWeaponMode());
     }
 
     public boolean isArenaReserved(String arenaId) {

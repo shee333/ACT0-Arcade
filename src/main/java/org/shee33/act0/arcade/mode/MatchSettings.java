@@ -27,7 +27,7 @@ public final class MatchSettings {
     private final int countdownSeconds;
     private final int reEquipProtectionSeconds;
     private final int timeLimitSeconds;
-    private final boolean randomWeapons;
+    private final RandomWeaponMode randomWeaponMode;
 
     private MatchSettings(Builder b) {
         this.modeId = Objects.requireNonNull(b.modeId, "modeId");
@@ -47,7 +47,7 @@ public final class MatchSettings {
         this.countdownSeconds = Math.max(0, b.countdownSeconds);
         this.reEquipProtectionSeconds = Math.max(0, b.reEquipProtectionSeconds);
         this.timeLimitSeconds = Math.max(0, b.timeLimitSeconds);
-        this.randomWeapons = b.randomWeapons;
+        this.randomWeaponMode = b.randomWeaponMode != null ? b.randomWeaponMode : RandomWeaponMode.OFF;
     }
 
     // ---- 内置模式预设 ----
@@ -147,7 +147,12 @@ public final class MatchSettings {
 
     /** 是否随机武器模式（忽略玩家配装，每次重生/回合随机发枪）。 */
     public boolean randomWeapons() {
-        return randomWeapons;
+        return randomWeaponMode.enabled();
+    }
+
+    /** 随机武器细分模式。 */
+    public RandomWeaponMode randomWeaponMode() {
+        return randomWeaponMode;
     }
 
     /**
@@ -183,7 +188,7 @@ public final class MatchSettings {
         private int countdownSeconds = 5;
         private int reEquipProtectionSeconds = 3;
         private int timeLimitSeconds = 0;
-        private boolean randomWeapons = false;
+        private RandomWeaponMode randomWeaponMode = RandomWeaponMode.OFF;
 
         private Builder(String modeId, String displayName) {
             this.modeId = modeId;
@@ -238,7 +243,13 @@ public final class MatchSettings {
 
         /** 随机武器模式开关。 */
         public Builder randomWeapons(boolean randomWeapons) {
-            this.randomWeapons = randomWeapons;
+            this.randomWeaponMode = randomWeapons ? RandomWeaponMode.ALL : RandomWeaponMode.OFF;
+            return this;
+        }
+
+        /** 随机武器细分模式。 */
+        public Builder randomMode(RandomWeaponMode randomWeaponMode) {
+            this.randomWeaponMode = randomWeaponMode != null ? randomWeaponMode : RandomWeaponMode.OFF;
             return this;
         }
 

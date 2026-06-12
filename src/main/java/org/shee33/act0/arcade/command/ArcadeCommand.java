@@ -1,7 +1,6 @@
 package org.shee33.act0.arcade.command;
 
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -41,6 +40,7 @@ import org.shee33.act0.arcade.match.ArcadeMatch;
 import org.shee33.act0.arcade.match.ArcadeServices;
 import org.shee33.act0.arcade.match.MatchLauncher;
 import org.shee33.act0.arcade.mode.MatchSettings;
+import org.shee33.act0.arcade.mode.RandomWeaponMode;
 import org.shee33.act0.arcade.network.ArcadeNetwork;
 import org.shee33.act0.arcade.storage.ArcadeLoadoutStore;
 import org.shee33.act0.arcade.storage.ArcadeGlobalSettings;
@@ -104,6 +104,17 @@ public final class ArcadeCommand {
         for (WeaponCategory c : WeaponCategory.values()) {
             names.add(c.name());
         }
+        return SharedSuggestionProvider.suggest(names, builder);
+    };
+
+    /** 随机武器模式补全。 */
+    private static final SuggestionProvider<CommandSourceStack> RANDOM_MODE_KEYS = (ctx, builder) -> {
+        List<String> names = new ArrayList<>();
+        for (RandomWeaponMode mode : RandomWeaponMode.values()) {
+            names.add(mode.id());
+        }
+        names.add("true");
+        names.add("false");
         return SharedSuggestionProvider.suggest(names, builder);
     };
 
@@ -293,7 +304,7 @@ public final class ArcadeCommand {
                                     .executes(ctx -> roomCreate(ctx, mode))
                                     .then(Commands.argument("time", IntegerArgumentType.integer(0, 3600))
                                             .executes(ctx -> roomCreate(ctx, mode))
-                                            .then(Commands.argument("random", BoolArgumentType.bool())
+                                            .then(Commands.argument("random", StringArgumentType.word()).suggests(RANDOM_MODE_KEYS)
                                                     .executes(ctx -> roomCreate(ctx, mode))
                                                     .then(Commands.argument("capacity", IntegerArgumentType.integer(2, 32))
                                                         .executes(ctx -> roomCreate(ctx, mode))))))));
@@ -323,7 +334,7 @@ public final class ArcadeCommand {
         String arena = StringArgumentType.getString(ctx, "arena");
         Integer target = optInt(ctx, "target");
         int time = optIntOr(ctx, "time", 0);
-        boolean random = optBool(ctx, "random", false);
+        RandomWeaponMode random = optRandomMode(ctx, "random");
         Integer capacity = optInt(ctx, "capacity");
         String feedback = services().rooms().create(server, player, mode, arena, target, time, random, capacity);
         ctx.getSource().sendSuccess(() -> Component.literal(feedback), false);
@@ -355,11 +366,11 @@ public final class ArcadeCommand {
         return v != null ? v : def;
     }
 
-    private static boolean optBool(CommandContext<CommandSourceStack> ctx, String name, boolean def) {
+    private static RandomWeaponMode optRandomMode(CommandContext<CommandSourceStack> ctx, String name) {
         try {
-            return BoolArgumentType.getBool(ctx, name);
+            return RandomWeaponMode.byName(StringArgumentType.getString(ctx, name));
         } catch (IllegalArgumentException e) {
-            return def;
+            return RandomWeaponMode.OFF;
         }
     }
 

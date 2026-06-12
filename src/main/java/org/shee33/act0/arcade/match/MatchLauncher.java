@@ -119,7 +119,7 @@ public final class MatchLauncher {
             }
         }
         return b.timeLimitSeconds(options.timeLimitSeconds())
-                .randomWeapons(options.randomWeapons())
+            .randomMode(options.randomMode())
                 .build();
     }
 

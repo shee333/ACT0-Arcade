@@ -32,8 +32,10 @@ import org.shee33.act0.arcade.loadout.LoadoutItem;
 import org.shee33.act0.arcade.loadout.LoadoutRegistry;
 import org.shee33.act0.arcade.loadout.LoadoutSlot;
 import org.shee33.act0.arcade.loadout.PlayerClassType;
+import org.shee33.act0.arcade.loadout.WeaponCategory;
 import org.shee33.act0.arcade.loadout.mc.LoadoutApplier;
 import org.shee33.act0.arcade.mode.MatchSettings;
+import org.shee33.act0.arcade.mode.RandomWeaponMode;
 import org.shee33.act0.arcade.mode.ScoringMode;
 import org.shee33.act0.arcade.network.ArcadeNetwork;
 import org.shee33.act0.arcade.round.MatchPhase;
@@ -1594,45 +1596,63 @@ public final class ArcadeMatch {
                 org.shee33.act0.arcade.Act0Arcade.services().apparel(), unlocked);
     }
 
-    /**
-     * 随机武器：忽略玩家配装，从注册表按槽位随机抽取主武器+副武器并发放（含元子弹）。
-     * 近战与投掷物沿用玩家配装中的选择（若有）。每次重生/回合都会重新随机。
-     */
+    /** 随机武器：按房间选择的细分随机模式临时生成配装。 */
     private void equipRandom(ServerPlayer player) {
         PlayerClassType cls = PlayerClassType.defaultClass();
         Loadout base = loadoutProvider.apply(player.getUUID());
         if (base != null) {
             cls = base.classType();
         }
-        Loadout temp = new Loadout("随机武器", cls);
+        RandomWeaponMode mode = settings.randomWeaponMode();
+        Loadout temp = new Loadout(mode.displayName(), cls);
         Set<String> grant = new LinkedHashSet<>();
 
-        LoadoutItem primary = randomItemForSlot(LoadoutSlot.PRIMARY_WEAPON, cls);
-        if (primary != null) {
-            temp.setSlot(LoadoutSlot.PRIMARY_WEAPON, primary.key());
-            grant.add(primary.key());
+        LoadoutItem primary = null;
+        LoadoutItem secondary;
+        LoadoutItem melee;
+        LoadoutItem throwable = null;
+
+        if (mode == RandomWeaponMode.ALL) {
+            primary = randomItemForSlot(LoadoutSlot.PRIMARY_WEAPON, cls);
+            throwable = randomItemForCategory(WeaponCategory.THROWABLE, cls);
+        } else if (!mode.pistolOnly() && mode.primaryCategory() != null) {
+            primary = randomItemForCategory(mode.primaryCategory(), cls);
         }
-        LoadoutItem secondary = randomItemForSlot(LoadoutSlot.SECONDARY_WEAPON, cls);
-        if (secondary != null) {
-            temp.setSlot(LoadoutSlot.SECONDARY_WEAPON, secondary.key());
-            grant.add(secondary.key());
-        }
-        // 近战/投掷沿用玩家配装（也加入授权集，避免被判未解锁）
-        if (base != null) {
-            for (LoadoutSlot slot : new LoadoutSlot[]{LoadoutSlot.MELEE, LoadoutSlot.THROWABLE}) {
-                base.slotItemKey(slot).ifPresent(key -> {
-                    temp.setSlot(slot, key);
-                    grant.add(key);
-                });
-            }
-        }
+        secondary = randomItemForCategory(WeaponCategory.PISTOL, cls);
+        melee = randomItemForCategory(WeaponCategory.MELEE, cls);
+
+        grantRandomItem(temp, grant, primary);
+        grantRandomItem(temp, grant, secondary);
+        grantRandomItem(temp, grant, melee);
+        grantRandomItem(temp, grant, throwable);
         applier.apply(player, temp, settings.ruleset(), grant, true);
 
         // 告知玩家本次抽到的武器，避免"不知道这局是随机武器"
         String primaryName = primary != null ? primary.displayName() : "无";
         String secondaryName = secondary != null ? secondary.displayName() : "无";
-        actionBar(player.getUUID(), "§6随机武器 §7» §f" + primaryName + " §8/ §f" + secondaryName);
+        String meleeName = melee != null ? melee.displayName() : "无";
+        actionBar(player.getUUID(), "§6" + mode.displayName() + " §7» §f" + primaryName
+                + " §8/ §f" + secondaryName + " §8/ §f" + meleeName);
         playTo(player.getUUID(), SoundEvents.NOTE_BLOCK_PLING.value(), 1.2f);
+    }
+
+    private void grantRandomItem(Loadout temp, Set<String> grant, LoadoutItem item) {
+        if (item == null) {
+            return;
+        }
+        temp.setSlot(item.slot(), item.key());
+        grant.add(item.key());
+    }
+
+    private LoadoutItem randomItemForCategory(WeaponCategory category, PlayerClassType cls) {
+        List<LoadoutItem> pool = registry.availableItemsInCategory(category, cls);
+        if (pool.isEmpty()) {
+            pool = registry.itemsForCategory(category);
+        }
+        if (pool.isEmpty()) {
+            return null;
+        }
+        return pool.get(random.nextInt(pool.size()));
     }
 
     /** 从注册表中随机取一件该槽位、对指定职业可用的装备；无则返回 {@code null}。 */
