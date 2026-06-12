@@ -5,11 +5,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
-import org.shee33.act0.arcade.client.ClientApparel;
 import org.shee33.act0.arcade.client.ClientCatalog;
-import org.shee33.act0.arcade.loadout.ApparelItem;
-import org.shee33.act0.arcade.loadout.ApparelSelection;
-import org.shee33.act0.arcade.loadout.ApparelSlot;
 import org.shee33.act0.arcade.loadout.Loadout;
 import org.shee33.act0.arcade.loadout.LoadoutItem;
 import org.shee33.act0.arcade.loadout.LoadoutRegistry;
@@ -17,7 +13,6 @@ import org.shee33.act0.arcade.loadout.LoadoutSet;
 import org.shee33.act0.arcade.loadout.LoadoutSlot;
 import org.shee33.act0.arcade.loadout.PlayerClassType;
 import org.shee33.act0.arcade.network.ArcadeNetwork;
-import org.shee33.act0.arcade.network.SaveApparelPacket;
 import org.shee33.act0.arcade.network.SaveLoadoutPacket;
 import org.shee33.act0.arcade.network.SelectLoadoutPacket;
 
@@ -29,14 +24,13 @@ import org.shee33.act0.arcade.network.SelectLoadoutPacket;
  */
 public final class LoadoutScreen extends Screen {
 
-    private static final int MAX_PANEL_W = 720;
+    private static final int MAX_PANEL_W = 560;
     private static final int MAX_PANEL_H = 420;
     private static final int MAX_CARD_W = 156;
     private static final int MAX_CARD_H = 62;
 
     private final LoadoutSet loadoutSet;
     private final LoadoutRegistry registry;
-    private final ApparelSelection apparelSelection;
 
     private int activeIndex;
     private int left;
@@ -57,7 +51,6 @@ public final class LoadoutScreen extends Screen {
         this.loadoutSet = loadoutSet;
         this.activeIndex = loadoutSet.activeIndex();
         this.registry = ClientCatalog.registry();
-        this.apparelSelection = ClientApparel.selection().copy();
     }
 
     private Loadout working() {
@@ -87,17 +80,8 @@ public final class LoadoutScreen extends Screen {
                     .bounds(rowX + rowW - btnW * 2 - 2, y, btnW * 2 + 2, 16).build());
             y += rowH;
         }
-
-        if (hasApparelPanel()) {
-            int apparelBtnW = 44;
-            int ay = apparelTop() + 20;
-            for (ApparelSlot slot : ApparelSlot.values()) {
-                final ApparelSlot s = slot;
-                addRenderableWidget(Button.builder(Component.literal("选择"), b -> openApparelSelect(s))
-                        .bounds(apparelX() + apparelW() - apparelBtnW - 6, ay, apparelBtnW, 16).build());
-                ay += apparelRowH();
-            }
-        }
+        addRenderableWidget(Button.builder(Component.literal("服饰 / 外观"), b -> openApparelScreen())
+            .bounds(rowX, y + 2, Math.min(120, rowW), 18).build());
 
         int footY = top + panelH - 30;
         if (rowW >= 330) {
@@ -170,8 +154,6 @@ public final class LoadoutScreen extends Screen {
 
     private void saveOnly() {
         ArcadeNetwork.CHANNEL.sendToServer(new SaveLoadoutPacket(activeIndex, working(), false, false));
-        ClientApparel.setSelection(apparelSelection.copy());
-        ArcadeNetwork.CHANNEL.sendToServer(new SaveApparelPacket(apparelSelection));
     }
 
     private void selectForNextRespawn() {
@@ -185,9 +167,9 @@ public final class LoadoutScreen extends Screen {
         ArcadeNetwork.CHANNEL.sendToServer(new SelectLoadoutPacket(activeIndex, SelectLoadoutPacket.Action.SET_DEFAULT));
     }
 
-    private void openApparelSelect(ApparelSlot slot) {
+    private void openApparelScreen() {
         if (minecraft != null) {
-            minecraft.setScreen(new ApparelSelectScreen(this, apparelSelection, slot));
+            minecraft.setScreen(new ApparelScreen(this));
         }
     }
 
@@ -233,34 +215,7 @@ public final class LoadoutScreen extends Screen {
             y += rowH;
         }
 
-        if (hasApparelPanel()) {
-            renderApparelPanel(gg);
-        }
-
         super.render(gg, mouseX, mouseY, partialTick);
-    }
-
-    private void renderApparelPanel(GuiGraphics gg) {
-        int x = apparelX();
-        int y = apparelTop();
-        int w = apparelW();
-        gg.drawCenteredString(font, "§l服饰", x + w / 2, y, PixelTheme.ACCENT);
-        y += 18;
-        for (ApparelSlot slot : ApparelSlot.values()) {
-            PixelTheme.row(gg, x, y - 2, w, 34, false);
-            gg.drawString(font, slot.displayName(), x + 6, y + 2, PixelTheme.TEXT_DIM, false);
-            String key = apparelSelection.selectedKey(slot).orElse(null);
-            String name = key == null ? "§8— 未选 —" : ClientApparel.registry().find(key).map(ApparelItem::displayName).orElse(key);
-            if (key != null) {
-                ItemStack icon = ClientApparel.iconFor(key);
-                if (!icon.isEmpty()) {
-                    gg.renderItem(icon, x + 8, y + 14);
-                }
-            }
-            gg.drawString(font, trim(name, w - 62), x + 28, y + 18, key == null ? PixelTheme.TEXT_DIM : PixelTheme.TEXT, false);
-            y += apparelRowH();
-        }
-        gg.drawString(font, "§7所有配装共享", x + 6, y + 2, PixelTheme.TEXT_DIM, false);
     }
 
     @Override
@@ -333,31 +288,11 @@ public final class LoadoutScreen extends Screen {
     }
 
     private int editorW() {
-        return panelW - cardW - apparelW() - 68;
+        return panelW - cardW - 52;
     }
 
     private int editorTop() {
         return top + (panelH < 350 ? 54 : 72);
-    }
-
-    private int apparelW() {
-        return hasApparelPanel() ? 132 : 0;
-    }
-
-    private boolean hasApparelPanel() {
-        return panelW >= 620;
-    }
-
-    private int apparelX() {
-        return left + panelW - apparelW() - 14;
-    }
-
-    private int apparelTop() {
-        return editorTop();
-    }
-
-    private int apparelRowH() {
-        return 42;
     }
 
     private String trim(String text, int maxW) {

@@ -17,22 +17,24 @@ import java.util.List;
 
 /** 选择某个服饰槽位的服饰。 */
 public final class ApparelSelectScreen extends Screen {
-    private static final int W = 300;
-    private static final int H = 190;
+    private static final int MAX_W = 320;
+    private static final int MAX_H = 220;
     private static final int CELL = 54;
     private static final int GAP = 8;
-    private static final int COLS = 4;
 
-    private final LoadoutScreen parent;
+    private final Screen parent;
     private final ApparelSelection selection;
     private final ApparelSlot slot;
     private final List<ApparelItem> options = new ArrayList<>();
     private int left;
     private int top;
+    private int panelW;
+    private int panelH;
+    private int cols;
     private int gridX;
     private int gridY;
 
-    public ApparelSelectScreen(LoadoutScreen parent, ApparelSelection selection, ApparelSlot slot) {
+    public ApparelSelectScreen(Screen parent, ApparelSelection selection, ApparelSlot slot) {
         super(Component.literal("选择服饰"));
         this.parent = parent;
         this.selection = selection;
@@ -43,29 +45,35 @@ public final class ApparelSelectScreen extends Screen {
     protected void init() {
         options.clear();
         options.addAll(ClientApparel.registry().itemsForSlot(slot));
-        left = (width - W) / 2;
-        top = (height - H) / 2;
+        panelW = Math.min(MAX_W, Math.max(220, width - 24));
+        panelH = Math.min(MAX_H, Math.max(170, height - 24));
+        cols = Math.max(2, Math.min(4, (panelW - 32 + GAP) / (CELL + GAP)));
+        left = (width - panelW) / 2;
+        top = (height - panelH) / 2;
         gridX = left + 16;
         gridY = top + 38;
         addRenderableWidget(Button.builder(Component.literal("清空"), b -> {
             selection.set(slot, null);
             Minecraft.getInstance().setScreen(parent);
-        }).bounds(left + W / 2 - 84, top + H - 28, 80, 20).build());
+        }).bounds(left + panelW / 2 - 84, top + panelH - 28, 80, 20).build());
         addRenderableWidget(Button.builder(Component.literal("返回"), b -> onClose())
-                .bounds(left + W / 2 + 4, top + H - 28, 80, 20).build());
+            .bounds(left + panelW / 2 + 4, top + panelH - 28, 80, 20).build());
     }
 
     @Override
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         renderBackground(gg);
-        PixelTheme.panel(gg, left, top, W, H);
-        gg.drawCenteredString(font, "§l" + slot.displayName(), left + W / 2, top + 10, PixelTheme.ACCENT);
-        gg.drawCenteredString(font, "§7默认服饰免费，未解锁服饰点击购买", left + W / 2, top + 24, PixelTheme.TEXT_DIM);
+        PixelTheme.panel(gg, left, top, panelW, panelH);
+        gg.drawCenteredString(font, "§l" + slot.displayName(), left + panelW / 2, top + 10, PixelTheme.ACCENT);
+        gg.drawCenteredString(font, "§7默认免费，未解锁点击购买", left + panelW / 2, top + 24, PixelTheme.TEXT_DIM);
         String selected = selection.selectedKey(slot).orElse(null);
         for (int i = 0; i < options.size(); i++) {
             ApparelItem item = options.get(i);
-            int x = gridX + (i % COLS) * (CELL + GAP);
-            int y = gridY + (i / COLS) * (CELL + GAP);
+            int x = gridX + (i % cols) * (CELL + GAP);
+            int y = gridY + (i / cols) * (CELL + GAP);
+            if (y + CELL > top + panelH - 34) {
+                continue;
+            }
             boolean locked = !item.isDefault() && !ClientUnlocks.isUnlocked(item.key());
             boolean isSelected = item.key().equals(selected);
             PixelTheme.row(gg, x, y, CELL, CELL, isSelected);
@@ -88,8 +96,11 @@ public final class ApparelSelectScreen extends Screen {
         if (button == 0) {
             for (int i = 0; i < options.size(); i++) {
                 ApparelItem item = options.get(i);
-                int x = gridX + (i % COLS) * (CELL + GAP);
-                int y = gridY + (i / COLS) * (CELL + GAP);
+                int x = gridX + (i % cols) * (CELL + GAP);
+                int y = gridY + (i / cols) * (CELL + GAP);
+                if (y + CELL > top + panelH - 34) {
+                    continue;
+                }
                 if (mouseX >= x && mouseX < x + CELL && mouseY >= y && mouseY < y + CELL) {
                     if (!item.isDefault() && !ClientUnlocks.isUnlocked(item.key())) {
                         if (minecraft != null && minecraft.player != null) {
