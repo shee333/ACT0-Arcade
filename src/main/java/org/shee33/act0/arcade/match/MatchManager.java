@@ -157,6 +157,9 @@ public final class MatchManager {
         int removed = 0;
         for (ServerLevel level : server.getAllLevels()) {
             for (Entity entity : level.getAllEntities()) {
+                if (entity == null) {
+                    continue;
+                }
                 if (entity instanceof ItemEntity item && isAmmoCrate(item.getItem())) {
                     item.discard();
                     removed++;

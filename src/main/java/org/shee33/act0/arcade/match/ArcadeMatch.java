@@ -805,6 +805,9 @@ public final class ArcadeMatch {
         }
         for (ServerLevel level : server.getAllLevels()) {
             for (Entity entity : level.getAllEntities()) {
+                if (entity == null) {
+                    continue;
+                }
                 if (ammoCrates.contains(entity.getUUID())) {
                     entity.discard();
                 }
