@@ -151,6 +151,7 @@ public final class RoomBrowserScreen extends Screen {
             minecraft.player.connection.sendCommand("arcade room leave");
         } else {
             minecraft.player.connection.sendCommand("arcade room join " + room.roomId());
+            minecraft.setScreen(new RoomLobbyScreen());
         }
     }
 

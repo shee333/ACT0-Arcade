@@ -33,7 +33,7 @@ import java.util.UUID;
  */
 public final class ArcadeNetwork {
 
-        private static final String PROTOCOL = "8";
+        private static final String PROTOCOL = "9";
 
     @SuppressWarnings("removal")
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(

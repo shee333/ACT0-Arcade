@@ -111,13 +111,18 @@ public final class MatchManager {
 
     /** 同步跳狙飞人蓄力跳按键状态；非跳狙/非对局内玩家会被对局层忽略。 */
     public void setJumpCharging(UUID playerId, boolean charging) {
+        setJumpCharging(playerId, charging, false);
+    }
+
+    /** 同步跳狙飞人蓄力跳按键状态；非跳狙/非对局内玩家会被对局层忽略。 */
+    public void setJumpCharging(UUID playerId, boolean charging, boolean normalJump) {
         String matchId = matchByPlayer.get(playerId);
         if (matchId == null) {
             return;
         }
         ArcadeMatch match = matches.get(matchId);
         if (match != null) {
-            match.setJumpCharging(playerId, charging);
+            match.setJumpCharging(playerId, charging, normalJump);
         }
     }
 

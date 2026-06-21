@@ -146,6 +146,7 @@ public final class ArcadeMatch {
     private static final int JUMP_CHARGE_MIN_TICKS = 8;
     private static final int JUMP_CHARGE_MAX_TICKS = 35;
     private static final int JUMP_CHARGE_COOLDOWN_TICKS = 12;
+    private static final double JUMP_CHARGE_NORMAL_VERTICAL = 0.82D;
     private static final double JUMP_CHARGE_MIN_VERTICAL = 0.72D;
     private static final double JUMP_CHARGE_MAX_VERTICAL = 1.35D;
     private static final double JUMP_CHARGE_MIN_HORIZONTAL = 0.35D;
@@ -1706,8 +1707,17 @@ public final class ArcadeMatch {
 
     /** 客户端蓄力跳按键状态同步入口。 */
     public void setJumpCharging(UUID playerId, boolean charging) {
+        setJumpCharging(playerId, charging, false);
+    }
+
+    /** 客户端蓄力跳按键状态同步入口。 */
+    public void setJumpCharging(UUID playerId, boolean charging, boolean normalJump) {
         if (!isJumpSniper() || !sideOf.containsKey(playerId) || phase != MatchPhase.COMBAT) {
             clearJumpCharge(playerId);
+            return;
+        }
+        if (normalJump) {
+            launchNormalJump(playerId);
             return;
         }
         if (charging) {
@@ -1717,7 +1727,7 @@ public final class ArcadeMatch {
         }
     }
 
-    /** 跳狙飞人专属：按住蓄力跳键在地面蓄力，松开后向视线方向弹射。 */
+    /** 跳狙飞人专属：按住空格在地面蓄力，松开后向视线方向弹射；短按空格则普通起跳。 */
     private void tickJumpCharge() {
         if (!isJumpSniper() || phase != MatchPhase.COMBAT) {
             return;
@@ -1739,7 +1749,7 @@ public final class ArcadeMatch {
                 jumpChargeTicks.put(id, charge);
                 if (charge == 1 || charge == JUMP_CHARGE_MAX_TICKS || charge % 5 == 0) {
                     int percent = Math.round(charge * 100.0f / JUMP_CHARGE_MAX_TICKS);
-                    actionBar(id, "§b蓄力跳 §7» §f" + percent + "% §8(松开按键起跳)");
+                    actionBar(id, "§b蓄力跳 §7» §f" + percent + "% §8(松开空格起跳)");
                     if (charge == JUMP_CHARGE_MAX_TICKS) {
                         playTo(id, SoundEvents.NOTE_BLOCK_PLING.value(), 1.6f);
                     }
@@ -1754,6 +1764,20 @@ public final class ArcadeMatch {
                 }
             }
         }
+    }
+
+    private void launchNormalJump(UUID playerId) {
+        jumpChargeTicks.remove(playerId);
+        jumpChargeInput.remove(playerId);
+        ServerPlayer player = player(playerId);
+        if (player == null || !player.isAlive() || player.isSpectator() || !player.onGround()) {
+            return;
+        }
+        Vec3 current = player.getDeltaMovement();
+        player.setDeltaMovement(current.x, JUMP_CHARGE_NORMAL_VERTICAL, current.z);
+        player.hurtMarked = true;
+        player.hasImpulse = true;
+        player.connection.send(new ClientboundSetEntityMotionPacket(player));
     }
 
     private void launchChargedJump(ServerPlayer player, int chargeTicks, long now) {
