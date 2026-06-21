@@ -1,6 +1,7 @@
 package org.shee33.act0.arcade.match;
 
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
@@ -121,6 +122,10 @@ public final class ArcadeMatch {
     private final Map<UUID, UUID> teammateSpectateTarget = new HashMap<>();
     /** 玩家最近一次受伤 tick，用于街机“呼吸回血”。 */
     private final Map<UUID, Long> lastHurtTick = new HashMap<>();
+    /** 跳狙飞人蓄力跳：玩家 → 当前蓄力 tick。 */
+    private final Map<UUID, Integer> jumpChargeTicks = new HashMap<>();
+    /** 跳狙飞人蓄力跳：玩家 → 冷却结束 tick。 */
+    private final Map<UUID, Long> jumpChargeCooldownUntil = new HashMap<>();
     /** 本对局生成的弹药补给箱实体 UUID，对局结束时清理。 */
     private final Set<UUID> ammoCrates = new LinkedHashSet<>();
     /** 本对局创建的原版计分板队伍：用于隐藏敌方头顶名、保留队友头顶名。 */
@@ -136,6 +141,13 @@ public final class ArcadeMatch {
     private static final double TEAMMATE_RESPAWN_ENEMY_CLEAR_RADIUS = 8.0;
     private static final int TEAMMATE_RECENT_COMBAT_TICKS = 5 * 20;
     private static final int JUMP_SNIPER_EFFECT_TICKS = 90;
+    private static final int JUMP_CHARGE_MIN_TICKS = 8;
+    private static final int JUMP_CHARGE_MAX_TICKS = 35;
+    private static final int JUMP_CHARGE_COOLDOWN_TICKS = 12;
+    private static final double JUMP_CHARGE_MIN_VERTICAL = 0.72D;
+    private static final double JUMP_CHARGE_MAX_VERTICAL = 1.35D;
+    private static final double JUMP_CHARGE_MIN_HORIZONTAL = 0.35D;
+    private static final double JUMP_CHARGE_MAX_HORIZONTAL = 1.05D;
         private static final ChatFormatting[] FFA_COLORS = new ChatFormatting[]{
             ChatFormatting.RED,
             ChatFormatting.BLUE,
@@ -244,6 +256,8 @@ public final class ArcadeMatch {
         respawnTimers.clear();
         respawnLastSecond.clear();
         countdownLock.clear();
+        jumpChargeTicks.clear();
+        jumpChargeCooldownUntil.clear();
         for (UUID id : sideOf.keySet()) {
             if (disconnected.contains(id)) {
                 continue; // 掉线者保留坐位但不参与本回合，重连后归位
@@ -301,6 +315,7 @@ public final class ArcadeMatch {
                 tickTeammateSpectate();
                 syncTeamHighlights();
                 tickJumpSniperEffects();
+                tickJumpCharge();
                 tickRespawns();
                 tickBreathHealing();
                 if (tickMatchClock()) {
@@ -362,6 +377,7 @@ public final class ArcadeMatch {
             }
             exitSpectator(player);
             enterAdventureMode(player);
+            clearJumpCharge(id);
             setupNameTagTeams();
             respawn(player, sideOf.getOrDefault(id, 0));
             equip(player);
@@ -573,6 +589,7 @@ public final class ArcadeMatch {
 
     private void handleRoundElimination(UUID victimId, UUID killerId) {
         alive.remove(victimId);
+        clearJumpCharge(victimId);
         ServerPlayer victim = player(victimId);
         if (victim != null) {
             victim.getInventory().clearContent();
@@ -747,6 +764,8 @@ public final class ArcadeMatch {
         teammateSpectateSwitchTick.clear();
         teammateSpectateTarget.clear();
         lastHurtTick.clear();
+        jumpChargeTicks.clear();
+        jumpChargeCooldownUntil.clear();
         for (UUID id : sideOf.keySet()) {
             ServerPlayer player = player(id);
             if (player != null) {
@@ -814,6 +833,7 @@ public final class ArcadeMatch {
         teammateSpectateSwitchTick.remove(playerId);
         teammateSpectateTarget.remove(playerId);
         lastHurtTick.remove(playerId);
+        clearJumpCharge(playerId);
         kills.remove(playerId);
         boolean wasAlive = alive.remove(playerId);
         ServerPlayer p = player(playerId);
@@ -852,6 +872,7 @@ public final class ArcadeMatch {
         teammateSpectateSwitchTick.remove(id);
         teammateSpectateTarget.remove(id);
         lastHurtTick.remove(id);
+        clearJumpCharge(id);
         kills.remove(id);
         clearKillerGlow(player);
         clearTeamHighlightFor(player);
@@ -889,6 +910,7 @@ public final class ArcadeMatch {
         if (phase == MatchPhase.COMBAT || phase == MatchPhase.COUNTDOWN) {
             exitSpectator(player);
             enterAdventureMode(player);
+            clearJumpCharge(id);
             spawnForRound(player, id, side);
             equip(player);
             applyGlobalHealth(player);
@@ -936,6 +958,7 @@ public final class ArcadeMatch {
         sidebar.showTo(player);
         if (phase == MatchPhase.COMBAT || phase == MatchPhase.COUNTDOWN) {
             enterAdventureMode(player);
+            clearJumpCharge(id);
             spawnForRound(player, id, side);
             equip(player);
             applyGlobalHealth(player);
@@ -1675,6 +1698,75 @@ public final class ArcadeMatch {
 
     public boolean shouldCancelFallDamage(UUID playerId) {
         return isJumpSniper() && sideOf.containsKey(playerId) && phase != MatchPhase.ENDED;
+    }
+
+    /** 跳狙飞人专属：按住潜行在地面蓄力，松开后向视线方向弹射。 */
+    private void tickJumpCharge() {
+        if (!isJumpSniper() || phase != MatchPhase.COMBAT) {
+            return;
+        }
+        long now = server.getTickCount();
+        for (UUID id : sideOf.keySet()) {
+            ServerPlayer player = player(id);
+            if (player == null || !player.isAlive() || player.isSpectator()
+                    || deathCamView.containsKey(id) || respawnTimers.containsKey(id)) {
+                clearJumpCharge(id);
+                continue;
+            }
+            if (jumpChargeCooldownUntil.getOrDefault(id, 0L) > now) {
+                jumpChargeTicks.remove(id);
+                continue;
+            }
+            if (player.isShiftKeyDown() && player.onGround()) {
+                int charge = Math.min(JUMP_CHARGE_MAX_TICKS, jumpChargeTicks.getOrDefault(id, 0) + 1);
+                jumpChargeTicks.put(id, charge);
+                if (charge == 1 || charge == JUMP_CHARGE_MAX_TICKS || charge % 5 == 0) {
+                    int percent = Math.round(charge * 100.0f / JUMP_CHARGE_MAX_TICKS);
+                    actionBar(id, "§b蓄力跳 §7» §f" + percent + "% §8(松开潜行起跳)");
+                    if (charge == JUMP_CHARGE_MAX_TICKS) {
+                        playTo(id, SoundEvents.NOTE_BLOCK_PLING.value(), 1.6f);
+                    }
+                }
+            } else {
+                int charge = jumpChargeTicks.getOrDefault(id, 0);
+                if (charge > 0) {
+                    jumpChargeTicks.remove(id);
+                    if (player.onGround() && charge >= JUMP_CHARGE_MIN_TICKS) {
+                        launchChargedJump(player, charge, now);
+                    }
+                }
+            }
+        }
+    }
+
+    private void launchChargedJump(ServerPlayer player, int chargeTicks, long now) {
+        UUID id = player.getUUID();
+        double strength = Math.min(1.0D, Math.max(0.0D,
+                (chargeTicks - JUMP_CHARGE_MIN_TICKS) / (double) (JUMP_CHARGE_MAX_TICKS - JUMP_CHARGE_MIN_TICKS)));
+        double vertical = lerp(JUMP_CHARGE_MIN_VERTICAL, JUMP_CHARGE_MAX_VERTICAL, strength);
+        double horizontal = lerp(JUMP_CHARGE_MIN_HORIZONTAL, JUMP_CHARGE_MAX_HORIZONTAL, strength);
+        Vec3 look = player.getLookAngle();
+        Vec3 flat = new Vec3(look.x, 0.0D, look.z);
+        if (flat.lengthSqr() < 0.0001D) {
+            flat = Vec3.directionFromRotation(0.0F, player.getYRot());
+        } else {
+            flat = flat.normalize();
+        }
+        Vec3 motion = flat.scale(horizontal).add(0.0D, vertical, 0.0D);
+        player.setDeltaMovement(motion);
+        player.connection.send(new ClientboundSetEntityMotionPacket(player));
+        jumpChargeCooldownUntil.put(id, now + JUMP_CHARGE_COOLDOWN_TICKS);
+        actionBar(id, "§b蓄力跳 §7» §a释放 " + Math.round(strength * 100.0D) + "%");
+        playTo(id, SoundEvents.SLIME_BLOCK_PLACE, 0.9f + (float) strength * 0.5f);
+    }
+
+    private static double lerp(double min, double max, double t) {
+        return min + (max - min) * t;
+    }
+
+    private void clearJumpCharge(UUID id) {
+        jumpChargeTicks.remove(id);
+        jumpChargeCooldownUntil.remove(id);
     }
 
     private void tickJumpSniperEffects() {
