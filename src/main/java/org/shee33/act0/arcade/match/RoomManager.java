@@ -50,7 +50,7 @@ public final class RoomManager {
         return switch (mode) {
             case "duel_1v1" -> 2;
             case "duel_2v2" -> 4;
-            case "team_deathmatch", "free_for_all" -> 2;
+            case "team_deathmatch", "free_for_all", "jump_sniper" -> 2;
             default -> -1;
         };
     }
@@ -59,7 +59,7 @@ public final class RoomManager {
         return switch (mode) {
             case "duel_1v1" -> 2;
             case "duel_2v2" -> 4;
-            case "team_deathmatch", "free_for_all" -> 32;
+            case "team_deathmatch", "free_for_all", "jump_sniper" -> 32;
             default -> -1;
         };
     }

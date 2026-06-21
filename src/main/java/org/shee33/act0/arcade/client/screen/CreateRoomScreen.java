@@ -29,7 +29,8 @@ public final class CreateRoomScreen extends Screen {
             new ModeDef("duel_1v1", "单挑 1v1", false, 3, 1, 15, 1),
             new ModeDef("duel_2v2", "2v2", false, 3, 1, 15, 1),
             new ModeDef("team_deathmatch", "团队死斗", true, 30, 5, 99, 5),
-            new ModeDef("free_for_all", "个人乱斗", true, 20, 5, 99, 5));
+            new ModeDef("free_for_all", "个人乱斗", true, 20, 5, 99, 5),
+            new ModeDef("jump_sniper", "跳狙飞人", true, 20, 5, 99, 5));
 
     private final RoomBrowserScreen parent;
 
@@ -133,10 +134,20 @@ public final class CreateRoomScreen extends Screen {
     }
 
     private Component randomLabel() {
+        if ("jump_sniper".equals(mode().id())) {
+            return Component.literal("§b跳狙固定: 狙击+近战");
+        }
         return Component.literal(randomMode.enabled() ? "§a" + randomMode.displayName() : "§7随机武器: 关");
     }
 
     private void cycleRandomMode() {
+        if ("jump_sniper".equals(mode().id())) {
+            randomMode = RandomWeaponMode.SNIPER;
+            if (randomToggle != null) {
+                randomToggle.setMessage(randomLabel());
+            }
+            return;
+        }
         RandomWeaponMode[] modes = RandomWeaponMode.values();
         randomMode = modes[Math.floorMod(randomMode.ordinal() + 1, modes.length)];
         if (randomToggle != null) {
@@ -164,6 +175,12 @@ public final class CreateRoomScreen extends Screen {
         selectedMode = idx;
         target = mode().defTarget();
         capacity = defaultCapacity();
+        if ("jump_sniper".equals(mode().id())) {
+            randomMode = RandomWeaponMode.SNIPER;
+        }
+        if (randomToggle != null) {
+            randomToggle.setMessage(randomLabel());
+        }
         updateCapacityButtons();
     }
 
@@ -197,9 +214,10 @@ public final class CreateRoomScreen extends Screen {
         }
         String arena = arenas().get(Math.min(selectedArena, arenas().size() - 1));
         int cap = capacityEditable() ? capacity : defaultCapacity();
+        RandomWeaponMode submitRandom = "jump_sniper".equals(mode().id()) ? RandomWeaponMode.SNIPER : randomMode;
         minecraft.player.connection.sendCommand(
                 "arcade room create " + mode().id() + " " + quoteArg(arena) + " " + target
-            + " " + timeLimitSeconds + " " + randomMode.id() + " " + cap);
+            + " " + timeLimitSeconds + " " + submitRandom.id() + " " + cap);
         minecraft.player.connection.sendCommand("arcade browse");
         onClose();
     }

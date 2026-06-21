@@ -13,6 +13,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
+import net.minecraftforge.event.entity.living.LivingFallEvent;
 import net.minecraftforge.event.entity.player.EntityItemPickupEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import org.shee33.act0.arcade.loadout.mc.LoadoutApplier;
@@ -193,6 +194,21 @@ public final class MatchManager {
                 return;
             }
             match.onHurt(victim.getUUID());
+        }
+    }
+
+    @SubscribeEvent
+    public void onLivingFall(LivingFallEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        String matchId = matchByPlayer.get(player.getUUID());
+        if (matchId == null) {
+            return;
+        }
+        ArcadeMatch match = matches.get(matchId);
+        if (match != null && match.shouldCancelFallDamage(player.getUUID())) {
+            event.setCanceled(true);
         }
     }
 

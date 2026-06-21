@@ -7,6 +7,7 @@ import org.shee33.act0.arcade.loadout.DefaultLoadoutCatalog;
 import org.shee33.act0.arcade.loadout.Loadout;
 import org.shee33.act0.arcade.mode.MatchOptions;
 import org.shee33.act0.arcade.mode.MatchSettings;
+import org.shee33.act0.arcade.mode.RandomWeaponMode;
 import org.shee33.act0.arcade.mode.ScoringMode;
 import org.shee33.act0.arcade.round.RespawnPolicy;
 import org.shee33.act0.arcade.round.RoundFormat;
@@ -31,6 +32,7 @@ public final class MatchLauncher {
     /** 各模式的默认计分目标。 */
     public static final int DEFAULT_TDM_KILLS = 30;
     public static final int DEFAULT_FFA_KILLS = 20;
+    public static final int DEFAULT_JUMP_SNIPER_KILLS = 20;
 
     private MatchLauncher() {
     }
@@ -114,12 +116,18 @@ public final class MatchLauncher {
                     .scoringMode(ScoringMode.KILL_COUNT)
                     .roundFormat(RoundFormat.firstTo(wt != null ? Math.max(1, wt) : DEFAULT_FFA_KILLS))
                     .respawnPolicy(RespawnPolicy.RANDOM);
+            case "jump_sniper" -> b = MatchSettings.builder("jump_sniper", "跳狙飞人")
+                    .sideCount(Math.max(2, sizingCount)).teamSize(1)
+                    .scoringMode(ScoringMode.KILL_COUNT)
+                    .roundFormat(RoundFormat.firstTo(wt != null ? Math.max(1, wt) : DEFAULT_JUMP_SNIPER_KILLS))
+                    .respawnPolicy(RespawnPolicy.RANDOM)
+                    .randomMode(RandomWeaponMode.SNIPER);
             default -> {
                 return null;
             }
         }
         return b.timeLimitSeconds(options.timeLimitSeconds())
-            .randomMode(options.randomMode())
+            .randomMode("jump_sniper".equals(mode) ? RandomWeaponMode.SNIPER : options.randomMode())
                 .build();
     }
 

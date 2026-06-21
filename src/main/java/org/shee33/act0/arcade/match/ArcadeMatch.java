@@ -135,6 +135,7 @@ public final class ArcadeMatch {
     private static final double TEAMMATE_COMBAT_RADIUS = 12.0;
     private static final double TEAMMATE_RESPAWN_ENEMY_CLEAR_RADIUS = 8.0;
     private static final int TEAMMATE_RECENT_COMBAT_TICKS = 5 * 20;
+    private static final int JUMP_SNIPER_EFFECT_TICKS = 90;
         private static final ChatFormatting[] FFA_COLORS = new ChatFormatting[]{
             ChatFormatting.RED,
             ChatFormatting.BLUE,
@@ -275,6 +276,7 @@ public final class ArcadeMatch {
         switch (phase) {
             case COUNTDOWN -> {
                 enforceCountdownLock();
+                tickJumpSniperEffects();
                 syncTeamHighlights();
                 int secs = timer.remainingSeconds();
                 if (secs != lastCountdownSecond) {
@@ -298,6 +300,7 @@ public final class ArcadeMatch {
                 enforceDeathCam();
                 tickTeammateSpectate();
                 syncTeamHighlights();
+                tickJumpSniperEffects();
                 tickRespawns();
                 tickBreathHealing();
                 if (tickMatchClock()) {
@@ -744,6 +747,7 @@ public final class ArcadeMatch {
             ServerPlayer player = player(id);
             if (player != null) {
                 exitSpectator(player);
+                clearJumpSniperEffects(player);
                 TeleportHelper.teleport(player, arena.returnSpawn());
                 restorePreMatchMode(player);
                 player.getInventory().clearContent();
@@ -813,6 +817,7 @@ public final class ArcadeMatch {
             clearKillerGlow(p);
             clearTeamHighlightFor(p);
             clearTeamHighlightTarget(p);
+            clearJumpSniperEffects(p);
             exitSpectator(p);
                 removeBossBarPlayer(p);
             sidebar.hideFrom(p);
@@ -847,6 +852,7 @@ public final class ArcadeMatch {
         clearKillerGlow(player);
         clearTeamHighlightFor(player);
         clearTeamHighlightTarget(player);
+        clearJumpSniperEffects(player);
         exitSpectator(player);
         restorePreMatchMode(player);
         TeleportHelper.teleport(player, arena.returnSpawn());
@@ -1621,10 +1627,12 @@ public final class ArcadeMatch {
         if (mode == RandomWeaponMode.ALL) {
             primary = randomItemForSlot(LoadoutSlot.PRIMARY_WEAPON, cls);
             throwable = randomItemForCategory(WeaponCategory.THROWABLE, cls);
+        } else if (isJumpSniper()) {
+            primary = randomItemForCategory(WeaponCategory.SNIPER, cls);
         } else if (!mode.pistolOnly() && mode.primaryCategory() != null) {
             primary = randomItemForCategory(mode.primaryCategory(), cls);
         }
-        secondary = randomItemForCategory(WeaponCategory.PISTOL, cls);
+        secondary = isJumpSniper() ? null : randomItemForCategory(WeaponCategory.PISTOL, cls);
         melee = randomItemForCategory(WeaponCategory.MELEE, cls);
 
         grantRandomItem(temp, grant, primary);
@@ -1640,6 +1648,45 @@ public final class ArcadeMatch {
         actionBar(player.getUUID(), "§6" + mode.displayName() + " §7» §f" + primaryName
                 + " §8/ §f" + secondaryName + " §8/ §f" + meleeName);
         playTo(player.getUUID(), SoundEvents.NOTE_BLOCK_PLING.value(), 1.2f);
+    }
+
+    private boolean isJumpSniper() {
+        return "jump_sniper".equals(settings.modeId());
+    }
+
+    public boolean shouldCancelFallDamage(UUID playerId) {
+        return isJumpSniper() && sideOf.containsKey(playerId) && phase != MatchPhase.ENDED;
+    }
+
+    private void tickJumpSniperEffects() {
+        if (!isJumpSniper()) {
+            return;
+        }
+        if (server.getTickCount() % 30L != 0L) {
+            return;
+        }
+        for (UUID id : sideOf.keySet()) {
+            if (respawnTimers.containsKey(id) || deathCamView.containsKey(id)) {
+                continue;
+            }
+            ServerPlayer p = player(id);
+            if (p == null || !p.isAlive() || p.isSpectator()) {
+                continue;
+            }
+            applyJumpSniperEffects(p);
+        }
+    }
+
+    private void applyJumpSniperEffects(ServerPlayer player) {
+        player.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, JUMP_SNIPER_EFFECT_TICKS, 0, false, false, true));
+        player.addEffect(new MobEffectInstance(MobEffects.JUMP, JUMP_SNIPER_EFFECT_TICKS, 3, false, false, true));
+        player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, JUMP_SNIPER_EFFECT_TICKS, 1, false, false, true));
+    }
+
+    private void clearJumpSniperEffects(ServerPlayer player) {
+        player.removeEffect(MobEffects.SLOW_FALLING);
+        player.removeEffect(MobEffects.JUMP);
+        player.removeEffect(MobEffects.MOVEMENT_SPEED);
     }
 
     private void grantRandomItem(Loadout temp, Set<String> grant, LoadoutItem item) {
