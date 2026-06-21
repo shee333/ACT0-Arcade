@@ -32,7 +32,7 @@ public final class MatchLauncher {
     /** 各模式的默认计分目标。 */
     public static final int DEFAULT_TDM_KILLS = 30;
     public static final int DEFAULT_FFA_KILLS = 20;
-    public static final int DEFAULT_JUMP_SNIPER_KILLS = 20;
+    public static final int DEFAULT_JUMP_SNIPER_ROUNDS = 5;
 
     private MatchLauncher() {
     }
@@ -117,10 +117,10 @@ public final class MatchLauncher {
                     .roundFormat(RoundFormat.firstTo(wt != null ? Math.max(1, wt) : DEFAULT_FFA_KILLS))
                     .respawnPolicy(RespawnPolicy.RANDOM);
             case "jump_sniper" -> b = MatchSettings.builder("jump_sniper", "跳狙飞人")
-                    .sideCount(Math.max(2, sizingCount)).teamSize(1)
-                    .scoringMode(ScoringMode.KILL_COUNT)
-                    .roundFormat(RoundFormat.firstTo(wt != null ? Math.max(1, wt) : DEFAULT_JUMP_SNIPER_KILLS))
-                    .respawnPolicy(RespawnPolicy.RANDOM)
+                    .sideCount(2).teamSize(Math.max(1, sizingCount / 2))
+                    .scoringMode(ScoringMode.ROUND_WIN)
+                    .roundFormat(RoundFormat.firstTo(wt != null ? Math.max(1, wt) : DEFAULT_JUMP_SNIPER_ROUNDS))
+                    .respawnPolicy(RespawnPolicy.FIXED_SPAWN)
                     .randomMode(RandomWeaponMode.SNIPER);
             default -> {
                 return null;

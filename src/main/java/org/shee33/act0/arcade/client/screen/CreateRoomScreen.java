@@ -30,7 +30,7 @@ public final class CreateRoomScreen extends Screen {
             new ModeDef("duel_2v2", "2v2", false, 3, 1, 15, 1),
             new ModeDef("team_deathmatch", "团队死斗", true, 30, 5, 99, 5),
             new ModeDef("free_for_all", "个人乱斗", true, 20, 5, 99, 5),
-            new ModeDef("jump_sniper", "跳狙飞人", true, 20, 5, 99, 5));
+            new ModeDef("jump_sniper", "跳狙飞人", false, 5, 1, 15, 1));
 
     private final RoomBrowserScreen parent;
 
@@ -62,7 +62,7 @@ public final class CreateRoomScreen extends Screen {
     }
 
     private boolean capacityEditable() {
-        return mode().killBased();
+        return mode().killBased() || "jump_sniper".equals(mode().id());
     }
 
     private List<String> arenas() {
@@ -166,7 +166,7 @@ public final class CreateRoomScreen extends Screen {
             updateCapacityButtons();
             return;
         }
-        int step = "team_deathmatch".equals(mode().id()) ? 2 : 1;
+        int step = ("team_deathmatch".equals(mode().id()) || "jump_sniper".equals(mode().id())) ? 2 : 1;
         capacity = RoomManager.normalizeCapacity(mode().id(), capacity + dir * step);
         updateCapacityButtons();
     }

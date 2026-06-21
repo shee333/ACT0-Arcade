@@ -578,7 +578,11 @@ public final class ArcadeMatch {
             victim.getInventory().clearContent();
             clearTeamHighlightFor(victim);
             clearTeamHighlightTarget(victim);
-            enterSpectator(victim, killerId);
+            if (isJumpSniper()) {
+                enterFreeSpectator(victim);
+            } else {
+                enterSpectator(victim, killerId);
+            }
             scheduleTeammateSpectate(victimId);
             actionBar(victimId, "§c阵亡 · 等待本回合结束");
         }
@@ -1147,7 +1151,7 @@ public final class ArcadeMatch {
     private void spawnForRound(ServerPlayer player, UUID playerId, int side) {
         if (settings.respawnPolicy() == RespawnPolicy.RANDOM) {
             TeleportHelper.teleport(player, initialFreeForAllSpawn(side));
-        } else if ("duel_2v2".equals(settings.modeId())) {
+        } else if ("duel_2v2".equals(settings.modeId()) || isJumpSniper()) {
             TeleportHelper.teleport(player, offsetTeamSpawn(playerId, side));
         } else {
             spawnAtSide(player, side);
@@ -1440,6 +1444,21 @@ public final class ArcadeMatch {
         player.connection.teleport(camX, camY, camZ, yaw, pitch);
         String killerName = validKiller ? killer.getGameProfile().getName() : "";
         ArcadeNetwork.sendDeathCam(player, true, killerName);
+    }
+
+    /** 进入自由观察者视角：用于跳狙飞人回合制死亡后自由观战，直到下一回合复活。 */
+    private void enterFreeSpectator(ServerPlayer player) {
+        GameType current = player.gameMode.getGameModeForPlayer();
+        if (current != GameType.SPECTATOR) {
+            originalGameMode.put(player.getUUID(), current);
+        }
+        player.setCamera(player);
+        deathCamView.remove(player.getUUID());
+        teammateSpectateSwitchTick.remove(player.getUUID());
+        teammateSpectateTarget.remove(player.getUUID());
+        clearKillerGlow(player);
+        ArcadeNetwork.sendDeathCam(player, false, "");
+        player.setGameMode(GameType.SPECTATOR);
     }
 
     /** 退出观察者视角，还原至记录的原始游戏模式（默认生存），清除死亡相机与击杀者高亮。 */

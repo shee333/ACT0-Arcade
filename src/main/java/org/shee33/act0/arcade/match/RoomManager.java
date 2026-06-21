@@ -71,7 +71,7 @@ public final class RoomManager {
             return -1;
         }
         int value = Math.max(min, Math.min(max, requested));
-        if ("team_deathmatch".equals(mode) && value % 2 != 0) {
+        if (requiresEvenTeams(mode) && value % 2 != 0) {
             value++;
             if (value > max) {
                 value -= 2;
@@ -205,8 +205,8 @@ public final class RoomManager {
         if (room == null) {
             return "§c你当前不在任何房间。";
         }
-        if (!"team_deathmatch".equals(room.modeId())) {
-            return "§c只有团队死斗房间可以选边。";
+        if (!supportsTeamChoice(room.modeId())) {
+            return "§c只有团队模式房间可以选边。";
         }
         if (room.state() != ArcadeRoom.State.WAITING) {
             return "§c对局已开始，无法选边。";
@@ -423,7 +423,7 @@ public final class RoomManager {
 
     private List<UUID> orderedMembers(ArcadeRoom room) {
         List<UUID> members = new ArrayList<>(room.members());
-        if (!"team_deathmatch".equals(room.modeId())) {
+        if (!supportsTeamChoice(room.modeId())) {
             return members;
         }
         int perSide = Math.max(1, room.capacity() / 2);
@@ -450,6 +450,14 @@ public final class RoomManager {
         List<UUID> ordered = new ArrayList<>(blue);
         ordered.addAll(red);
         return ordered;
+    }
+
+    private static boolean supportsTeamChoice(String mode) {
+        return "team_deathmatch".equals(mode) || "jump_sniper".equals(mode);
+    }
+
+    private static boolean requiresEvenTeams(String mode) {
+        return supportsTeamChoice(mode);
     }
 
     private void closeRoomBrowsers(MinecraftServer server, Collection<UUID> ids) {
