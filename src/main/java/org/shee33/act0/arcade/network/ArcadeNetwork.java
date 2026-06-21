@@ -33,7 +33,7 @@ import java.util.UUID;
  */
 public final class ArcadeNetwork {
 
-        private static final String PROTOCOL = "7";
+        private static final String PROTOCOL = "8";
 
     @SuppressWarnings("removal")
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
@@ -88,6 +88,8 @@ public final class ArcadeNetwork {
                 SyncApparelPacket::encode, SyncApparelPacket::decode, SyncApparelPacket::handle);
         CHANNEL.registerMessage(id++, SaveApparelPacket.class,
                 SaveApparelPacket::encode, SaveApparelPacket::decode, SaveApparelPacket::handle);
+        CHANNEL.registerMessage(id++, JumpChargePacket.class,
+                JumpChargePacket::encode, JumpChargePacket::decode, JumpChargePacket::handle);
     }
 
     /** 把服务端当前装备目录下发给指定玩家。 */

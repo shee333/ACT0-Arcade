@@ -8,11 +8,13 @@ import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.common.Mod;
 import org.shee33.act0.arcade.Act0Arcade;
 import org.shee33.act0.arcade.network.ArcadeNetwork;
+import org.shee33.act0.arcade.network.JumpChargePacket;
 import org.shee33.act0.arcade.network.RequestLoadoutPacket;
 
 /** 客户端输入轮询：按 B 请求服务端打开配装。 */
 @Mod.EventBusSubscriber(modid = Act0Arcade.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class ArcadeClientInput {
+    private static boolean lastChargeJumpDown;
 
     private ArcadeClientInput() {
     }
@@ -26,12 +28,26 @@ public final class ArcadeClientInput {
             return;
         }
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || mc.screen != null) {
+        if (mc.player == null) {
+            lastChargeJumpDown = false;
             return;
         }
+        if (mc.screen != null) {
+            sendChargeJump(false);
+            return;
+        }
+        sendChargeJump(ArcadeKeyMappings.CHARGE_JUMP.isDown());
         while (ArcadeKeyMappings.OPEN_LOADOUT.consumeClick()) {
             ArcadeNetwork.CHANNEL.sendToServer(new RequestLoadoutPacket());
         }
+    }
+
+    private static void sendChargeJump(boolean down) {
+        if (down == lastChargeJumpDown) {
+            return;
+        }
+        lastChargeJumpDown = down;
+        ArcadeNetwork.CHANNEL.sendToServer(new JumpChargePacket(down));
     }
 
     private static boolean isBattlefieldActive() {

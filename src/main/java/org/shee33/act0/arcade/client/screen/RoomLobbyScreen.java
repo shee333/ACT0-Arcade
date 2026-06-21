@@ -111,7 +111,7 @@ public final class RoomLobbyScreen extends Screen {
         if (room.capacity() > count) {
             gg.drawString(font, "§8… 还有 " + (room.capacity() - count) + " 个槽位", left + 14, top + 145, PixelTheme.TEXT_DIM, false);
         }
-        if ("团队死斗".equals(room.modeName())) {
+        if (supportsTeamChoice(room)) {
             teamY = top + 154;
             teamW = 72;
             teamH = 18;
@@ -184,21 +184,21 @@ public final class RoomLobbyScreen extends Screen {
             return true;
         }
         if (host && inRect((int) mouseX, (int) mouseY, minusX, adjustY, adjustW, adjustH)) {
-            minecraft.player.connection.sendCommand("arcade room size " + Math.max(room.size(), room.capacity() - 1));
+            minecraft.player.connection.sendCommand("arcade room size " + Math.max(room.size(), room.capacity() - capacityStep(room)));
             requestRefresh();
             return true;
         }
         if (host && inRect((int) mouseX, (int) mouseY, plusX, adjustY, adjustW, adjustH)) {
-            minecraft.player.connection.sendCommand("arcade room size " + Math.min(32, room.capacity() + 1));
+            minecraft.player.connection.sendCommand("arcade room size " + Math.min(32, room.capacity() + capacityStep(room)));
             requestRefresh();
             return true;
         }
-        if ("团队死斗".equals(room.modeName()) && inRect((int) mouseX, (int) mouseY, blueX, teamY, teamW, teamH)) {
+        if (supportsTeamChoice(room) && inRect((int) mouseX, (int) mouseY, blueX, teamY, teamW, teamH)) {
             minecraft.player.connection.sendCommand("arcade room team blue");
             requestRefresh();
             return true;
         }
-        if ("团队死斗".equals(room.modeName()) && inRect((int) mouseX, (int) mouseY, redX, teamY, teamW, teamH)) {
+        if (supportsTeamChoice(room) && inRect((int) mouseX, (int) mouseY, redX, teamY, teamW, teamH)) {
             minecraft.player.connection.sendCommand("arcade room team red");
             requestRefresh();
             return true;
@@ -218,6 +218,14 @@ public final class RoomLobbyScreen extends Screen {
     private boolean isHost(RoomDto room) {
         Minecraft mc = Minecraft.getInstance();
         return mc.player != null && mc.player.getGameProfile().getName().equals(room.hostName());
+    }
+
+    private static boolean supportsTeamChoice(RoomDto room) {
+        return "团队死斗".equals(room.modeName()) || "跳狙飞人".equals(room.modeName());
+    }
+
+    private static int capacityStep(RoomDto room) {
+        return supportsTeamChoice(room) ? 2 : 1;
     }
 
     private static List<String> splitPlayers(String raw) {

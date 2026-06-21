@@ -126,6 +126,8 @@ public final class ArcadeMatch {
     private final Map<UUID, Integer> jumpChargeTicks = new HashMap<>();
     /** 跳狙飞人蓄力跳：玩家 → 冷却结束 tick。 */
     private final Map<UUID, Long> jumpChargeCooldownUntil = new HashMap<>();
+    /** 跳狙飞人蓄力跳：玩家当前是否按住蓄力键。 */
+    private final Set<UUID> jumpChargeInput = new LinkedHashSet<>();
     /** 本对局生成的弹药补给箱实体 UUID，对局结束时清理。 */
     private final Set<UUID> ammoCrates = new LinkedHashSet<>();
     /** 本对局创建的原版计分板队伍：用于隐藏敌方头顶名、保留队友头顶名。 */
@@ -258,6 +260,7 @@ public final class ArcadeMatch {
         countdownLock.clear();
         jumpChargeTicks.clear();
         jumpChargeCooldownUntil.clear();
+        jumpChargeInput.clear();
         for (UUID id : sideOf.keySet()) {
             if (disconnected.contains(id)) {
                 continue; // 掉线者保留坐位但不参与本回合，重连后归位
@@ -766,6 +769,7 @@ public final class ArcadeMatch {
         lastHurtTick.clear();
         jumpChargeTicks.clear();
         jumpChargeCooldownUntil.clear();
+        jumpChargeInput.clear();
         for (UUID id : sideOf.keySet()) {
             ServerPlayer player = player(id);
             if (player != null) {
@@ -1700,7 +1704,20 @@ public final class ArcadeMatch {
         return isJumpSniper() && sideOf.containsKey(playerId) && phase != MatchPhase.ENDED;
     }
 
-    /** 跳狙飞人专属：按住潜行在地面蓄力，松开后向视线方向弹射。 */
+    /** 客户端蓄力跳按键状态同步入口。 */
+    public void setJumpCharging(UUID playerId, boolean charging) {
+        if (!isJumpSniper() || !sideOf.containsKey(playerId) || phase != MatchPhase.COMBAT) {
+            clearJumpCharge(playerId);
+            return;
+        }
+        if (charging) {
+            jumpChargeInput.add(playerId);
+        } else {
+            jumpChargeInput.remove(playerId);
+        }
+    }
+
+    /** 跳狙飞人专属：按住蓄力跳键在地面蓄力，松开后向视线方向弹射。 */
     private void tickJumpCharge() {
         if (!isJumpSniper() || phase != MatchPhase.COMBAT) {
             return;
@@ -1717,12 +1734,12 @@ public final class ArcadeMatch {
                 jumpChargeTicks.remove(id);
                 continue;
             }
-            if (player.isShiftKeyDown() && player.onGround()) {
+            if (jumpChargeInput.contains(id) && player.onGround()) {
                 int charge = Math.min(JUMP_CHARGE_MAX_TICKS, jumpChargeTicks.getOrDefault(id, 0) + 1);
                 jumpChargeTicks.put(id, charge);
                 if (charge == 1 || charge == JUMP_CHARGE_MAX_TICKS || charge % 5 == 0) {
                     int percent = Math.round(charge * 100.0f / JUMP_CHARGE_MAX_TICKS);
-                    actionBar(id, "§b蓄力跳 §7» §f" + percent + "% §8(松开潜行起跳)");
+                    actionBar(id, "§b蓄力跳 §7» §f" + percent + "% §8(松开按键起跳)");
                     if (charge == JUMP_CHARGE_MAX_TICKS) {
                         playTo(id, SoundEvents.NOTE_BLOCK_PLING.value(), 1.6f);
                     }
@@ -1754,6 +1771,8 @@ public final class ArcadeMatch {
         }
         Vec3 motion = flat.scale(horizontal).add(0.0D, vertical, 0.0D);
         player.setDeltaMovement(motion);
+        player.hurtMarked = true;
+        player.hasImpulse = true;
         player.connection.send(new ClientboundSetEntityMotionPacket(player));
         jumpChargeCooldownUntil.put(id, now + JUMP_CHARGE_COOLDOWN_TICKS);
         actionBar(id, "§b蓄力跳 §7» §a释放 " + Math.round(strength * 100.0D) + "%");
@@ -1765,6 +1784,7 @@ public final class ArcadeMatch {
     }
 
     private void clearJumpCharge(UUID id) {
+        jumpChargeInput.remove(id);
         jumpChargeTicks.remove(id);
         jumpChargeCooldownUntil.remove(id);
     }

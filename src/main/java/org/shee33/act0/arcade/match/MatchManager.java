@@ -109,6 +109,18 @@ public final class MatchManager {
         return match != null && match.canChangeLoadout(playerId);
     }
 
+    /** 同步跳狙飞人蓄力跳按键状态；非跳狙/非对局内玩家会被对局层忽略。 */
+    public void setJumpCharging(UUID playerId, boolean charging) {
+        String matchId = matchByPlayer.get(playerId);
+        if (matchId == null) {
+            return;
+        }
+        ArcadeMatch match = matches.get(matchId);
+        if (match != null) {
+            match.setJumpCharging(playerId, charging);
+        }
+    }
+
     /** 玩家所在对局 id；不在任何对局返回 {@code null}。 */
     public String matchIdOf(UUID playerId) {
         return matchByPlayer.get(playerId);
