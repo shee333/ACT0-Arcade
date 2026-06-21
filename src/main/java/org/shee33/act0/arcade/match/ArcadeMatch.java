@@ -1140,6 +1140,7 @@ public final class ArcadeMatch {
     }
 
     private void clearTeamHighlightFor(ServerPlayer viewer) {
+        RelativeTeamSync.clear(viewer);
         for (UUID targetId : sideOf.keySet()) {
             ServerPlayer target = player(targetId);
             if (target != null && !target.getUUID().equals(viewer.getUUID())) {
@@ -1152,6 +1153,7 @@ public final class ArcadeMatch {
         for (UUID viewerId : sideOf.keySet()) {
             ServerPlayer viewer = player(viewerId);
             if (viewer != null && !viewer.getUUID().equals(target.getUUID())) {
+                RelativeTeamSync.removeTarget(viewer, target);
                 GlowSync.hideGlowFrom(viewer, target);
             }
         }
