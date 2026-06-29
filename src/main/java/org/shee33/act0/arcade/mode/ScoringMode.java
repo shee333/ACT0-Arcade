@@ -12,5 +12,6 @@ package org.shee33.act0.arcade.mode;
 public enum ScoringMode {
     ROUND_WIN,
     KILL_COUNT,
-    HOT_ZONE
+    HOT_ZONE,
+    ARMS_RACE
 }

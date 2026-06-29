@@ -34,6 +34,7 @@ public final class MatchLauncher {
     public static final int DEFAULT_FFA_KILLS = 20;
     public static final int DEFAULT_JUMP_SNIPER_ROUNDS = 5;
     public static final int DEFAULT_HOT_ZONE_SCORE = 150;
+    public static final int DEFAULT_ARMS_RACE_LEVELS = 8;
 
     private MatchLauncher() {
     }
@@ -128,6 +129,18 @@ public final class MatchLauncher {
                     .roundFormat(RoundFormat.firstTo(wt != null ? Math.max(1, wt) : DEFAULT_JUMP_SNIPER_ROUNDS))
                     .respawnPolicy(RespawnPolicy.FIXED_SPAWN)
                     .randomMode(RandomWeaponMode.SNIPER);
+            case "arms_race" -> {
+                java.util.List<org.shee33.act0.arcade.mode.ArmsRaceLevel> levels =
+                        options.armsRaceLevels() != null ? options.armsRaceLevels()
+                                : org.shee33.act0.arcade.mode.ArmsRaceLevel.defaultProgression();
+                int totalLevels = levels.size();
+                b = MatchSettings.builder("arms_race", "军备竞赛")
+                    .sideCount(Math.max(2, sizingCount)).teamSize(1)
+                    .scoringMode(ScoringMode.ARMS_RACE)
+                    .roundFormat(RoundFormat.firstTo(totalLevels))
+                    .respawnPolicy(RespawnPolicy.RANDOM)
+                    .armsRaceLevels(levels);
+            }
             default -> {
                 return null;
             }
@@ -141,6 +154,7 @@ public final class MatchLauncher {
             .hotZoneRotateSeconds(options.hotZoneRotateSeconds())
             .hotZoneRadius(options.hotZoneRadius())
             .hotZoneScorePerSecond(options.hotZoneScorePerSecond())
+            .armsRaceLevels(options.armsRaceLevels())
                 .build();
     }
 

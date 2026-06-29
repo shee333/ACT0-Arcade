@@ -16,7 +16,8 @@ public record MatchOptions(Integer winTarget,
                            int ammoCrateChancePercent,
                            int hotZoneRotateSeconds,
                            double hotZoneRadius,
-                           int hotZoneScorePerSecond) {
+                           int hotZoneScorePerSecond,
+                           java.util.List<ArmsRaceLevel> armsRaceLevels) {
 
     public MatchOptions(Integer winTarget, int timeLimitSeconds, boolean randomWeapons) {
         this(winTarget, timeLimitSeconds, randomWeapons ? RandomWeaponMode.ALL : RandomWeaponMode.OFF);
@@ -24,7 +25,7 @@ public record MatchOptions(Integer winTarget,
 
     public MatchOptions(Integer winTarget, int timeLimitSeconds, RandomWeaponMode randomMode) {
         this(winTarget, timeLimitSeconds, randomMode,
-                0.0D, 3, false, 25, 60, 6.0D, 1);
+                0.0D, 3, false, 25, 60, 6.0D, 1, null);
     }
 
     public MatchOptions {
@@ -36,6 +37,8 @@ public record MatchOptions(Integer winTarget,
         hotZoneRotateSeconds = Math.max(15, Math.min(180, hotZoneRotateSeconds));
         hotZoneRadius = Math.max(2.0D, Math.min(16.0D, hotZoneRadius));
         hotZoneScorePerSecond = Math.max(1, Math.min(5, hotZoneScorePerSecond));
+        armsRaceLevels = armsRaceLevels != null && !armsRaceLevels.isEmpty()
+                ? java.util.List.copyOf(armsRaceLevels) : null;
     }
 
     /** 全部使用默认（无自定义目标、不限时、非随机武器）。 */

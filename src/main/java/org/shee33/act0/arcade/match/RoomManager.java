@@ -50,7 +50,7 @@ public final class RoomManager {
         return switch (mode) {
             case "duel_1v1" -> 2;
             case "duel_2v2" -> 4;
-            case "team_deathmatch", "hot_zone", "free_for_all", "jump_sniper" -> 2;
+            case "team_deathmatch", "hot_zone", "free_for_all", "jump_sniper", "arms_race" -> 2;
             default -> -1;
         };
     }
@@ -59,7 +59,7 @@ public final class RoomManager {
         return switch (mode) {
             case "duel_1v1" -> 2;
             case "duel_2v2" -> 4;
-            case "team_deathmatch", "hot_zone", "free_for_all", "jump_sniper" -> 32;
+            case "team_deathmatch", "hot_zone", "free_for_all", "jump_sniper", "arms_race" -> 32;
             default -> -1;
         };
     }
@@ -103,6 +103,9 @@ public final class RoomManager {
         int pts = s.roundFormat().pointsToWin();
         if (s.scoringMode() == ScoringMode.KILL_COUNT) {
             return pts + " 杀";
+        }
+        if (s.scoringMode() == ScoringMode.ARMS_RACE) {
+            return s.armsRaceLevels().size() + " 级";
         }
         if (s.scoringMode() == ScoringMode.HOT_ZONE) {
             return pts + " 分";
@@ -160,7 +163,7 @@ public final class RoomManager {
         Integer target = winTarget != null ? Math.max(1, Math.min(maxTargetFor(mode), winTarget)) : null;
         MatchOptions options = new MatchOptions(target, timeLimitSeconds, randomMode,
                 healthOverride, respawnDelaySeconds, friendlyFire, ammoCrateChancePercent,
-                hotZoneRotateSeconds, hotZoneRadius, hotZoneScorePerSecond);
+                hotZoneRotateSeconds, hotZoneRadius, hotZoneScorePerSecond, null);
 
         String roomId = nextRoomId();
         ArcadeRoom room = new ArcadeRoom(roomId, id, host.getGameProfile().getName(),
@@ -493,7 +496,13 @@ public final class RoomManager {
     }
 
     private static int maxTargetFor(String mode) {
-        return "hot_zone".equals(mode) ? 300 : 99;
+        if ("hot_zone".equals(mode)) {
+            return 300;
+        }
+        if ("arms_race".equals(mode)) {
+            return 16;
+        }
+        return 99;
     }
 
     private static boolean requiresEvenTeams(String mode) {

@@ -38,6 +38,7 @@ import org.shee33.act0.arcade.loadout.mc.LoadoutApplier;
 import org.shee33.act0.arcade.mode.MatchSettings;
 import org.shee33.act0.arcade.mode.RandomWeaponMode;
 import org.shee33.act0.arcade.mode.ScoringMode;
+import org.shee33.act0.arcade.mode.ArmsRaceLevel;
 import org.shee33.act0.arcade.network.ArcadeNetwork;
 import org.shee33.act0.arcade.round.MatchPhase;
 import org.shee33.act0.arcade.round.MatchScore;
@@ -132,6 +133,10 @@ public final class ArcadeMatch {
     private final Set<UUID> ammoCrates = new LinkedHashSet<>();
     /** 本对局创建的原版计分板队伍：用于隐藏敌方头顶名、保留队友头顶名。 */
     private final List<PlayerTeam> nameTagTeams = new ArrayList<>();
+    /** 军备竞赛：玩家 → 当前等级（0-based）。 */
+    private final Map<UUID, Integer> armsRaceLevel = new HashMap<>();
+    /** 军备竞赛：玩家 → 当前等级内已击杀数。 */
+    private final Map<UUID, Integer> armsRaceLevelKills = new HashMap<>();
 
     /** 死亡补给箱标记 NBT 键：拾取后补满虚拟弹药。 */
     public static final String AMMO_CRATE_KEY = "Act0AmmoCrate";
@@ -624,6 +629,8 @@ public final class ArcadeMatch {
             handleKillScoring(victimId, killerId);
         } else if (settings.scoringMode() == ScoringMode.HOT_ZONE) {
             handleHotZoneDeath(victimId, killerId);
+        } else if (settings.scoringMode() == ScoringMode.ARMS_RACE) {
+            handleArmsRaceDeath(victimId, killerId);
         } else {
             handleRoundElimination(victimId, killerId);
         }
@@ -728,6 +735,99 @@ public final class ArcadeMatch {
         t.startSeconds(settings.reEquipProtectionSeconds());
         respawnTimers.put(victimId, t);
         respawnLastSecond.put(victimId, -1);
+    }
+
+    private void handleArmsRaceDeath(UUID victimId, UUID killerId) {
+        if (killerId != null && sideOf.containsKey(killerId)
+                && !killerId.equals(victimId)) {
+            kills.merge(killerId, 1, Integer::sum);
+            int levelKills = armsRaceLevelKills.merge(killerId, 1, Integer::sum);
+            int currentLevel = armsRaceLevel.getOrDefault(killerId, 0);
+            java.util.List<ArmsRaceLevel> levels = settings.armsRaceLevels();
+            ArmsRaceLevel current = currentLevel < levels.size() ? levels.get(currentLevel) : null;
+            boolean advanced = false;
+            if (current != null && levelKills >= current.killsToAdvance()) {
+                armsRaceLevelKills.put(killerId, 0);
+                int newLevel = currentLevel + 1;
+                armsRaceLevel.put(killerId, newLevel);
+                advanced = true;
+                int killerSide = sideOf.getOrDefault(killerId, 0);
+                score.addPoint(sideId(killerSide));
+                if (newLevel >= levels.size()) {
+                    broadcast("§6§l" + nameOf(killerId) + " §6§l完成了全部武器，获胜！");
+                    winMatch(killerSide);
+                    respawnVictim(victimId, killerId);
+                    return;
+                }
+                ArmsRaceLevel next = levels.get(newLevel);
+                actionBar(killerId, "§6晋级 §7» §e" + next.category().displayName()
+                        + " §8(第 " + (newLevel + 1) + "/" + levels.size() + " 级)");
+                playTo(killerId, SoundEvents.PLAYER_LEVELUP, 1.2f);
+                ServerPlayer killerPlayer = player(killerId);
+                if (killerPlayer != null) {
+                    equipArmsRace(killerPlayer);
+                }
+            } else if (current != null) {
+                actionBar(killerId, "§a击杀 §7+1 §8(" + levelKills + "/" + current.killsToAdvance() + ")");
+                playTo(killerId, SoundEvents.ARROW_HIT_PLAYER, 1.0f);
+            }
+            int killerSide = sideOf.getOrDefault(killerId, 0);
+            broadcast(sideColor(killerSide) + nameOf(killerId) + " §7击杀了 "
+                    + sideColor(sideOf.getOrDefault(victimId, -1)) + nameOf(victimId)
+                    + (advanced ? " §6[晋级]" : ""));
+            updateBossBar();
+            updateSidebar();
+        }
+        respawnVictim(victimId, killerId);
+    }
+
+    private void respawnVictim(UUID victimId, UUID killerId) {
+        ServerPlayer victim = player(victimId);
+        if (victim != null) {
+            victim.getInventory().clearContent();
+            enterSpectator(victim, killerId);
+        }
+        PhaseTimer t = new PhaseTimer();
+        t.startSeconds(settings.reEquipProtectionSeconds());
+        respawnTimers.put(victimId, t);
+        respawnLastSecond.put(victimId, -1);
+    }
+
+    private boolean isArmsRace() {
+        return settings.scoringMode() == ScoringMode.ARMS_RACE;
+    }
+
+    private void equipArmsRace(ServerPlayer player) {
+        UUID id = player.getUUID();
+        int level = armsRaceLevel.getOrDefault(id, 0);
+        java.util.List<ArmsRaceLevel> levels = settings.armsRaceLevels();
+        if (level >= levels.size()) {
+            level = levels.size() - 1;
+        }
+        ArmsRaceLevel current = levels.get(level);
+        WeaponCategory category = current.category();
+        PlayerClassType cls = PlayerClassType.defaultClass();
+        Loadout temp = new Loadout("军备竞赛", cls);
+        Set<String> grant = new LinkedHashSet<>();
+        LoadoutItem weapon = randomItemForCategory(category, cls);
+        if (weapon != null) {
+            temp.setSlot(weapon.slot(), weapon.key());
+            grant.add(weapon.key());
+        }
+        if (category != WeaponCategory.MELEE && category != WeaponCategory.PISTOL) {
+            LoadoutItem pistol = randomItemForCategory(WeaponCategory.PISTOL, cls);
+            if (pistol != null) {
+                temp.setSlot(pistol.slot(), pistol.key());
+                grant.add(pistol.key());
+            }
+        }
+        LoadoutItem melee = randomItemForCategory(WeaponCategory.MELEE, cls);
+        if (melee != null) {
+            temp.setSlot(melee.slot(), melee.key());
+            grant.add(melee.key());
+        }
+        applier.apply(player, temp, settings.ruleset(), grant, true);
+        applyApparel(player);
     }
 
     private void handleHotZoneDeath(UUID victimId, UUID killerId) {
@@ -1803,6 +1903,10 @@ public final class ArcadeMatch {
     }
 
     private void equip(ServerPlayer player) {
+        if (isArmsRace()) {
+            equipArmsRace(player);
+            return;
+        }
         if (settings.randomWeapons()) {
             equipRandom(player);
             applyApparel(player);
@@ -2151,7 +2255,8 @@ public final class ArcadeMatch {
         List<String> lines = new ArrayList<>();
         lines.add("§7目标: §f" + score.pointsToWin()
                 + (settings.scoringMode() == ScoringMode.KILL_COUNT ? " 击杀"
-                : (settings.scoringMode() == ScoringMode.HOT_ZONE ? " 分" : " 回合")));
+                : (settings.scoringMode() == ScoringMode.HOT_ZONE ? " 分"
+                : (settings.scoringMode() == ScoringMode.ARMS_RACE ? " 级" : " 回合"))));
         if (matchClockTicks >= 0) {
             lines.add("§7剩余: §f" + formatClock(matchClockTicks));
         }
@@ -2161,17 +2266,31 @@ public final class ArcadeMatch {
             lines.add("§6热区: §f#" + zoneNo + " §7" + secs + "秒");
         }
         lines.add("§8 ");
-        boolean ffa = settings.scoringMode() == ScoringMode.KILL_COUNT && settings.teamSize() == 1;
+        boolean ffa = (settings.scoringMode() == ScoringMode.KILL_COUNT || settings.scoringMode() == ScoringMode.ARMS_RACE)
+                && settings.teamSize() == 1;
         if (ffa) {
-            // 个人乱斗：逐人击杀实时榜，按击杀降序
+            // 个人模式：逐人实时榜
             List<UUID> ranked = new ArrayList<>(sideOf.keySet());
-            ranked.sort(Comparator.comparingInt((UUID id) -> kills.getOrDefault(id, 0)).reversed());
+            if (isArmsRace()) {
+                ranked.sort(Comparator.comparingInt((UUID id) -> armsRaceLevel.getOrDefault(id, 0)).reversed()
+                        .thenComparingInt((UUID id) -> kills.getOrDefault(id, 0)).reversed());
+            } else {
+                ranked.sort(Comparator.comparingInt((UUID id) -> kills.getOrDefault(id, 0)).reversed());
+            }
             int rank = 1;
             for (UUID id : ranked) {
                 String tag = disconnected.contains(id) ? " §8(掉线)" : "";
                 int side = sideOf.getOrDefault(id, -1);
+                String valueStr;
+                if (isArmsRace()) {
+                    int lvl = armsRaceLevel.getOrDefault(id, 0) + 1;
+                    int total = settings.armsRaceLevels().size();
+                    valueStr = "Lv" + lvl + "/" + total;
+                } else {
+                    valueStr = String.valueOf(kills.getOrDefault(id, 0));
+                }
                 lines.add("§f" + rank + ". " + sideColor(side) + nameOf(id)
-                        + " §7- " + sideColor(side) + kills.getOrDefault(id, 0) + tag);
+                        + " §7- " + sideColor(side) + valueStr + tag);
                 rank++;
             }
         } else {
@@ -2387,6 +2506,9 @@ public final class ArcadeMatch {
         if (settings.scoringMode() == ScoringMode.HOT_ZONE) {
             return "热区";
         }
+        if (settings.scoringMode() == ScoringMode.ARMS_RACE) {
+            return "军备竞赛";
+        }
         if (settings.scoringMode() == ScoringMode.KILL_COUNT) {
             return "击杀战";
         }
@@ -2460,6 +2582,9 @@ public final class ArcadeMatch {
         }
         if (settings.scoringMode() == ScoringMode.HOT_ZONE) {
             return pts + " 分";
+        }
+        if (settings.scoringMode() == ScoringMode.ARMS_RACE) {
+            return pts + " 级";
         }
         return pts + " 胜";
     }

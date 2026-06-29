@@ -34,6 +34,7 @@ public final class MatchSettings {
     private final int hotZoneRotateSeconds;
     private final double hotZoneRadius;
     private final int hotZoneScorePerSecond;
+    private final java.util.List<ArmsRaceLevel> armsRaceLevels;
 
     private MatchSettings(Builder b) {
         this.modeId = Objects.requireNonNull(b.modeId, "modeId");
@@ -60,6 +61,8 @@ public final class MatchSettings {
         this.hotZoneRotateSeconds = Math.max(15, Math.min(180, b.hotZoneRotateSeconds));
         this.hotZoneRadius = Math.max(2.0D, Math.min(16.0D, b.hotZoneRadius));
         this.hotZoneScorePerSecond = Math.max(1, Math.min(5, b.hotZoneScorePerSecond));
+        this.armsRaceLevels = b.armsRaceLevels != null && !b.armsRaceLevels.isEmpty()
+                ? java.util.List.copyOf(b.armsRaceLevels) : ArmsRaceLevel.defaultProgression();
     }
 
     // ---- 内置模式预设 ----
@@ -192,12 +195,17 @@ public final class MatchSettings {
         return hotZoneScorePerSecond;
     }
 
+    public java.util.List<ArmsRaceLevel> armsRaceLevels() {
+        return armsRaceLevels;
+    }
+
     /**
      * 是否为“弹性人数”模式：击杀/目标计分类可以不满员开局并中途补人；
      * 回合制决斗（单挑/2v2）为固定人数，必须满员开局。
      */
     public boolean flexible() {
-        return scoringMode == ScoringMode.KILL_COUNT || scoringMode == ScoringMode.HOT_ZONE;
+        return scoringMode == ScoringMode.KILL_COUNT || scoringMode == ScoringMode.HOT_ZONE
+                || scoringMode == ScoringMode.ARMS_RACE;
     }
 
     /** 每局总参战人数。 */
@@ -232,6 +240,7 @@ public final class MatchSettings {
         private int hotZoneRotateSeconds = 60;
         private double hotZoneRadius = 6.0D;
         private int hotZoneScorePerSecond = 1;
+        private java.util.List<ArmsRaceLevel> armsRaceLevels = null;
 
         private Builder(String modeId, String displayName) {
             this.modeId = modeId;
@@ -323,6 +332,11 @@ public final class MatchSettings {
 
         public Builder hotZoneScorePerSecond(int hotZoneScorePerSecond) {
             this.hotZoneScorePerSecond = hotZoneScorePerSecond;
+            return this;
+        }
+
+        public Builder armsRaceLevels(java.util.List<ArmsRaceLevel> armsRaceLevels) {
+            this.armsRaceLevels = armsRaceLevels;
             return this;
         }
 

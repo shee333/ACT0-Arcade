@@ -30,6 +30,7 @@ public final class CreateRoomScreen extends Screen {
             new ModeDef("duel_2v2", "2v2", false, "胜", 3, 1, 15, 1),
             new ModeDef("team_deathmatch", "团队死斗", true, "杀", 30, 5, 99, 5),
             new ModeDef("hot_zone", "热区", false, "分", 150, 30, 300, 10),
+            new ModeDef("arms_race", "军备竞赛", false, "级", 8, 4, 16, 1),
             new ModeDef("free_for_all", "个人乱斗", true, "杀", 20, 5, 99, 5),
             new ModeDef("jump_sniper", "跳狙飞人", false, "胜", 5, 1, 15, 1));
 
