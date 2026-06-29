@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.shee33.act0.arcade.mode.MatchOptions;
 import org.shee33.act0.arcade.mode.RandomWeaponMode;
 
 /**
@@ -38,6 +39,8 @@ public final class ArcadeRoom {
     private final int timeLimitSeconds;
     /** 随机武器细分模式。 */
     private final RandomWeaponMode randomWeaponMode;
+    /** 完整对局设定。 */
+    private final MatchOptions options;
 
     /** 成员（保持加入顺序，房主始终在首位）。 */
     private final Set<UUID> members = new LinkedHashSet<>();
@@ -51,21 +54,29 @@ public final class ArcadeRoom {
                       String modeId, String arenaId, Integer winTarget, int capacity,
                       int timeLimitSeconds, boolean randomWeapons) {
         this(roomId, hostId, hostName, modeId, arenaId, winTarget, capacity, timeLimitSeconds,
-            randomWeapons ? RandomWeaponMode.ALL : RandomWeaponMode.OFF);
-        }
+                randomWeapons ? RandomWeaponMode.ALL : RandomWeaponMode.OFF);
+    }
 
-        public ArcadeRoom(String roomId, UUID hostId, String hostName,
-                  String modeId, String arenaId, Integer winTarget, int capacity,
-                  int timeLimitSeconds, RandomWeaponMode randomWeaponMode) {
+    public ArcadeRoom(String roomId, UUID hostId, String hostName,
+                      String modeId, String arenaId, Integer winTarget, int capacity,
+                      int timeLimitSeconds, RandomWeaponMode randomWeaponMode) {
+        this(roomId, hostId, hostName, modeId, arenaId, winTarget, capacity,
+                new MatchOptions(winTarget, timeLimitSeconds, randomWeaponMode));
+    }
+
+    public ArcadeRoom(String roomId, UUID hostId, String hostName,
+                      String modeId, String arenaId, Integer winTarget, int capacity,
+                      MatchOptions options) {
         this.roomId = roomId;
         this.hostId = hostId;
         this.hostName = hostName;
         this.modeId = modeId;
         this.arenaId = arenaId;
-        this.winTarget = winTarget;
+        this.options = options != null ? options : MatchOptions.defaults();
+        this.winTarget = this.options.winTarget();
         this.capacity = Math.max(2, capacity);
-        this.timeLimitSeconds = Math.max(0, timeLimitSeconds);
-        this.randomWeaponMode = randomWeaponMode != null ? randomWeaponMode : RandomWeaponMode.OFF;
+        this.timeLimitSeconds = this.options.timeLimitSeconds();
+        this.randomWeaponMode = this.options.randomMode();
         this.members.add(hostId);
     }
 
@@ -111,6 +122,10 @@ public final class ArcadeRoom {
 
     public RandomWeaponMode randomWeaponMode() {
         return randomWeaponMode;
+    }
+
+    public MatchOptions options() {
+        return options;
     }
 
     public State state() {

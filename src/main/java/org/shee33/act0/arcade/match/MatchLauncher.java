@@ -133,7 +133,14 @@ public final class MatchLauncher {
             }
         }
         return b.timeLimitSeconds(options.timeLimitSeconds())
+            .reEquipProtectionSeconds(options.respawnDelaySeconds())
             .randomMode("jump_sniper".equals(mode) ? RandomWeaponMode.SNIPER : options.randomMode())
+            .healthOverride(options.healthOverride())
+            .friendlyFire(options.friendlyFire())
+            .ammoCrateChancePercent(options.ammoCrateChancePercent())
+            .hotZoneRotateSeconds(options.hotZoneRotateSeconds())
+            .hotZoneRadius(options.hotZoneRadius())
+            .hotZoneScorePerSecond(options.hotZoneScorePerSecond())
                 .build();
     }
 

@@ -45,6 +45,13 @@ public final class CreateRoomScreen extends Screen {
     /** 随机武器模式。 */
     private RandomWeaponMode randomMode = RandomWeaponMode.OFF;
     private int capacity = 2;
+    private double settingsHealthOverride = 0.0D;
+    private int settingsRespawnDelaySeconds = 3;
+    private boolean settingsFriendlyFire = false;
+    private int settingsAmmoCrateChancePercent = 25;
+    private int settingsHotZoneRotateSeconds = 60;
+    private double settingsHotZoneRadius = 6.0D;
+    private int settingsHotZoneScorePerSecond = 1;
     private Button randomToggle;
     private Button capacityMinus;
     private Button capacityPlus;
@@ -124,6 +131,9 @@ public final class CreateRoomScreen extends Screen {
                 .bounds(rx, randomY, 128, 18).build();
         addRenderableWidget(randomToggle);
 
+        addRenderableWidget(Button.builder(Component.literal("对局设定"), b -> openSettings())
+            .bounds(left + 12, top + 196, 110, 18).build());
+
         // 底部：创建 / 返回
         int footY = top + H - 26;
         Button create = Button.builder(Component.literal("§a创建"), b -> create())
@@ -139,6 +149,12 @@ public final class CreateRoomScreen extends Screen {
             return Component.literal("§b跳狙固定: 狙击+近战");
         }
         return Component.literal(randomMode.enabled() ? "§a" + randomMode.displayName() : "§7随机武器: 关");
+    }
+
+    private void openSettings() {
+        if (minecraft != null) {
+            minecraft.setScreen(new MatchSettingsScreen(this));
+        }
     }
 
     private void cycleRandomMode() {
@@ -218,9 +234,126 @@ public final class CreateRoomScreen extends Screen {
         RandomWeaponMode submitRandom = "jump_sniper".equals(mode().id()) ? RandomWeaponMode.SNIPER : randomMode;
         minecraft.player.connection.sendCommand(
                 "arcade room create " + mode().id() + " " + quoteArg(arena) + " " + target
-            + " " + timeLimitSeconds + " " + submitRandom.id() + " " + cap);
+            + " " + timeLimitSeconds + " " + submitRandom.id() + " " + cap
+            + " " + (int) Math.round(settingsHealthOverride)
+            + " " + settingsRespawnDelaySeconds
+            + " " + (settingsFriendlyFire ? "true" : "false")
+            + " " + settingsAmmoCrateChancePercent
+            + " " + settingsHotZoneRotateSeconds
+            + " " + settingsHotZoneRadius
+            + " " + settingsHotZoneScorePerSecond);
         minecraft.player.connection.sendCommand("arcade browse");
         onClose();
+    }
+
+    double settingsHealthOverride() {
+        return settingsHealthOverride;
+    }
+
+    RandomWeaponMode settingsRandomMode() {
+        return randomMode;
+    }
+
+    int settingsRespawnDelaySeconds() {
+        return settingsRespawnDelaySeconds;
+    }
+
+    boolean settingsFriendlyFire() {
+        return settingsFriendlyFire;
+    }
+
+    int settingsAmmoCrateChancePercent() {
+        return settingsAmmoCrateChancePercent;
+    }
+
+    int settingsHotZoneRotateSeconds() {
+        return settingsHotZoneRotateSeconds;
+    }
+
+    double settingsHotZoneRadius() {
+        return settingsHotZoneRadius;
+    }
+
+    int settingsHotZoneScorePerSecond() {
+        return settingsHotZoneScorePerSecond;
+    }
+
+    void adjustSettingsHealth(int dir) {
+        double[] values = {0, 20, 40, 60, 100, 150, 200};
+        int idx = nearestIndex(values, settingsHealthOverride);
+        settingsHealthOverride = values[Math.floorMod(idx + dir, values.length)];
+    }
+
+    void adjustSettingsRandomMode(int dir) {
+        if ("jump_sniper".equals(mode().id())) {
+            randomMode = RandomWeaponMode.SNIPER;
+            return;
+        }
+        RandomWeaponMode[] modes = RandomWeaponMode.values();
+        randomMode = modes[Math.floorMod(randomMode.ordinal() + dir, modes.length)];
+        if (randomToggle != null) {
+            randomToggle.setMessage(randomLabel());
+        }
+    }
+
+    void adjustSettingsRespawn(int dir) {
+        int[] values = {0, 3, 5, 8, 10};
+        int idx = nearestIndex(values, settingsRespawnDelaySeconds);
+        settingsRespawnDelaySeconds = values[Math.floorMod(idx + dir, values.length)];
+    }
+
+    void toggleSettingsFriendlyFire() {
+        settingsFriendlyFire = !settingsFriendlyFire;
+    }
+
+    void adjustSettingsAmmoCrate(int dir) {
+        int[] values = {0, 25, 50, 100};
+        int idx = nearestIndex(values, settingsAmmoCrateChancePercent);
+        settingsAmmoCrateChancePercent = values[Math.floorMod(idx + dir, values.length)];
+    }
+
+    void adjustSettingsHotZoneRotate(int dir) {
+        int[] values = {30, 45, 60, 90, 120};
+        int idx = nearestIndex(values, settingsHotZoneRotateSeconds);
+        settingsHotZoneRotateSeconds = values[Math.floorMod(idx + dir, values.length)];
+    }
+
+    void adjustSettingsHotZoneRadius(int dir) {
+        double[] values = {4, 6, 8, 10, 12};
+        int idx = nearestIndex(values, settingsHotZoneRadius);
+        settingsHotZoneRadius = values[Math.floorMod(idx + dir, values.length)];
+    }
+
+    void adjustSettingsHotZoneScore(int dir) {
+        int[] values = {1, 2, 3};
+        int idx = nearestIndex(values, settingsHotZoneScorePerSecond);
+        settingsHotZoneScorePerSecond = values[Math.floorMod(idx + dir, values.length)];
+    }
+
+    private static int nearestIndex(int[] values, int current) {
+        int best = 0;
+        int diff = Integer.MAX_VALUE;
+        for (int i = 0; i < values.length; i++) {
+            int d = Math.abs(values[i] - current);
+            if (d < diff) {
+                diff = d;
+                best = i;
+            }
+        }
+        return best;
+    }
+
+    private static int nearestIndex(double[] values, double current) {
+        int best = 0;
+        double diff = Double.MAX_VALUE;
+        for (int i = 0; i < values.length; i++) {
+            double d = Math.abs(values[i] - current);
+            if (d < diff) {
+                diff = d;
+                best = i;
+            }
+        }
+        return best;
     }
 
     private static String quoteArg(String text) {

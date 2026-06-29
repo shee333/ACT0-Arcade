@@ -132,6 +132,14 @@ public final class RoomManager {
 
         public String create(MinecraftServer server, ServerPlayer host, String mode, String arenaId,
                  Integer winTarget, int timeLimitSeconds, RandomWeaponMode randomMode, Integer requestedCapacity) {
+        return create(server, host, mode, arenaId, winTarget, timeLimitSeconds, randomMode, requestedCapacity,
+                0.0D, 3, false, 25, 60, 6.0D, 1);
+    }
+
+        public String create(MinecraftServer server, ServerPlayer host, String mode, String arenaId,
+                 Integer winTarget, int timeLimitSeconds, RandomWeaponMode randomMode, Integer requestedCapacity,
+                 double healthOverride, int respawnDelaySeconds, boolean friendlyFire, int ammoCrateChancePercent,
+                 int hotZoneRotateSeconds, double hotZoneRadius, int hotZoneScorePerSecond) {
         int capacity = requestedCapacity != null ? normalizeCapacity(mode, requestedCapacity) : capacityFor(mode);
         if (capacity <= 0) {
             return "§c未知模式：" + mode;
@@ -150,16 +158,17 @@ public final class RoomManager {
             return "§c竞技场正在使用中：" + arenaId;
         }
         Integer target = winTarget != null ? Math.max(1, Math.min(maxTargetFor(mode), winTarget)) : null;
-        int timeLimit = Math.max(0, Math.min(3600, timeLimitSeconds));
+        MatchOptions options = new MatchOptions(target, timeLimitSeconds, randomMode,
+                healthOverride, respawnDelaySeconds, friendlyFire, ammoCrateChancePercent,
+                hotZoneRotateSeconds, hotZoneRadius, hotZoneScorePerSecond);
 
         String roomId = nextRoomId();
         ArcadeRoom room = new ArcadeRoom(roomId, id, host.getGameProfile().getName(),
-            mode, arenaId, target, capacity, timeLimit, randomMode);
+            mode, arenaId, target, capacity, options);
         rooms.put(roomId, room);
         roomOf.put(id, roomId);
         ArcadeGlobalSettings.get(server).applyHealth(host);
-        String extra = (timeLimit > 0 ? " §7限时 §e" + (timeLimit / 60) + "分" + (timeLimit % 60) + "秒" : "")
-            + (room.randomWeapons() ? " §7" + room.randomWeaponMode().displayName() : "");
+        String extra = settingsSummary(options);
         broadcastRoomCreated(server, room, extra);
         return "§a已创建房间 §e" + modeName(room) + " §7@ §e" + arenaId
                 + " §7(1/" + capacity + ")" + extra;
@@ -226,7 +235,28 @@ public final class RoomManager {
 
     /** 由房间构建完整可配置项。 */
     private static MatchOptions optionsOf(ArcadeRoom room) {
-        return new MatchOptions(room.winTarget(), room.timeLimitSeconds(), room.randomWeaponMode());
+        return room.options();
+    }
+
+    private static String settingsSummary(MatchOptions options) {
+        StringBuilder sb = new StringBuilder();
+        if (options.timeLimitSeconds() > 0) {
+            sb.append(" §7限时 §e").append(options.timeLimitSeconds() / 60).append("分")
+                    .append(options.timeLimitSeconds() % 60).append("秒");
+        }
+        if (options.randomWeapons()) {
+            sb.append(" §7").append(options.randomMode().displayName());
+        }
+        if (options.healthOverride() > 0.0D) {
+            sb.append(" §7血量 §e").append((int) Math.round(options.healthOverride()));
+        }
+        if (options.friendlyFire()) {
+            sb.append(" §c友伤");
+        }
+        if (options.ammoCrateChancePercent() != 25) {
+            sb.append(" §7补给 §e").append(options.ammoCrateChancePercent()).append("%");
+        }
+        return sb.toString();
     }
 
     public boolean isArenaReserved(String arenaId) {

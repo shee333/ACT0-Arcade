@@ -28,6 +28,12 @@ public final class MatchSettings {
     private final int reEquipProtectionSeconds;
     private final int timeLimitSeconds;
     private final RandomWeaponMode randomWeaponMode;
+    private final double healthOverride;
+    private final boolean friendlyFire;
+    private final int ammoCrateChancePercent;
+    private final int hotZoneRotateSeconds;
+    private final double hotZoneRadius;
+    private final int hotZoneScorePerSecond;
 
     private MatchSettings(Builder b) {
         this.modeId = Objects.requireNonNull(b.modeId, "modeId");
@@ -48,6 +54,12 @@ public final class MatchSettings {
         this.reEquipProtectionSeconds = Math.max(0, b.reEquipProtectionSeconds);
         this.timeLimitSeconds = Math.max(0, b.timeLimitSeconds);
         this.randomWeaponMode = b.randomWeaponMode != null ? b.randomWeaponMode : RandomWeaponMode.OFF;
+        this.healthOverride = b.healthOverride <= 0.0D ? 0.0D : Math.max(1.0D, Math.min(200.0D, b.healthOverride));
+        this.friendlyFire = b.friendlyFire;
+        this.ammoCrateChancePercent = Math.max(0, Math.min(100, b.ammoCrateChancePercent));
+        this.hotZoneRotateSeconds = Math.max(15, Math.min(180, b.hotZoneRotateSeconds));
+        this.hotZoneRadius = Math.max(2.0D, Math.min(16.0D, b.hotZoneRadius));
+        this.hotZoneScorePerSecond = Math.max(1, Math.min(5, b.hotZoneScorePerSecond));
     }
 
     // ---- 内置模式预设 ----
@@ -155,6 +167,31 @@ public final class MatchSettings {
         return randomWeaponMode;
     }
 
+    /** 本局覆盖血量；{@code <=0} 表示使用全局血量。 */
+    public double healthOverride() {
+        return healthOverride;
+    }
+
+    public boolean friendlyFire() {
+        return friendlyFire;
+    }
+
+    public double ammoCrateChance() {
+        return ammoCrateChancePercent / 100.0D;
+    }
+
+    public int hotZoneRotateTicks() {
+        return hotZoneRotateSeconds * 20;
+    }
+
+    public double hotZoneRadius() {
+        return hotZoneRadius;
+    }
+
+    public int hotZoneScorePerSecond() {
+        return hotZoneScorePerSecond;
+    }
+
     /**
      * 是否为“弹性人数”模式：击杀/目标计分类可以不满员开局并中途补人；
      * 回合制决斗（单挑/2v2）为固定人数，必须满员开局。
@@ -189,6 +226,12 @@ public final class MatchSettings {
         private int reEquipProtectionSeconds = 3;
         private int timeLimitSeconds = 0;
         private RandomWeaponMode randomWeaponMode = RandomWeaponMode.OFF;
+        private double healthOverride = 0.0D;
+        private boolean friendlyFire = false;
+        private int ammoCrateChancePercent = 25;
+        private int hotZoneRotateSeconds = 60;
+        private double hotZoneRadius = 6.0D;
+        private int hotZoneScorePerSecond = 1;
 
         private Builder(String modeId, String displayName) {
             this.modeId = modeId;
@@ -250,6 +293,36 @@ public final class MatchSettings {
         /** 随机武器细分模式。 */
         public Builder randomMode(RandomWeaponMode randomWeaponMode) {
             this.randomWeaponMode = randomWeaponMode != null ? randomWeaponMode : RandomWeaponMode.OFF;
+            return this;
+        }
+
+        public Builder healthOverride(double healthOverride) {
+            this.healthOverride = healthOverride;
+            return this;
+        }
+
+        public Builder friendlyFire(boolean friendlyFire) {
+            this.friendlyFire = friendlyFire;
+            return this;
+        }
+
+        public Builder ammoCrateChancePercent(int ammoCrateChancePercent) {
+            this.ammoCrateChancePercent = ammoCrateChancePercent;
+            return this;
+        }
+
+        public Builder hotZoneRotateSeconds(int hotZoneRotateSeconds) {
+            this.hotZoneRotateSeconds = hotZoneRotateSeconds;
+            return this;
+        }
+
+        public Builder hotZoneRadius(double hotZoneRadius) {
+            this.hotZoneRadius = hotZoneRadius;
+            return this;
+        }
+
+        public Builder hotZoneScorePerSecond(int hotZoneScorePerSecond) {
+            this.hotZoneScorePerSecond = hotZoneScorePerSecond;
             return this;
         }
 

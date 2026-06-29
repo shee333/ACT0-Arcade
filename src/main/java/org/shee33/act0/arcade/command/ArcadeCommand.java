@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.commands.CommandSourceStack;
@@ -298,16 +299,7 @@ public final class ArcadeCommand {
         LiteralArgumentBuilder<CommandSourceStack> create = Commands.literal("create");
         for (String mode : List.of("duel_1v1", "duel_2v2", "team_deathmatch", "hot_zone", "free_for_all", "jump_sniper")) {
             create.then(Commands.literal(mode)
-                    .then(Commands.argument("arena", StringArgumentType.string()).suggests(ARENA_IDS)
-                            .executes(ctx -> roomCreate(ctx, mode))
-                                .then(Commands.argument("target", IntegerArgumentType.integer(1, 300))
-                                    .executes(ctx -> roomCreate(ctx, mode))
-                                    .then(Commands.argument("time", IntegerArgumentType.integer(0, 3600))
-                                            .executes(ctx -> roomCreate(ctx, mode))
-                                            .then(Commands.argument("random", StringArgumentType.word()).suggests(RANDOM_MODE_KEYS)
-                                                    .executes(ctx -> roomCreate(ctx, mode))
-                                                    .then(Commands.argument("capacity", IntegerArgumentType.integer(2, 32))
-                                                        .executes(ctx -> roomCreate(ctx, mode))))))));
+                    .then(roomCreateArgs(mode)));
         }
         return Commands.literal("room")
                 .then(create)
@@ -328,6 +320,40 @@ public final class ArcadeCommand {
                 .then(Commands.literal("list").executes(ArcadeCommand::roomList));
     }
 
+    private static RequiredArgumentBuilder<CommandSourceStack, String> roomCreateArgs(String mode) {
+        var arena = Commands.argument("arena", StringArgumentType.string()).suggests(ARENA_IDS)
+                .executes(ctx -> roomCreate(ctx, mode));
+        var target = Commands.argument("target", IntegerArgumentType.integer(1, 300))
+                .executes(ctx -> roomCreate(ctx, mode));
+        var time = Commands.argument("time", IntegerArgumentType.integer(0, 3600))
+                .executes(ctx -> roomCreate(ctx, mode));
+        var random = Commands.argument("random", StringArgumentType.word()).suggests(RANDOM_MODE_KEYS)
+                .executes(ctx -> roomCreate(ctx, mode));
+        var capacity = Commands.argument("capacity", IntegerArgumentType.integer(2, 32))
+                .executes(ctx -> roomCreate(ctx, mode));
+        var health = Commands.argument("health", IntegerArgumentType.integer(0, 200));
+        var respawn = Commands.argument("respawn", IntegerArgumentType.integer(0, 20));
+        var friendly = Commands.argument("friendly", StringArgumentType.word());
+        var crate = Commands.argument("crate", IntegerArgumentType.integer(0, 100));
+        var hotTime = Commands.argument("hotTime", IntegerArgumentType.integer(15, 180));
+        var hotRadius = Commands.argument("hotRadius", DoubleArgumentType.doubleArg(2.0D, 16.0D));
+        var hotScore = Commands.argument("hotScore", IntegerArgumentType.integer(1, 5))
+                .executes(ctx -> roomCreate(ctx, mode));
+
+        hotRadius.then(hotScore);
+        hotTime.then(hotRadius);
+        crate.then(hotTime);
+        friendly.then(crate);
+        respawn.then(friendly);
+        health.then(respawn);
+        capacity.then(health);
+        random.then(capacity);
+        time.then(random);
+        target.then(time);
+        arena.then(target);
+        return arena;
+    }
+
     private static int roomCreate(CommandContext<CommandSourceStack> ctx, String mode) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
         MinecraftServer server = ctx.getSource().getServer();
@@ -336,7 +362,15 @@ public final class ArcadeCommand {
         int time = optIntOr(ctx, "time", 0);
         RandomWeaponMode random = optRandomMode(ctx, "random");
         Integer capacity = optInt(ctx, "capacity");
-        String feedback = services().rooms().create(server, player, mode, arena, target, time, random, capacity);
+        int health = optIntOr(ctx, "health", 0);
+        int respawn = optIntOr(ctx, "respawn", 3);
+        boolean friendly = optBool(ctx, "friendly", false);
+        int crate = optIntOr(ctx, "crate", 25);
+        int hotTime = optIntOr(ctx, "hotTime", 60);
+        double hotRadius = optDoubleOr(ctx, "hotRadius", 6.0D);
+        int hotScore = optIntOr(ctx, "hotScore", 1);
+        String feedback = services().rooms().create(server, player, mode, arena, target, time, random, capacity,
+            health, respawn, friendly, crate, hotTime, hotRadius, hotScore);
         ctx.getSource().sendSuccess(() -> Component.literal(feedback), false);
         ArcadeNetwork.broadcastRoomList(server);
         return 1;
@@ -364,6 +398,31 @@ public final class ArcadeCommand {
     private static int optIntOr(CommandContext<CommandSourceStack> ctx, String name, int def) {
         Integer v = optInt(ctx, name);
         return v != null ? v : def;
+    }
+
+    private static double optDoubleOr(CommandContext<CommandSourceStack> ctx, String name, double def) {
+        try {
+            return DoubleArgumentType.getDouble(ctx, name);
+        } catch (IllegalArgumentException e) {
+            return def;
+        }
+    }
+
+    private static boolean optBool(CommandContext<CommandSourceStack> ctx, String name, boolean def) {
+        try {
+            String raw = StringArgumentType.getString(ctx, name);
+            if ("true".equalsIgnoreCase(raw) || "on".equalsIgnoreCase(raw) || "yes".equalsIgnoreCase(raw)
+                    || "1".equals(raw) || "开".equals(raw)) {
+                return true;
+            }
+            if ("false".equalsIgnoreCase(raw) || "off".equalsIgnoreCase(raw) || "no".equalsIgnoreCase(raw)
+                    || "0".equals(raw) || "关".equals(raw)) {
+                return false;
+            }
+            return def;
+        } catch (IllegalArgumentException e) {
+            return def;
+        }
     }
 
     private static RandomWeaponMode optRandomMode(CommandContext<CommandSourceStack> ctx, String name) {

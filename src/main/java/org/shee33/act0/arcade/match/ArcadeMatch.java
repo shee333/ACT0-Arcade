@@ -135,7 +135,6 @@ public final class ArcadeMatch {
 
     /** 死亡补给箱标记 NBT 键：拾取后补满虚拟弹药。 */
     public static final String AMMO_CRATE_KEY = "Act0AmmoCrate";
-    private static final double AMMO_CRATE_DROP_CHANCE = 0.25D;
     private static final double RESPAWN_CLEAR_RADIUS = 10.0;
     private static final double TEAMMATE_RESPAWN_MIN_RADIUS = 3.0;
     private static final double TEAMMATE_RESPAWN_MAX_RADIUS = 5.0;
@@ -151,8 +150,6 @@ public final class ArcadeMatch {
     private static final double JUMP_CHARGE_MAX_VERTICAL = 1.35D;
     private static final double JUMP_CHARGE_MIN_HORIZONTAL = 0.35D;
     private static final double JUMP_CHARGE_MAX_HORIZONTAL = 1.05D;
-    private static final int HOT_ZONE_ROTATE_TICKS = 60 * 20;
-    private static final double HOT_ZONE_RADIUS = 6.0D;
     private static final double HOT_ZONE_HEIGHT = 4.0D;
         private static final ChatFormatting[] FFA_COLORS = new ChatFormatting[]{
             ChatFormatting.RED,
@@ -484,7 +481,7 @@ public final class ArcadeMatch {
             return;
         }
         hotZoneIndex = 0;
-        hotZoneTicksRemaining = HOT_ZONE_ROTATE_TICKS;
+        hotZoneTicksRemaining = settings.hotZoneRotateTicks();
     }
 
     private void rotateHotZone() {
@@ -493,7 +490,7 @@ public final class ArcadeMatch {
             return;
         }
         hotZoneIndex = hotZoneIndex < 0 ? 0 : (hotZoneIndex + 1) % zones.size();
-        hotZoneTicksRemaining = HOT_ZONE_ROTATE_TICKS;
+        hotZoneTicksRemaining = settings.hotZoneRotateTicks();
         SpawnPoint zone = zones.get(hotZoneIndex);
         broadcast("§6热区转移 §7» §e#" + (hotZoneIndex + 1)
                 + " §8(" + Math.round(zone.x()) + ", " + Math.round(zone.y()) + ", " + Math.round(zone.z()) + ")");
@@ -526,7 +523,10 @@ public final class ArcadeMatch {
             updateSidebar();
             return;
         }
-        int total = score.addPoint(sideId(controllingSide));
+        int total = 0;
+        for (int i = 0; i < settings.hotZoneScorePerSecond(); i++) {
+            total = score.addPoint(sideId(controllingSide));
+        }
         actionBarSide(controllingSide, "§6热区占领 §7+1 §8(" + total + "/" + score.pointsToWin() + ")");
         updateBossBar();
         updateSidebar();
@@ -575,7 +575,8 @@ public final class ArcadeMatch {
         double dx = player.getX() - zone.x();
         double dz = player.getZ() - zone.z();
         double dy = Math.abs(player.getY() - zone.y());
-        return dx * dx + dz * dz <= HOT_ZONE_RADIUS * HOT_ZONE_RADIUS && dy <= HOT_ZONE_HEIGHT;
+        double radius = settings.hotZoneRadius();
+        return dx * dx + dz * dz <= radius * radius && dy <= HOT_ZONE_HEIGHT;
     }
 
     private void actionBarSide(int side, String message) {
@@ -651,6 +652,9 @@ public final class ArcadeMatch {
         if (attackerId == null || attackerId.equals(victimId) || !sideOf.containsKey(attackerId)) {
             return false;
         }
+        if (settings.friendlyFire()) {
+            return false;
+        }
         Integer victimSide = sideOf.get(victimId);
         Integer attackerSide = sideOf.get(attackerId);
         return victimSide != null && victimSide.equals(attackerSide);
@@ -680,7 +684,7 @@ public final class ArcadeMatch {
 
     /** 在玩家死亡点掉落一个补给箱（箱子物品 + 标记 NBT），拾取后补满虚拟弹药。 */
     private void dropAmmoCrate(ServerPlayer victim) {
-        if (random.nextDouble() >= AMMO_CRATE_DROP_CHANCE) {
+        if (random.nextDouble() >= settings.ammoCrateChance()) {
             return;
         }
         ItemStack crate = new ItemStack(Items.CHEST);
@@ -938,6 +942,7 @@ public final class ArcadeMatch {
                 clearJumpSniperEffects(player);
                 TeleportHelper.teleport(player, arena.returnSpawn());
                 restorePreMatchMode(player);
+                restoreGlobalHealth(player);
                 player.getInventory().clearContent();
                 sidebar.hideFrom(player);
                 removeBossBarPlayer(player);
@@ -1011,6 +1016,7 @@ public final class ArcadeMatch {
             clearTeamHighlightTarget(p);
             clearJumpSniperEffects(p);
             exitSpectator(p);
+            restoreGlobalHealth(p);
                 removeBossBarPlayer(p);
             sidebar.hideFrom(p);
         }
@@ -1048,6 +1054,7 @@ public final class ArcadeMatch {
         clearJumpSniperEffects(player);
         exitSpectator(player);
         restorePreMatchMode(player);
+        restoreGlobalHealth(player);
         TeleportHelper.teleport(player, arena.returnSpawn());
         player.getInventory().clearContent();
         sidebar.hideFrom(player);
@@ -1811,6 +1818,19 @@ public final class ArcadeMatch {
     }
 
     private void applyGlobalHealth(ServerPlayer player) {
+        double health = settings.healthOverride();
+        if (health > 0.0D) {
+            var attr = player.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
+            if (attr != null) {
+                attr.setBaseValue(health);
+            }
+            player.setHealth((float) health);
+        } else {
+            ArcadeGlobalSettings.get(server).applyHealth(player);
+        }
+    }
+
+    private void restoreGlobalHealth(ServerPlayer player) {
         ArcadeGlobalSettings.get(server).applyHealth(player);
     }
 
