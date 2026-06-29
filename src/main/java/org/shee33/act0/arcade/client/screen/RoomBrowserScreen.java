@@ -159,9 +159,10 @@ public final class RoomBrowserScreen extends Screen {
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         renderBackground(gg);
         PixelTheme.panel(gg, left, top, W, H);
+        PixelTheme.titleBar(gg, left + 1, top + 1, W - 2, 24);
 
-        gg.drawCenteredString(font, "§l游戏浏览器", left + W / 2, top + 12, PixelTheme.ACCENT);
-        gg.drawString(font, "§7房间与进行中的对局", left + 12, top + 28, PixelTheme.TEXT_DIM, false);
+        gg.drawCenteredString(font, "§l游戏浏览器", left + W / 2, top + 9, PixelTheme.TEXT);
+        gg.drawString(font, "§7房间与进行中的对局", left + 12, top + 29, PixelTheme.TEXT_DIM, false);
 
         List<RoomDto> list = rooms();
         if (list.isEmpty()) {
@@ -183,7 +184,11 @@ public final class RoomBrowserScreen extends Screen {
     }
 
     private void renderRoomRow(GuiGraphics gg, RoomDto room, int y, int mouseX, int mouseY) {
-        PixelTheme.row(gg, listX, y, listW, ROW_H - 2, room.youAreMember());
+        int ax = listX + listW - ACTION_W - 4;
+        int ay = y + 8;
+        int ah = ROW_H - 8;
+        boolean hovered = mouseX >= listX && mouseX <= listX + listW && mouseY >= y && mouseY <= y + ROW_H - 2;
+        PixelTheme.card(gg, listX, y, listW, ROW_H - 2, room.youAreMember() || hovered);
 
         String status = room.inProgress() ? " §a[进行中 " + formatClock(room.elapsedSeconds()) + "]" : "";
         gg.drawString(font, "§f" + room.modeName() + " §8· §7" + room.targetText() + status,
@@ -194,16 +199,21 @@ public final class RoomBrowserScreen extends Screen {
         gg.drawString(font, "§8玩家 §7" + players, listX + 4, y + 24, PixelTheme.TEXT_DIM, false);
 
         String count = room.size() + "/" + room.capacity();
-        int countColor = room.isFull() ? 0xFFCF6A5A : PixelTheme.TEXT;
-        gg.drawString(font, count, listX + listW - ACTION_W - 4 - font.width(count) - 6, y + 14, countColor, false);
+        int countColor = room.isFull() ? PixelTheme.RED : PixelTheme.SUCCESS;
+        int countX = ax - font.width(count) - 8;
+        PixelTheme.progress(gg, countX - 30, y + 25, 48, 3,
+            room.capacity() <= 0 ? 0f : room.size() / (float) room.capacity(), countColor);
+        gg.drawString(font, count, countX, y + 13, countColor, false);
+
+        if (room.inProgress()) {
+            PixelTheme.chip(gg, listX + listW - ACTION_W - 72, y + 4, 44, 10, PixelTheme.SUCCESS);
+            gg.drawCenteredString(font, "进行中", listX + listW - ACTION_W - 50, y + 5, PixelTheme.TEXT);
+        }
 
         // 操作按钮
-        int ax = listX + listW - ACTION_W - 4;
-        int ay = y + 8;
-        int ah = ROW_H - 8;
         String label;
         int color;
-        boolean hovered = mouseX >= ax && mouseX <= ax + ACTION_W && mouseY >= ay && mouseY <= ay + ah;
+        boolean buttonHovered = mouseX >= ax && mouseX <= ax + ACTION_W && mouseY >= ay && mouseY <= ay + ah;
         if (room.roomId().startsWith("bf@") && room.youAreMember()) {
             label = "已在";
             color = PixelTheme.TEXT_DIM;
@@ -218,13 +228,11 @@ public final class RoomBrowserScreen extends Screen {
             color = PixelTheme.ACCENT;
         }
         boolean enabled = room.youAreMember() || !room.isFull();
-        drawActionButton(gg, ax, ay, ACTION_W, ah, label, color, enabled && hovered);
+        drawActionButton(gg, ax, ay, ACTION_W, ah, label, color, enabled && buttonHovered);
     }
 
     private void drawActionButton(GuiGraphics gg, int x, int y, int w, int h, String label, int color, boolean hovered) {
-        gg.fill(x, y, x + w, y + h, hovered ? 0x55FFFFFF : 0x40000000);
-        gg.fill(x, y, x + w, y + 1, PixelTheme.BEVEL_LIGHT);
-        gg.fill(x, y + h - 1, x + w, y + h, PixelTheme.BEVEL_SHADOW);
+        PixelTheme.chip(gg, x, y, w, h, hovered ? PixelTheme.ACCENT : color);
         gg.drawCenteredString(font, label, x + w / 2, y + (h - 8) / 2, color);
     }
 

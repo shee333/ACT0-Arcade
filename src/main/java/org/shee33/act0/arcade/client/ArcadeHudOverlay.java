@@ -8,6 +8,7 @@ import net.minecraftforge.client.event.RenderGuiEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.shee33.act0.arcade.Act0Arcade;
+import org.shee33.act0.arcade.client.screen.PixelTheme;
 
 import java.util.List;
 
@@ -20,10 +21,9 @@ import java.util.List;
 @Mod.EventBusSubscriber(modid = Act0Arcade.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class ArcadeHudOverlay {
 
-    private static final int PAD_X = 4;
-    private static final int LINE_H = 9;
-    private static final int BG = 0x90000000;
-    private static final int TITLE_BG = 0xB0000000;
+    private static final int PAD_X = 8;
+    private static final int LINE_H = 12;
+    private static final int HEADER_H = 17;
 
     private ArcadeHudOverlay() {
     }
@@ -50,27 +50,54 @@ public final class ArcadeHudOverlay {
         for (String line : lines) {
             contentW = Math.max(contentW, font.width(line));
         }
-        int panelW = contentW + PAD_X * 2;
+        int panelW = Math.max(118, contentW + PAD_X * 2 + 10);
         int screenW = gg.guiWidth();
         int screenH = gg.guiHeight();
 
-        int totalH = LINE_H + lines.size() * LINE_H;
+        int totalH = HEADER_H + lines.size() * LINE_H + 6;
         int top = screenH / 2 - totalH / 2;
-        int right = screenW - 1;
+        int right = screenW - 6;
         int left = right - panelW;
 
-        // 标题栏背景
-        gg.fill(left, top, right, top + LINE_H, TITLE_BG);
-        // 内容背景
-        gg.fill(left, top + LINE_H, right, top + totalH, BG);
+        // 主面板：阴影 + 边框 + 标题栏
+        gg.fill(left + 3, top + 3, right + 3, top + totalH + 3, 0x66000000);
+        gg.fill(left, top, right, top + totalH, 0xE40B100D);
+        gg.fill(left, top, left + 3, top + totalH, PixelTheme.ACCENT);
+        gg.fill(left + 1, top + 1, right - 1, top + 2, 0x44FFFFFF);
+        PixelTheme.titleBar(gg, left, top, panelW, HEADER_H);
 
-        // 标题：右对齐
-        gg.drawString(font, title, right - PAD_X - font.width(title), top + 1, 0xFFFFFFFF, false);
+        // 标题：左侧短线 + 右对齐文本
+        gg.fill(left + 8, top + 6, left + 18, top + 8, PixelTheme.ACCENT);
+        gg.drawString(font, title, right - PAD_X - font.width(title), top + 5, PixelTheme.TEXT, false);
 
-        int y = top + LINE_H;
-        for (String line : lines) {
-            gg.drawString(font, line, right - PAD_X - font.width(line), y + 1, 0xFFFFFFFF, false);
+        int y = top + HEADER_H + 3;
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
+            int rowColor = (i & 1) == 0 ? 0x381A211B : 0x221A211B;
+            gg.fill(left + 6, y, right - 5, y + LINE_H - 1, rowColor);
+            int bulletColor = colorForLine(line);
+            gg.fill(left + 9, y + 4, left + 12, y + 7, bulletColor);
+            gg.drawString(font, line, right - PAD_X - font.width(line), y + 2, PixelTheme.TEXT, false);
             y += LINE_H;
         }
+    }
+
+    private static int colorForLine(String line) {
+        if (line == null) {
+            return PixelTheme.ACCENT;
+        }
+        if (line.contains("§c") || line.contains("红")) {
+            return PixelTheme.RED;
+        }
+        if (line.contains("§9") || line.contains("蓝")) {
+            return PixelTheme.BLUE;
+        }
+        if (line.contains("§a") || line.contains("胜") || line.contains("击杀")) {
+            return PixelTheme.SUCCESS;
+        }
+        if (line.contains("§e")) {
+            return PixelTheme.WARNING;
+        }
+        return PixelTheme.ACCENT;
     }
 }

@@ -237,13 +237,15 @@ public final class CreateRoomScreen extends Screen {
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         renderBackground(gg);
         PixelTheme.panel(gg, left, top, W, H);
+        PixelTheme.titleBar(gg, left + 1, top + 1, W - 2, 24);
 
-        gg.drawCenteredString(font, "§l创建房间", left + W / 2, top + 12, PixelTheme.ACCENT);
+        gg.drawCenteredString(font, "§l创建房间", left + W / 2, top + 9, PixelTheme.TEXT);
         gg.drawString(font, "§7选择模式", left + 12, top + 28, PixelTheme.TEXT_DIM, false);
+        PixelTheme.card(gg, left + 132, top + 36, 138, 186, false);
 
         // 左栏选中高亮
         int hy = top + 40 + selectedMode * 22;
-        PixelTheme.row(gg, left + 10, hy - 1, 114, 20, true);
+        PixelTheme.card(gg, left + 10, hy - 1, 114, 20, true);
 
         int rx = left + 140;
         ModeDef m = mode();
