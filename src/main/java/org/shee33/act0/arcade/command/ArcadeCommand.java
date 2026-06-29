@@ -300,7 +300,7 @@ public final class ArcadeCommand {
             create.then(Commands.literal(mode)
                     .then(Commands.argument("arena", StringArgumentType.string()).suggests(ARENA_IDS)
                             .executes(ctx -> roomCreate(ctx, mode))
-                            .then(Commands.argument("target", IntegerArgumentType.integer(1, 99))
+                                .then(Commands.argument("target", IntegerArgumentType.integer(1, 300))
                                     .executes(ctx -> roomCreate(ctx, mode))
                                     .then(Commands.argument("time", IntegerArgumentType.integer(0, 3600))
                                             .executes(ctx -> roomCreate(ctx, mode))

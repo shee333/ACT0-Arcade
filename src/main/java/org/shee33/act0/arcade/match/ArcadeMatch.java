@@ -236,7 +236,7 @@ public final class ArcadeMatch {
         }
         int idx = 0;
         for (UUID id : players) {
-            int side = Math.min(idx / settings.teamSize(), settings.sideCount() - 1);
+            int side = initialSideForIndex(idx, players.size());
             sides.get(side).add(id);
             sideOf.put(id, side);
             kills.put(id, 0);
@@ -258,6 +258,17 @@ public final class ArcadeMatch {
         }
         updateSidebar();
         startRound();
+    }
+
+    /**
+     * 初始分队：固定模式按配置容量切分；弹性两队模式按实际开局人数切分，避免未满员手动开局时全进一队。
+     */
+    private int initialSideForIndex(int index, int actualPlayers) {
+        int perSide = settings.teamSize();
+        if (settings.flexible() && settings.sideCount() == 2 && settings.teamSize() > 1) {
+            perSide = Math.max(1, (actualPlayers + 1) / 2);
+        }
+        return Math.min(index / Math.max(1, perSide), settings.sideCount() - 1);
     }
 
     /** 开始（或重开）一个回合：满血归位、发配装、进入倒计时。 */
@@ -1003,7 +1014,7 @@ public final class ArcadeMatch {
                 removeBossBarPlayer(p);
             sidebar.hideFrom(p);
         }
-        if (settings.scoringMode() != ScoringMode.KILL_COUNT && wasAlive && phase == MatchPhase.COMBAT) {
+        if (settings.scoringMode() == ScoringMode.ROUND_WIN && wasAlive && phase == MatchPhase.COMBAT) {
             evaluateRoundElimination();
         }
         setupNameTagTeams();
@@ -1183,7 +1194,7 @@ public final class ArcadeMatch {
         if (connectedPlayers == 0) {
             broadcast("§7全员掉线，对局结束。");
             finish();
-        } else if (connectedSides.size() == 1 && sideOf.size() > 1) {
+        } else if (connectedSides.size() == 1 && !sideOf.isEmpty()) {
             int winner = connectedSides.iterator().next();
             broadcast("§7其余玩家已离开，对局结束。");
             winMatch(winner);

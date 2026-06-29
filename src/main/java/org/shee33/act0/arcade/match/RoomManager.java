@@ -149,7 +149,7 @@ public final class RoomManager {
         if (isArenaReserved(arenaId)) {
             return "§c竞技场正在使用中：" + arenaId;
         }
-        Integer target = winTarget != null ? Math.max(1, Math.min(99, winTarget)) : null;
+        Integer target = winTarget != null ? Math.max(1, Math.min(maxTargetFor(mode), winTarget)) : null;
         int timeLimit = Math.max(0, Math.min(3600, timeLimitSeconds));
 
         String roomId = nextRoomId();
@@ -460,6 +460,10 @@ public final class RoomManager {
 
     private static boolean supportsTeamChoice(String mode) {
         return "team_deathmatch".equals(mode) || "hot_zone".equals(mode) || "jump_sniper".equals(mode);
+    }
+
+    private static int maxTargetFor(String mode) {
+        return "hot_zone".equals(mode) ? 300 : 99;
     }
 
     private static boolean requiresEvenTeams(String mode) {
