@@ -1108,6 +1108,8 @@ public final class ArcadeMatch {
         lastHurtTick.remove(playerId);
         clearJumpCharge(playerId);
         kills.remove(playerId);
+        armsRaceLevel.remove(playerId);
+        armsRaceLevelKills.remove(playerId);
         boolean wasAlive = alive.remove(playerId);
         ServerPlayer p = player(playerId);
         if (p != null) {
@@ -1148,6 +1150,8 @@ public final class ArcadeMatch {
         lastHurtTick.remove(id);
         clearJumpCharge(id);
         kills.remove(id);
+        armsRaceLevel.remove(id);
+        armsRaceLevelKills.remove(id);
         clearKillerGlow(player);
         clearTeamHighlightFor(player);
         clearTeamHighlightTarget(player);
@@ -1301,7 +1305,12 @@ public final class ArcadeMatch {
         if (connectedPlayers == 0) {
             broadcast("§7全员掉线，对局结束。");
             finish();
-        } else if (connectedSides.size() == 1 && !sideOf.isEmpty()) {
+        } else if (connectedSides.size() == 1 && !sideOf.isEmpty() && connectedPlayers > 0
+                && settings.teamSize() > 1) {
+            int winner = connectedSides.iterator().next();
+            broadcast("§7其余玩家已离开，对局结束。");
+            winMatch(winner);
+        } else if (connectedPlayers == 1 && sideOf.size() <= 1) {
             int winner = connectedSides.iterator().next();
             broadcast("§7其余玩家已离开，对局结束。");
             winMatch(winner);
