@@ -81,7 +81,7 @@ public final class Act0Arcade {
             return;
         }
         event.setCanceled(true);
-        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§c对局中只能使用 /arcade leave 或 /suicide。"));
+        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§c对局中无法使用该指令，使用退出按钮可离开。"));
     }
 
     @SubscribeEvent

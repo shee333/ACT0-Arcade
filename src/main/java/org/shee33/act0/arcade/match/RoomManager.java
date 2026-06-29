@@ -186,7 +186,7 @@ public final class RoomManager {
                 .withStyle(style -> style
                     .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, joinCommand))
                     .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                        Component.literal("§a点击快速加入房间 §e" + room.roomId())))));
+                        Component.literal("§a点击加入房间")))));
         for (ServerPlayer online : server.getPlayerList().getPlayers()) {
             online.sendSystemMessage(message);
         }
@@ -437,8 +437,8 @@ public final class RoomManager {
             services, server, room.modeId(), room.arenaId(), members, optionsOf(room), room.capacity());
         if (!result.isOk()) {
             room.setState(ArcadeRoom.State.WAITING);
-            notifyAll(server, members, "§c开局失败：" + result.message());
-            return "§c开局失败：" + result.message();
+            notifyLaunchFailure(server, room, members, result.message());
+            return launchFailureText(server, room, result.message());
         }
 
         ArcadeMatch match = result.match();
@@ -448,7 +448,7 @@ public final class RoomManager {
             room.setState(ArcadeRoom.State.IN_PROGRESS);
             notifyAll(server, members, "§a对局开始！祝你好运。");
             closeRoomBrowsers(server, members);
-            return "§a对局开始 §7(" + result.message() + ")";
+            return "§a对局开始！";
         }
         // 固定模式：回收房间
         rooms.remove(room.roomId());
@@ -457,7 +457,27 @@ public final class RoomManager {
         }
         notifyAll(server, members, "§a对局开始！祝你好运。");
         closeRoomBrowsers(server, members);
-        return "§a对局开始 §7(" + result.message() + ")";
+        return "§a对局开始！";
+    }
+
+    /** 开局失败：仅向房主/管理员展示具体原因，普通成员只看到精简提示。 */
+    private void notifyLaunchFailure(MinecraftServer server, ArcadeRoom room, Collection<UUID> members, String reason) {
+        Component full = Component.literal("§c开局失败：" + reason);
+        Component brief = Component.literal("§c开局失败，请稍后再试。");
+        for (UUID id : members) {
+            ServerPlayer p = server.getPlayerList().getPlayer(id);
+            if (p == null) {
+                continue;
+            }
+            boolean privileged = id.equals(room.hostId()) || p.hasPermissions(2);
+            p.sendSystemMessage(privileged ? full : brief);
+        }
+    }
+
+    private String launchFailureText(MinecraftServer server, ArcadeRoom room, String reason) {
+        ServerPlayer host = server.getPlayerList().getPlayer(room.hostId());
+        boolean privileged = host != null && host.hasPermissions(2);
+        return privileged ? "§c开局失败：" + reason : "§c开局失败，请稍后再试。";
     }
 
     private List<UUID> orderedMembers(ArcadeRoom room) {

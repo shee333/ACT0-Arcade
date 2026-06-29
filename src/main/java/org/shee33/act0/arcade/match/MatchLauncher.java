@@ -267,7 +267,7 @@ public final class MatchLauncher {
                     + " 个，当前 " + arena.randomSpawns().size() + " 个。");
         }
         if ("hot_zone".equals(mode) && arena.randomSpawns().isEmpty()) {
-            return Result.fail("热区模式需要至少 1 个热区点，请使用 /arcade arena addhotzone 录入。");
+            return Result.fail("该战场未配置热区点。");
         }
 
         String matchId = mode + "-" + UUID.randomUUID().toString().substring(0, 8);
