@@ -33,6 +33,7 @@ public final class MatchLauncher {
     public static final int DEFAULT_TDM_KILLS = 30;
     public static final int DEFAULT_FFA_KILLS = 20;
     public static final int DEFAULT_JUMP_SNIPER_ROUNDS = 5;
+    public static final int DEFAULT_HOT_ZONE_SCORE = 150;
 
     private MatchLauncher() {
     }
@@ -110,6 +111,11 @@ public final class MatchLauncher {
                     .sideCount(2).teamSize(Math.max(1, sizingCount / 2))
                     .scoringMode(ScoringMode.KILL_COUNT)
                     .roundFormat(RoundFormat.firstTo(wt != null ? Math.max(1, wt) : DEFAULT_TDM_KILLS))
+                    .respawnPolicy(RespawnPolicy.NEAR_TEAMMATE);
+                case "hot_zone" -> b = MatchSettings.builder("hot_zone", "热区")
+                    .sideCount(2).teamSize(Math.max(1, sizingCount / 2))
+                    .scoringMode(ScoringMode.HOT_ZONE)
+                    .roundFormat(RoundFormat.firstTo(wt != null ? Math.max(1, wt) : DEFAULT_HOT_ZONE_SCORE))
                     .respawnPolicy(RespawnPolicy.NEAR_TEAMMATE);
             case "free_for_all" -> b = MatchSettings.builder("free_for_all", "个人乱斗")
                     .sideCount(Math.max(2, sizingCount)).teamSize(1)
@@ -226,6 +232,9 @@ public final class MatchLauncher {
                 && arena.randomSpawns().size() < players.size()) {
             return Result.fail("个人乱斗复活点不足：需要至少 " + players.size()
                     + " 个，当前 " + arena.randomSpawns().size() + " 个。");
+        }
+        if ("hot_zone".equals(mode) && arena.randomSpawns().isEmpty()) {
+            return Result.fail("热区模式需要至少 1 个热区点，请使用 /arcade arena addhotzone 录入。");
         }
 
         String matchId = mode + "-" + UUID.randomUUID().toString().substring(0, 8);

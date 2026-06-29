@@ -50,7 +50,7 @@ public final class RoomManager {
         return switch (mode) {
             case "duel_1v1" -> 2;
             case "duel_2v2" -> 4;
-            case "team_deathmatch", "free_for_all", "jump_sniper" -> 2;
+            case "team_deathmatch", "hot_zone", "free_for_all", "jump_sniper" -> 2;
             default -> -1;
         };
     }
@@ -59,7 +59,7 @@ public final class RoomManager {
         return switch (mode) {
             case "duel_1v1" -> 2;
             case "duel_2v2" -> 4;
-            case "team_deathmatch", "free_for_all", "jump_sniper" -> 32;
+            case "team_deathmatch", "hot_zone", "free_for_all", "jump_sniper" -> 32;
             default -> -1;
         };
     }
@@ -101,7 +101,13 @@ public final class RoomManager {
             return "-";
         }
         int pts = s.roundFormat().pointsToWin();
-        return s.scoringMode() == ScoringMode.KILL_COUNT ? (pts + " 杀") : (pts + " 胜");
+        if (s.scoringMode() == ScoringMode.KILL_COUNT) {
+            return pts + " 杀";
+        }
+        if (s.scoringMode() == ScoringMode.HOT_ZONE) {
+            return pts + " 分";
+        }
+        return pts + " 胜";
     }
 
     /** 该房间的模式显示名。 */
@@ -453,7 +459,7 @@ public final class RoomManager {
     }
 
     private static boolean supportsTeamChoice(String mode) {
-        return "team_deathmatch".equals(mode) || "jump_sniper".equals(mode);
+        return "team_deathmatch".equals(mode) || "hot_zone".equals(mode) || "jump_sniper".equals(mode);
     }
 
     private static boolean requiresEvenTeams(String mode) {

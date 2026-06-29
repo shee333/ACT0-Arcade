@@ -20,17 +20,18 @@ public final class CreateRoomScreen extends Screen {
     private static final int W = 280;
     private static final int H = 278;
 
-    /** 模式定义：id、显示名、是否击杀制、默认目标、目标下限、目标上限、步长。 */
+        /** 模式定义：id、显示名、是否击杀制、目标单位、默认目标、目标下限、目标上限、步长。 */
     private record ModeDef(String id, String name, boolean killBased,
-                           int defTarget, int minTarget, int maxTarget, int step) {
+                   String targetUnit, int defTarget, int minTarget, int maxTarget, int step) {
     }
 
     private static final List<ModeDef> MODES = List.of(
-            new ModeDef("duel_1v1", "单挑 1v1", false, 3, 1, 15, 1),
-            new ModeDef("duel_2v2", "2v2", false, 3, 1, 15, 1),
-            new ModeDef("team_deathmatch", "团队死斗", true, 30, 5, 99, 5),
-            new ModeDef("free_for_all", "个人乱斗", true, 20, 5, 99, 5),
-            new ModeDef("jump_sniper", "跳狙飞人", false, 5, 1, 15, 1));
+            new ModeDef("duel_1v1", "单挑 1v1", false, "胜", 3, 1, 15, 1),
+            new ModeDef("duel_2v2", "2v2", false, "胜", 3, 1, 15, 1),
+            new ModeDef("team_deathmatch", "团队死斗", true, "杀", 30, 5, 99, 5),
+            new ModeDef("hot_zone", "热区", false, "分", 150, 30, 300, 10),
+            new ModeDef("free_for_all", "个人乱斗", true, "杀", 20, 5, 99, 5),
+            new ModeDef("jump_sniper", "跳狙飞人", false, "胜", 5, 1, 15, 1));
 
     private final RoomBrowserScreen parent;
 
@@ -62,7 +63,7 @@ public final class CreateRoomScreen extends Screen {
     }
 
     private boolean capacityEditable() {
-        return mode().killBased() || "jump_sniper".equals(mode().id());
+        return mode().killBased() || "hot_zone".equals(mode().id()) || "jump_sniper".equals(mode().id());
     }
 
     private List<String> arenas() {
@@ -166,7 +167,7 @@ public final class CreateRoomScreen extends Screen {
             updateCapacityButtons();
             return;
         }
-        int step = ("team_deathmatch".equals(mode().id()) || "jump_sniper".equals(mode().id())) ? 2 : 1;
+        int step = ("team_deathmatch".equals(mode().id()) || "hot_zone".equals(mode().id()) || "jump_sniper".equals(mode().id())) ? 2 : 1;
         capacity = RoomManager.normalizeCapacity(mode().id(), capacity + dir * step);
         updateCapacityButtons();
     }
@@ -259,9 +260,8 @@ public final class CreateRoomScreen extends Screen {
         gg.drawCenteredString(font, arenaText, rx + 64, top + 61, PixelTheme.TEXT);
 
         // 目标
-        String unit = m.killBased() ? "杀" : "胜";
         gg.drawString(font, "§7计分目标", rx, top + 84, PixelTheme.TEXT_DIM, false);
-        gg.drawCenteredString(font, "§f先到 §e" + target + " " + unit, rx + 64, top + 101, PixelTheme.TEXT);
+        gg.drawCenteredString(font, "§f先到 §e" + target + " " + m.targetUnit(), rx + 64, top + 101, PixelTheme.TEXT);
 
         // 限时
         gg.drawString(font, "§7对局限时", rx, top + 124, PixelTheme.TEXT_DIM, false);

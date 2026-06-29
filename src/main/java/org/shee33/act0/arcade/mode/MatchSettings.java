@@ -156,11 +156,11 @@ public final class MatchSettings {
     }
 
     /**
-     * 是否为“弹性人数”模式：击杀计分类（团队死斗/个人乱斗）可以不满员开局并中途补人；
+     * 是否为“弹性人数”模式：击杀/目标计分类可以不满员开局并中途补人；
      * 回合制决斗（单挑/2v2）为固定人数，必须满员开局。
      */
     public boolean flexible() {
-        return scoringMode == ScoringMode.KILL_COUNT;
+        return scoringMode == ScoringMode.KILL_COUNT || scoringMode == ScoringMode.HOT_ZONE;
     }
 
     /** 每局总参战人数。 */

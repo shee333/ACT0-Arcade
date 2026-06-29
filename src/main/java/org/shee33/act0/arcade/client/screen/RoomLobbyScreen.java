@@ -226,7 +226,7 @@ public final class RoomLobbyScreen extends Screen {
     }
 
     private static boolean supportsTeamChoice(RoomDto room) {
-        return "团队死斗".equals(room.modeName()) || "跳狙飞人".equals(room.modeName());
+        return "团队死斗".equals(room.modeName()) || "热区".equals(room.modeName()) || "跳狙飞人".equals(room.modeName());
     }
 
     private static int capacityStep(RoomDto room) {

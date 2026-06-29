@@ -252,7 +252,7 @@ public final class ArcadeCommand {
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildQueueBranch() {
         LiteralArgumentBuilder<CommandSourceStack> join = Commands.literal("join");
-        for (String mode : List.of("duel_1v1", "duel_2v2", "team_deathmatch", "free_for_all", "jump_sniper")) {
+        for (String mode : List.of("duel_1v1", "duel_2v2", "team_deathmatch", "hot_zone", "free_for_all", "jump_sniper")) {
             join.then(Commands.literal(mode)
                     .then(Commands.argument("arena", StringArgumentType.string()).suggests(ARENA_IDS)
                             .executes(ctx -> queueJoin(ctx, mode))));
@@ -296,7 +296,7 @@ public final class ArcadeCommand {
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildRoomBranch() {
         LiteralArgumentBuilder<CommandSourceStack> create = Commands.literal("create");
-        for (String mode : List.of("duel_1v1", "duel_2v2", "team_deathmatch", "free_for_all", "jump_sniper")) {
+        for (String mode : List.of("duel_1v1", "duel_2v2", "team_deathmatch", "hot_zone", "free_for_all", "jump_sniper")) {
             create.then(Commands.literal(mode)
                     .then(Commands.argument("arena", StringArgumentType.string()).suggests(ARENA_IDS)
                             .executes(ctx -> roomCreate(ctx, mode))
@@ -458,6 +458,9 @@ public final class ArcadeCommand {
                 .then(Commands.literal("addrespawn")
                     .then(Commands.argument("id", StringArgumentType.string()).suggests(ARENA_IDS)
                         .executes(ArcadeCommand::arenaAddRandomSpawn)))
+                .then(Commands.literal("addhotzone")
+                    .then(Commands.argument("id", StringArgumentType.string()).suggests(ARENA_IDS)
+                        .executes(ArcadeCommand::arenaAddHotZone)))
                 .then(Commands.literal("addrandom")
                         .then(Commands.argument("id", StringArgumentType.string()).suggests(ARENA_IDS)
                                 .executes(ArcadeCommand::arenaAddRandomSpawn)))
@@ -528,6 +531,14 @@ public final class ArcadeCommand {
     }
 
     private static int arenaAddRandomSpawn(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        return arenaAddRandomLikePoint(ctx, "§a已为 §e%s §a添加个人乱斗手动复活点 #%d");
+    }
+
+    private static int arenaAddHotZone(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        return arenaAddRandomLikePoint(ctx, "§a已为 §e%s §a添加热区点 #%d");
+    }
+
+    private static int arenaAddRandomLikePoint(CommandContext<CommandSourceStack> ctx, String successFormat) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
         String id = StringArgumentType.getString(ctx, "id");
         ArenaRegistry registry = ArenaRegistry.get(ctx.getSource().getServer());
@@ -544,7 +555,7 @@ public final class ArcadeCommand {
         ArcadeArena updated = builder.build();
         registry.put(updated);
         ctx.getSource().sendSuccess(() -> Component.literal(
-            "§a已为 §e" + id + " §a添加个人乱斗手动复活点 #" + updated.randomSpawns().size()), true);
+            String.format(successFormat, id, updated.randomSpawns().size())), true);
         return 1;
     }
 
@@ -782,7 +793,7 @@ public final class ArcadeCommand {
     private static LiteralArgumentBuilder<CommandSourceStack> buildMatchBranch() {
         LiteralArgumentBuilder<CommandSourceStack> start = Commands.literal("start")
                 .requires(src -> src.hasPermission(2));
-        for (String mode : List.of("duel_1v1", "duel_2v2", "team_deathmatch", "free_for_all", "jump_sniper")) {
+        for (String mode : List.of("duel_1v1", "duel_2v2", "team_deathmatch", "hot_zone", "free_for_all", "jump_sniper")) {
             start.then(Commands.literal(mode)
                     .then(Commands.argument("arena", StringArgumentType.string()).suggests(ARENA_IDS)
                             .then(Commands.argument("players", EntityArgument.players())
