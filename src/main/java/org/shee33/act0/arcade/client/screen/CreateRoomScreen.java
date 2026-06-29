@@ -31,6 +31,7 @@ public final class CreateRoomScreen extends Screen {
             new ModeDef("team_deathmatch", "团队死斗", true, "杀", 30, 5, 99, 5),
             new ModeDef("hot_zone", "热区", false, "分", 150, 30, 300, 10),
             new ModeDef("arms_race", "军备竞赛", false, "级", 8, 4, 16, 1),
+            new ModeDef("team_arms_race", "军备竞赛 团队", false, "级", 8, 4, 16, 1),
             new ModeDef("free_for_all", "个人乱斗", true, "杀", 20, 5, 99, 5),
             new ModeDef("jump_sniper", "跳狙飞人", false, "胜", 5, 1, 15, 1));
 
@@ -71,7 +72,8 @@ public final class CreateRoomScreen extends Screen {
     }
 
     private boolean capacityEditable() {
-        return mode().killBased() || "hot_zone".equals(mode().id()) || "jump_sniper".equals(mode().id());
+        return mode().killBased() || "hot_zone".equals(mode().id()) || "jump_sniper".equals(mode().id())
+                || "arms_race".equals(mode().id()) || "team_arms_race".equals(mode().id());
     }
 
     private List<String> arenas() {
@@ -184,7 +186,8 @@ public final class CreateRoomScreen extends Screen {
             updateCapacityButtons();
             return;
         }
-        int step = ("team_deathmatch".equals(mode().id()) || "hot_zone".equals(mode().id()) || "jump_sniper".equals(mode().id())) ? 2 : 1;
+        int step = ("team_deathmatch".equals(mode().id()) || "hot_zone".equals(mode().id())
+                || "jump_sniper".equals(mode().id()) || "team_arms_race".equals(mode().id())) ? 2 : 1;
         capacity = RoomManager.normalizeCapacity(mode().id(), capacity + dir * step);
         updateCapacityButtons();
     }

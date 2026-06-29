@@ -39,6 +39,7 @@ public final class MatchQueue {
             case "duel_2v2" -> 4;
             case "team_deathmatch", "hot_zone" -> 4;
             case "free_for_all", "jump_sniper", "arms_race" -> 4;
+            case "team_arms_race" -> 4;
             default -> -1;
         };
     }

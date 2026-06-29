@@ -739,7 +739,8 @@ public final class ArcadeMatch {
 
     private void handleArmsRaceDeath(UUID victimId, UUID killerId) {
         if (killerId != null && sideOf.containsKey(killerId)
-                && !killerId.equals(victimId)) {
+                && !killerId.equals(victimId)
+                && !sideOf.getOrDefault(killerId, -1).equals(sideOf.getOrDefault(victimId, -2))) {
             kills.merge(killerId, 1, Integer::sum);
             int levelKills = armsRaceLevelKills.merge(killerId, 1, Integer::sum);
             int currentLevel = armsRaceLevel.getOrDefault(killerId, 0);

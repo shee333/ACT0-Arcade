@@ -141,6 +141,18 @@ public final class MatchLauncher {
                     .respawnPolicy(RespawnPolicy.RANDOM)
                     .armsRaceLevels(levels);
             }
+            case "team_arms_race" -> {
+                java.util.List<org.shee33.act0.arcade.mode.ArmsRaceLevel> levels =
+                        options.armsRaceLevels() != null ? options.armsRaceLevels()
+                                : org.shee33.act0.arcade.mode.ArmsRaceLevel.defaultProgression();
+                int totalLevels = levels.size();
+                b = MatchSettings.builder("team_arms_race", "军备竞赛 团队")
+                    .sideCount(2).teamSize(Math.max(1, sizingCount / 2))
+                    .scoringMode(ScoringMode.ARMS_RACE)
+                    .roundFormat(RoundFormat.firstTo(totalLevels))
+                    .respawnPolicy(RespawnPolicy.NEAR_TEAMMATE)
+                    .armsRaceLevels(levels);
+            }
             default -> {
                 return null;
             }

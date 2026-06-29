@@ -50,7 +50,7 @@ public final class RoomManager {
         return switch (mode) {
             case "duel_1v1" -> 2;
             case "duel_2v2" -> 4;
-            case "team_deathmatch", "hot_zone", "free_for_all", "jump_sniper", "arms_race" -> 2;
+            case "team_deathmatch", "hot_zone", "free_for_all", "jump_sniper", "arms_race", "team_arms_race" -> 2;
             default -> -1;
         };
     }
@@ -59,7 +59,7 @@ public final class RoomManager {
         return switch (mode) {
             case "duel_1v1" -> 2;
             case "duel_2v2" -> 4;
-            case "team_deathmatch", "hot_zone", "free_for_all", "jump_sniper", "arms_race" -> 32;
+            case "team_deathmatch", "hot_zone", "free_for_all", "jump_sniper", "arms_race", "team_arms_race" -> 32;
             default -> -1;
         };
     }
@@ -492,14 +492,15 @@ public final class RoomManager {
     }
 
     private static boolean supportsTeamChoice(String mode) {
-        return "team_deathmatch".equals(mode) || "hot_zone".equals(mode) || "jump_sniper".equals(mode);
+        return "team_deathmatch".equals(mode) || "hot_zone".equals(mode) || "jump_sniper".equals(mode)
+                || "team_arms_race".equals(mode);
     }
 
     private static int maxTargetFor(String mode) {
         if ("hot_zone".equals(mode)) {
             return 300;
         }
-        if ("arms_race".equals(mode)) {
+        if ("arms_race".equals(mode) || "team_arms_race".equals(mode)) {
             return 16;
         }
         return 99;
