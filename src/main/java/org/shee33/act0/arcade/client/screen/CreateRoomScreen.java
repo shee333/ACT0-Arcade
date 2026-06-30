@@ -20,7 +20,7 @@ public final class CreateRoomScreen extends Screen {
     private static final int W = 280;
     private static final int H = 278;
 
-        /** 模式定义：id、显示名、是否击杀制、目标单位、默认目标、目标下限、目标上限、步长。 */
+    /** 模式定义：id、显示名、是否击杀制、目标单位、默认目标、目标下限、目标上限、步长。 */
     private record ModeDef(String id, String name, boolean killBased,
                    String targetUnit, int defTarget, int minTarget, int maxTarget, int step) {
     }
@@ -134,8 +134,9 @@ public final class CreateRoomScreen extends Screen {
                 .bounds(rx, randomY, 128, 18).build();
         addRenderableWidget(randomToggle);
 
+        int settingsY = Math.min(top + H - 56, my + 6);
         addRenderableWidget(Button.builder(Component.literal("对局设定"), b -> openSettings())
-            .bounds(left + 12, top + 196, 110, 18).build());
+            .bounds(left + 12, settingsY, 110, 18).build());
 
         // 底部：创建 / 返回
         int footY = top + H - 26;
