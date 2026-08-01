@@ -18,7 +18,7 @@ import java.util.List;
  * 武器分类选择界面（客户端）：当一个槽位对应多个武器分类（如主武器 = 步枪 / 冲锋枪 / 狙击枪 …）时，
  * 先让玩家选一个细分类别，再跳转到 {@link WeaponSelectScreen} 浏览该类别下的具体武器。
  *
- * <p>仅展示<b>当前职业下确有武器</b>的分类，避免出现空类别。渲染基于 {@link PixelTheme} 程序化像素面板。
+ * <p>仅展示<b>当前职业下确有武器</b>的分类，避免出现空类别。渲染基于 {@link FlatTheme} 程序化扁平面板。
  */
 public final class CategorySelectScreen extends Screen {
 
@@ -87,11 +87,11 @@ public final class CategorySelectScreen extends Screen {
     @Override
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         renderBackground(gg);
-        PixelTheme.panel(gg, left, top, PANEL_W, panelH);
-        gg.drawCenteredString(font, "§l" + slotLabel(slot), left + PANEL_W / 2, top + 10, PixelTheme.ACCENT);
+        FlatTheme.panel(gg, left, top, PANEL_W, panelH);
+        gg.drawCenteredString(font, slotLabel(slot), left + PANEL_W / 2, top + 10, FlatTheme.TEXT_HEADER);
 
         if (categories.isEmpty()) {
-            gg.drawCenteredString(font, "§7暂无可选武器", left + PANEL_W / 2, top + HEADER_H + 8, PixelTheme.TEXT_DIM);
+            gg.drawCenteredString(font, "§7暂无可选武器", left + PANEL_W / 2, top + HEADER_H + 8, FlatTheme.TEXT_DIM);
         }
 
         super.render(gg, mouseX, mouseY, partialTick);

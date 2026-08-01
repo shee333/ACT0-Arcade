@@ -12,7 +12,7 @@ import org.shee33.act0.arcade.network.RoomDto;
 import java.util.List;
 
 /**
- * 像素风"游戏浏览器"界面（客户端）：浏览当前可加入的房间，一键加入/离开；玩家可创建房间。
+ * FlatTheme 战地 2042 风格"游戏浏览器"界面（客户端）：浏览当前可加入的房间，一键加入/离开；玩家可创建房间。
  *
  * <p>房间数据来自 {@link ClientRoomList}（由 {@code SyncRoomListPacket} 下发），界面打开后每 2 秒
  * 自动向服务端请求一次最新列表。列表区支持滚轮滚动，避免房间过多撑大界面。
@@ -34,6 +34,7 @@ public final class RoomBrowserScreen extends Screen {
     private int viewportH;
     private int scrollRow;
     private int refreshTimer;
+    private final long openedAtMs = System.currentTimeMillis();
 
     public RoomBrowserScreen() {
         super(Component.literal("游戏浏览器"));
@@ -165,16 +166,18 @@ public final class RoomBrowserScreen extends Screen {
     @Override
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         renderBackground(gg);
-        PixelTheme.panel(gg, left, top, W, H);
-        PixelTheme.titleBar(gg, left + 1, top + 1, W - 2, 24);
+        FlatTheme.Fade fade = FlatTheme.fadeIn(openedAtMs);
+        int panelTop = top + fade.offsetY();
+        FlatTheme.panel(gg, left, panelTop, W, H, fade.alpha());
+        FlatTheme.titleBar(gg, left, panelTop, W, 24);
 
-        gg.drawCenteredString(font, "§l游戏浏览器", left + W / 2, top + 9, PixelTheme.TEXT);
-        gg.drawString(font, "§7房间与进行中的对局", left + 12, top + 29, PixelTheme.TEXT_DIM, false);
+        gg.drawCenteredString(font, "游戏浏览器", left + W / 2, panelTop + 9, FlatTheme.TEXT_HEADER);
+        gg.drawString(font, "§7房间与进行中的对局", left + 12, panelTop + 29, FlatTheme.TEXT_DIM, false);
 
         List<RoomDto> list = rooms();
         if (list.isEmpty()) {
                 gg.drawCenteredString(font, "§7暂无房间，点击下方创建",
-                    left + W / 2, listY + viewportH / 2 - 4, PixelTheme.TEXT_DIM);
+                    left + W / 2, listY + viewportH / 2 - 4, FlatTheme.TEXT_DIM);
         } else {
             gg.enableScissor(listX, listY, listX + listW, listY + viewportH);
             for (int i = 0; i < list.size(); i++) {
@@ -195,51 +198,51 @@ public final class RoomBrowserScreen extends Screen {
         int ay = y + 8;
         int ah = ROW_H - 8;
         boolean hovered = mouseX >= listX && mouseX <= listX + listW && mouseY >= y && mouseY <= y + ROW_H - 2;
-        PixelTheme.card(gg, listX, y, listW, ROW_H - 2, room.youAreMember() || hovered);
+        FlatTheme.card(gg, listX, y, listW, ROW_H - 2, room.youAreMember() || hovered);
 
         String status = room.inProgress() ? " §a[进行中 " + formatClock(room.elapsedSeconds()) + "]" : "";
         gg.drawString(font, "§f" + room.modeName() + " §8· §7" + room.targetText() + status,
-                listX + 4, y + 4, PixelTheme.TEXT, false);
+                listX + 4, y + 4, FlatTheme.TEXT, false);
         gg.drawString(font, "§8战场 §7" + room.arenaId() + "  §8房主 §7" + room.hostName(),
-                listX + 4, y + 14, PixelTheme.TEXT_DIM, false);
+                listX + 4, y + 14, FlatTheme.TEXT_DIM, false);
         String players = room.playersText().isBlank() ? "-" : trim(room.playersText(), listW - ACTION_W - 76);
-        gg.drawString(font, "§8玩家 §7" + players, listX + 4, y + 24, PixelTheme.TEXT_DIM, false);
+        gg.drawString(font, "§8玩家 §7" + players, listX + 4, y + 24, FlatTheme.TEXT_DIM, false);
 
         String count = room.size() + "/" + room.capacity();
-        int countColor = room.isFull() ? PixelTheme.RED : PixelTheme.SUCCESS;
+        int countColor = room.isFull() ? FlatTheme.DANGER : FlatTheme.SUCCESS;
         int countX = ax - font.width(count) - 8;
-        PixelTheme.progress(gg, countX - 30, y + 25, 48, 3,
+        FlatTheme.progress(gg, countX - 30, y + 25, 48, 3,
             room.capacity() <= 0 ? 0f : room.size() / (float) room.capacity(), countColor);
         gg.drawString(font, count, countX, y + 13, countColor, false);
 
         if (room.inProgress()) {
-            PixelTheme.chip(gg, listX + listW - ACTION_W - 72, y + 4, 44, 10, PixelTheme.SUCCESS);
-            gg.drawCenteredString(font, "进行中", listX + listW - ACTION_W - 50, y + 5, PixelTheme.TEXT);
+            FlatTheme.chip(gg, listX + listW - ACTION_W - 72, y + 4, 44, 10, FlatTheme.SUCCESS);
+            gg.drawCenteredString(font, "进行中", listX + listW - ACTION_W - 50, y + 5, FlatTheme.TEXT);
         }
 
-        // 操作按钮
+        // 操作按钮：加入=强调蓝，离开=警示橙，已满/已在=中性灰（禁用态）
         String label;
         int color;
         boolean buttonHovered = mouseX >= ax && mouseX <= ax + ACTION_W && mouseY >= ay && mouseY <= ay + ah;
         if (room.roomId().startsWith("bf@") && room.youAreMember()) {
             label = "已在";
-            color = PixelTheme.TEXT_DIM;
+            color = FlatTheme.TEXT_DIM;
         } else if (room.youAreMember()) {
             label = "离开";
-            color = 0xFFE0C060;
+            color = FlatTheme.DANGER;
         } else if (room.isFull()) {
             label = "已满";
-            color = PixelTheme.TEXT_DIM;
+            color = FlatTheme.TEXT_DIM;
         } else {
             label = "加入";
-            color = PixelTheme.ACCENT;
+            color = FlatTheme.ACCENT;
         }
         boolean enabled = room.youAreMember() || !room.isFull();
         drawActionButton(gg, ax, ay, ACTION_W, ah, label, color, enabled && buttonHovered);
     }
 
     private void drawActionButton(GuiGraphics gg, int x, int y, int w, int h, String label, int color, boolean hovered) {
-        PixelTheme.chip(gg, x, y, w, h, hovered ? PixelTheme.ACCENT : color);
+        FlatTheme.chip(gg, x, y, w, h, hovered ? FlatTheme.ACCENT : color);
         gg.drawCenteredString(font, label, x + w / 2, y + (h - 8) / 2, color);
     }
 
@@ -250,13 +253,13 @@ public final class RoomBrowserScreen extends Screen {
         int trackX = listX + listW - 2;
         int trackY = listY;
         int trackH = viewportH;
-        gg.fill(trackX, trackY, trackX + 2, trackY + trackH, 0x40000000);
+        gg.fill(trackX, trackY, trackX + 2, trackY + trackH, FlatTheme.SURFACE_DISABLED);
 
         int total = totalRows();
         int thumbH = Math.max(12, trackH * VISIBLE_ROWS / total);
         int range = trackH - thumbH;
         int thumbY = trackY + (range * scrollRow / maxScrollRow());
-        gg.fill(trackX, thumbY, trackX + 2, thumbY + thumbH, PixelTheme.BEVEL_LIGHT);
+        gg.fill(trackX, thumbY, trackX + 2, thumbY + thumbH, FlatTheme.ACCENT);
     }
 
     private String trim(String text, int maxW) {

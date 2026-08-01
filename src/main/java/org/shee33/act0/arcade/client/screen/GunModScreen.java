@@ -69,6 +69,7 @@ public final class GunModScreen extends Screen {
 
     /** 待确认购买的配件 key（非空时显示确认弹层）。 */
     private String pendingBuy;
+    private final long openedAtMs = System.currentTimeMillis();
 
     public GunModScreen(Screen backScreen, String weaponKey, String weaponName) {
         super(Component.literal("改装"));
@@ -132,9 +133,10 @@ public final class GunModScreen extends Screen {
     @Override
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         renderBackground(gg);
-        PixelTheme.panel(gg, left, top, panelW, panelH);
-        gg.drawCenteredString(font, "§l改装 · " + trim(weaponName, panelW - 40),
-                left + panelW / 2, top + 10, PixelTheme.ACCENT);
+        FlatTheme.Fade fade = FlatTheme.fadeIn(openedAtMs);
+        FlatTheme.panel(gg, left, top, panelW, panelH, fade.alpha());
+        gg.drawCenteredString(font, "改装 · " + trim(weaponName, panelW - 40),
+                left + panelW / 2, top + 10, FlatTheme.TEXT_HEADER);
 
         slotRects.clear();
         slotKeys.clear();
@@ -143,7 +145,7 @@ public final class GunModScreen extends Screen {
 
         int contentY = top + 28;
         if (data == null || data.slots.isEmpty()) {
-            gg.drawCenteredString(font, "§7该武器暂无可用配件槽", left + panelW / 2, top + panelH / 2 - 4, PixelTheme.TEXT_DIM);
+            gg.drawCenteredString(font, "§7该武器暂无可用配件槽", left + panelW / 2, top + panelH / 2 - 4, FlatTheme.TEXT_DIM);
             super.render(gg, mouseX, mouseY, partialTick);
             return;
         }
@@ -157,12 +159,12 @@ public final class GunModScreen extends Screen {
             AttachmentSlotType type = AttachmentSlotType.byName(s.slot);
             String label = type != null ? type.displayName() : s.slot;
             boolean selected = s.slot.equals(selectedSlot);
-            PixelTheme.row(gg, slotColX, sy, slotColW, rowH, selected);
+            FlatTheme.row(gg, slotColX, sy, slotColW, rowH, selected);
             boolean installed = s.installedKey != null && !s.installedKey.isEmpty();
             gg.drawString(font, (selected ? "§f" : "§7") + label, slotColX + 5, sy + 5,
-                    selected ? PixelTheme.TEXT : PixelTheme.TEXT_DIM, false);
+                    selected ? FlatTheme.TEXT : FlatTheme.TEXT_DIM, false);
             if (installed) {
-                gg.drawString(font, "§a●", slotColX + slotColW - 10, sy + 5, 0xFF8AE66B, false);
+                gg.drawString(font, "●", slotColX + slotColW - 10, sy + 5, FlatTheme.SUCCESS, false);
             }
             slotRects.add(new int[]{slotColX, sy, slotColW, rowH});
             slotKeys.add(s.slot);
@@ -183,8 +185,8 @@ public final class GunModScreen extends Screen {
         // 卸下当前配件行（固定在列表顶部，不随滚动）
         if (hasInstalled) {
             int rh = 16;
-            gg.fill(listX, ly, listX + listW, ly + rh, 0x40301010);
-            gg.drawString(font, "§c卸下当前配件", listX + 4, ly + 4, 0xFFFF7777, false);
+            gg.fill(listX, ly, listX + listW, ly + rh, FlatTheme.SURFACE);
+            gg.drawString(font, "卸下当前配件", listX + 4, ly + 4, FlatTheme.DANGER, false);
             attRects.add(new int[]{listX, ly, listW, rh});
             attKeys.add(REMOVE_SENTINEL);
             ly += rh + 3;
@@ -200,7 +202,7 @@ public final class GunModScreen extends Screen {
         }
 
         if (visible.isEmpty()) {
-            gg.drawString(font, "§7无兼容配件", listX + 4, ly + 4, PixelTheme.TEXT_DIM, false);
+            gg.drawString(font, "§7无兼容配件", listX + 4, ly + 4, FlatTheme.TEXT_DIM, false);
             super.render(gg, mouseX, mouseY, partialTick);
             if (pendingBuy != null) {
                 renderConfirm(gg, mouseX, mouseY);
@@ -234,19 +236,19 @@ public final class GunModScreen extends Screen {
             boolean installed = key.equals(sel.installedKey);
             boolean locked = !att.isDefault() && !ClientUnlocks.isUnlocked(key);
 
-            PixelTheme.row(gg, listX, ry, listW, attRowH, installed);
+            FlatTheme.row(gg, listX, ry, listW, attRowH, installed);
             ItemStack icon = LoadoutApplier.fromSnbt(att.itemSnbt());
             if (!icon.isEmpty()) {
                 gg.renderItem(icon, listX + 3, ry + 3);
             }
             String name = trim(att.displayName(), listW - 60);
-            gg.drawString(font, name, listX + 24, ry + 3, locked ? PixelTheme.TEXT_DIM : PixelTheme.TEXT, false);
-            String status = installed ? "§a已装备" : (locked ? "§e" + att.price() : "§7已解锁");
-            gg.drawString(font, status, listX + 24, ry + 12, installed ? 0xFF8AE66B : (locked ? 0xFFE6C84B : PixelTheme.TEXT_DIM), false);
+            gg.drawString(font, name, listX + 24, ry + 3, locked ? FlatTheme.TEXT_DIM : FlatTheme.TEXT, false);
+            String status = installed ? "已装备" : (locked ? String.valueOf(att.price()) : "已解锁");
+            gg.drawString(font, status, listX + 24, ry + 12, installed ? FlatTheme.SUCCESS : (locked ? FlatTheme.DANGER : FlatTheme.TEXT_DIM), false);
 
             if (locked) {
                 gg.fill(listX, ry, listX + listW, ry + attRowH, LOCK_OVERLAY);
-                gg.drawString(font, "§c未解锁", listX + listW - 38, ry + 8, 0xFFFF5555, false);
+                gg.drawString(font, "未解锁", listX + listW - 38, ry + 8, FlatTheme.DANGER, false);
             }
 
             if (mouseX >= listX && mouseX < listX + listW && mouseY >= ry && mouseY < ry + attRowH) {
@@ -277,12 +279,12 @@ public final class GunModScreen extends Screen {
         int trackX = listViewX + listViewW - 3;
         int trackY = listViewY;
         int trackH = listViewH;
-        gg.fill(trackX, trackY, trackX + 3, trackY + trackH, 0x40000000);
+        gg.fill(trackX, trackY, trackX + 3, trackY + trackH, FlatTheme.SURFACE_DISABLED);
         int contentH = attMaxScroll + listViewH;
         int thumbH = Math.max(12, trackH * listViewH / contentH);
         int range = trackH - thumbH;
         int thumbY = trackY + (range * attScroll / attMaxScroll);
-        gg.fill(trackX, thumbY, trackX + 3, thumbY + thumbH, PixelTheme.BEVEL_LIGHT);
+        gg.fill(trackX, thumbY, trackX + 3, thumbY + thumbH, FlatTheme.ACCENT);
     }
 
     @Override
@@ -359,7 +361,7 @@ public final class GunModScreen extends Screen {
     private void renderConfirm(GuiGraphics gg, int mouseX, int mouseY) {
         gg.pose().pushPose();
         gg.pose().translate(0, 0, 300);
-        gg.fill(0, 0, this.width, this.height, 0xCC000000);
+        gg.fill(0, 0, this.width, this.height, FlatTheme.MODAL_OVERLAY);
 
         ArcadeAttachment att = ClientAttachmentCatalog.registry().find(pendingBuy).orElse(null);
         String name = att != null ? att.displayName() : pendingBuy;
@@ -369,23 +371,22 @@ public final class GunModScreen extends Screen {
         int boxH = 80;
         int bx = left + (panelW - boxW) / 2;
         int by = top + (panelH - boxH) / 2;
-        gg.fill(bx, by, bx + boxW, by + boxH, 0xFF000000);
-        PixelTheme.panel(gg, bx, by, boxW, boxH);
+        FlatTheme.panel(gg, bx, by, boxW, boxH);
 
-        gg.drawCenteredString(font, "§l购买确认", left + panelW / 2, by + 8, PixelTheme.ACCENT);
-        gg.drawCenteredString(font, name, left + panelW / 2, by + 22, PixelTheme.TEXT);
-        gg.drawCenteredString(font, "§e花费 " + price, left + panelW / 2, by + 34, 0xFFE6C84B);
+        gg.drawCenteredString(font, "购买确认", left + panelW / 2, by + 8, FlatTheme.TEXT_HEADER);
+        gg.drawCenteredString(font, name, left + panelW / 2, by + 22, FlatTheme.TEXT);
+        gg.drawCenteredString(font, "花费 " + price, left + panelW / 2, by + 34, FlatTheme.DANGER);
 
-        drawTextButton(gg, confirmButtonRect(), "§a确认", mouseX, mouseY);
+        drawTextButton(gg, confirmButtonRect(), "确认", mouseX, mouseY);
         drawTextButton(gg, cancelButtonRect(), "取消", mouseX, mouseY);
         gg.pose().popPose();
     }
 
     private void drawTextButton(GuiGraphics gg, int[] r, String label, int mouseX, int mouseY) {
         boolean hover = inRect(mouseX, mouseY, r);
-        gg.fill(r[0], r[1], r[0] + r[2], r[1] + r[3], hover ? 0xFF3A4A2A : 0xFF26301C);
-        gg.fill(r[0], r[1], r[0] + r[2], r[1] + 1, PixelTheme.BEVEL_LIGHT);
-        gg.drawCenteredString(font, label, r[0] + r[2] / 2, r[1] + (r[3] - 8) / 2, PixelTheme.TEXT);
+        gg.fill(r[0], r[1], r[0] + r[2], r[1] + r[3], hover ? FlatTheme.SURFACE_HOVER : FlatTheme.SURFACE);
+        gg.fill(r[0], r[1], r[0] + r[2], r[1] + 1, hover ? FlatTheme.ACCENT : FlatTheme.BORDER);
+        gg.drawCenteredString(font, label, r[0] + r[2] / 2, r[1] + (r[3] - 8) / 2, FlatTheme.TEXT);
     }
 
     private int[] confirmButtonRect() {

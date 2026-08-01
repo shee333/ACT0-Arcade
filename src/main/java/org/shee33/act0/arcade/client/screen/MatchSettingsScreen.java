@@ -34,10 +34,10 @@ public final class MatchSettingsScreen extends Screen {
     @Override
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         renderBackground(gg);
-        PixelTheme.panel(gg, left, top, W, H);
-        PixelTheme.titleBar(gg, left + 1, top + 1, W - 2, 24);
-        gg.drawCenteredString(font, "§l对局设定", left + W / 2, top + 9, PixelTheme.TEXT);
-        gg.drawString(font, "§7仅影响本房间", left + 14, top + 32, PixelTheme.TEXT_DIM, false);
+        FlatTheme.panel(gg, left, top, W, H);
+        FlatTheme.titleBar(gg, left, top, W, 24);
+        gg.drawCenteredString(font, "对局设定", left + W / 2, top + 9, FlatTheme.TEXT_HEADER);
+        gg.drawString(font, "§7仅影响本房间", left + 14, top + 32, FlatTheme.TEXT_DIM, false);
 
         int y = top + 48;
         renderRow(gg, mouseX, mouseY, 0, y, "玩家血量", healthText());
@@ -69,17 +69,17 @@ public final class MatchSettingsScreen extends Screen {
         int x = left + 14;
         int w = W - 28;
         boolean hovered = mouseY >= y && mouseY < y + 18 && mouseX >= x && mouseX < x + w;
-        PixelTheme.card(gg, x, y, w, 18, hovered);
-        gg.drawString(font, "§7" + label, x + 7, y + 5, PixelTheme.TEXT_DIM, false);
-        gg.drawCenteredString(font, "◀", x + w - 72, y + 5, PixelTheme.ACCENT);
-        gg.drawCenteredString(font, value, x + w - 42, y + 5, PixelTheme.TEXT);
-        gg.drawCenteredString(font, "▶", x + w - 10, y + 5, PixelTheme.ACCENT);
+        FlatTheme.card(gg, x, y, w, 18, hovered);
+        gg.drawString(font, "§7" + label, x + 7, y + 5, FlatTheme.TEXT_DIM, false);
+        gg.drawCenteredString(font, "◀", x + w - 72, y + 5, FlatTheme.ACCENT);
+        gg.drawCenteredString(font, value, x + w - 42, y + 5, FlatTheme.TEXT);
+        gg.drawCenteredString(font, "▶", x + w - 10, y + 5, FlatTheme.ACCENT);
     }
 
     private void renderButton(GuiGraphics gg, int x, int y, int w, int h, String label, int mouseX, int mouseY) {
         boolean hovered = inRect(mouseX, mouseY, x, y, w, h);
-        PixelTheme.card(gg, x, y, w, h, hovered);
-        gg.drawCenteredString(font, label, x + w / 2, y + 6, PixelTheme.TEXT);
+        FlatTheme.card(gg, x, y, w, h, hovered);
+        gg.drawCenteredString(font, label, x + w / 2, y + 6, FlatTheme.TEXT);
     }
 
     @Override

@@ -41,6 +41,7 @@ public final class LoadoutScreen extends Screen {
     private int cardH;
     private int cardGap;
     private int rowH;
+    private final long openedAtMs = System.currentTimeMillis();
 
     public LoadoutScreen(Loadout loadout) {
         this(LoadoutSet.single(loadout));
@@ -176,14 +177,15 @@ public final class LoadoutScreen extends Screen {
     @Override
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         renderBackground(gg);
-        PixelTheme.panel(gg, left, top, panelW, panelH);
+        FlatTheme.Fade fade = FlatTheme.fadeIn(openedAtMs);
+        FlatTheme.panel(gg, left, top, panelW, panelH, fade.alpha());
 
-        gg.drawCenteredString(font, "§l配装", left + panelW / 2, top + 8, PixelTheme.ACCENT);
+        gg.drawCenteredString(font, "配装", left + panelW / 2, top + 8, FlatTheme.TEXT_HEADER);
         if (panelH >= 330) {
-            gg.drawString(font, "§7点击左侧方案卡片进行修改", left + 18, top + 28, PixelTheme.TEXT_DIM, false);
+            gg.drawString(font, "§7点击左侧方案卡片进行修改", left + 18, top + 28, FlatTheme.TEXT_DIM, false);
         }
         gg.drawString(font, "§7当前编辑：§f第 " + (activeIndex + 1) + " 套",
-                editorX(), top + (panelH < 350 ? 36 : 46), PixelTheme.TEXT_DIM, false);
+                editorX(), top + (panelH < 350 ? 36 : 46), FlatTheme.TEXT_DIM, false);
 
         renderProfileCards(gg, mouseX, mouseY);
 
@@ -191,18 +193,18 @@ public final class LoadoutScreen extends Screen {
         int rowW = editorW();
         int y = editorTop();
 
-        PixelTheme.row(gg, rowX, y - 2, rowW, 18, false);
-        gg.drawString(font, "职业", rowX + 4, y + 4, PixelTheme.TEXT_DIM, false);
-        gg.drawString(font, classLabel(working().classType()), rowX + 60, y + 4, PixelTheme.TEXT, false);
+        FlatTheme.row(gg, rowX, y - 2, rowW, 18, false);
+        gg.drawString(font, "职业", rowX + 4, y + 4, FlatTheme.TEXT_DIM, false);
+        gg.drawString(font, classLabel(working().classType()), rowX + 60, y + 4, FlatTheme.TEXT, false);
         y += rowH;
 
         for (LoadoutSlot slot : LoadoutSlot.values()) {
-            PixelTheme.row(gg, rowX, y - 2, rowW, 18, false);
-            gg.drawString(font, slotLabel(slot), rowX + 4, y + 4, PixelTheme.TEXT_DIM, false);
+            FlatTheme.row(gg, rowX, y - 2, rowW, 18, false);
+            gg.drawString(font, slotLabel(slot), rowX + 4, y + 4, FlatTheme.TEXT_DIM, false);
 
             String key = working().slotItemKey(slot).orElse(null);
             String name = key == null ? "§8— 未选 —" : registry.find(key).map(LoadoutItem::displayName).orElse(key);
-            int color = key == null ? PixelTheme.TEXT_DIM : PixelTheme.TEXT;
+            int color = key == null ? FlatTheme.TEXT_DIM : FlatTheme.TEXT;
             int iconX = rowX + 56;
             int textX = iconX + 20;
             if (key != null) {
@@ -239,8 +241,8 @@ public final class LoadoutScreen extends Screen {
             boolean active = i == loadoutSet.activeIndex();
             boolean def = i == loadoutSet.defaultIndex();
             boolean hovered = mouseX >= x && mouseX <= x + cardW && mouseY >= y && mouseY <= y + cardH;
-            PixelTheme.row(gg, x, y, cardW, cardH, selected || hovered);
-            int border = selected ? PixelTheme.ACCENT : (active ? 0xFF9ACD68 : 0x55395B2F);
+            FlatTheme.row(gg, x, y, cardW, cardH, selected || hovered);
+            int border = selected ? FlatTheme.ACCENT : (active ? FlatTheme.SUCCESS : FlatTheme.BORDER);
             gg.fill(x, y, x + cardW, y + 1, border);
             gg.fill(x, y + cardH - 1, x + cardW, y + cardH, border);
             gg.fill(x, y, x + 1, y + cardH, border);
@@ -249,9 +251,9 @@ public final class LoadoutScreen extends Screen {
             Loadout loadout = loadoutSet.get(i);
             String tags = (def ? " §e默认" : "") + (active ? " §a已选" : "");
             gg.drawString(font, trim("§f第 " + (i + 1) + " 套" + tags, cardW - 12),
-                    x + 6, y + 5, PixelTheme.TEXT, false);
+                    x + 6, y + 5, FlatTheme.TEXT, false);
             if (cardH >= 44) {
-                gg.drawString(font, "§7" + classLabel(loadout.classType()), x + 6, y + 17, PixelTheme.TEXT_DIM, false);
+                gg.drawString(font, "§7" + classLabel(loadout.classType()), x + 6, y + 17, FlatTheme.TEXT_DIM, false);
             }
 
             int iconY = y + Math.max(cardH >= 44 ? 30 : 20, cardH - 24);
@@ -271,8 +273,8 @@ public final class LoadoutScreen extends Screen {
                 return;
             }
         }
-        gg.fill(x + 1, y + 1, x + 15, y + 15, 0x55000000);
-        gg.drawCenteredString(font, "-", x + 8, y + 4, PixelTheme.TEXT_DIM);
+        gg.fill(x + 1, y + 1, x + 15, y + 15, FlatTheme.SURFACE_DISABLED);
+        gg.drawCenteredString(font, "-", x + 8, y + 4, FlatTheme.TEXT_DIM);
     }
 
     private int cardX() {

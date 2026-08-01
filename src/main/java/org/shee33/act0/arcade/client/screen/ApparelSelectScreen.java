@@ -63,9 +63,9 @@ public final class ApparelSelectScreen extends Screen {
     @Override
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         renderBackground(gg);
-        PixelTheme.panel(gg, left, top, panelW, panelH);
-        gg.drawCenteredString(font, "§l" + slot.displayName(), left + panelW / 2, top + 10, PixelTheme.ACCENT);
-        gg.drawCenteredString(font, "§7默认免费，未解锁点击购买", left + panelW / 2, top + 24, PixelTheme.TEXT_DIM);
+        FlatTheme.panel(gg, left, top, panelW, panelH);
+        gg.drawCenteredString(font, slot.displayName(), left + panelW / 2, top + 10, FlatTheme.TEXT_HEADER);
+        gg.drawCenteredString(font, "§7默认免费，未解锁点击购买", left + panelW / 2, top + 24, FlatTheme.TEXT_DIM);
         String selected = selection.selectedKey(slot).orElse(null);
         for (int i = 0; i < options.size(); i++) {
             ApparelItem item = options.get(i);
@@ -76,16 +76,16 @@ public final class ApparelSelectScreen extends Screen {
             }
             boolean locked = !item.isDefault() && !ClientUnlocks.isUnlocked(item.key());
             boolean isSelected = item.key().equals(selected);
-            PixelTheme.row(gg, x, y, CELL, CELL, isSelected);
+            FlatTheme.row(gg, x, y, CELL, CELL, isSelected);
             ItemStack icon = ClientApparel.iconFor(item);
             if (!icon.isEmpty()) {
                 gg.renderItem(icon, x + (CELL - 16) / 2, y + 8);
             }
             gg.drawCenteredString(font, trim(item.displayName(), CELL - 4), x + CELL / 2, y + CELL - 18,
-                    locked ? PixelTheme.TEXT_DIM : PixelTheme.TEXT);
+                    locked ? FlatTheme.TEXT_DIM : FlatTheme.TEXT);
             if (locked) {
-                gg.fill(x, y, x + CELL, y + CELL, 0x88000000);
-                gg.drawCenteredString(font, "§c" + item.price(), x + CELL / 2, y + CELL / 2 - 4, 0xFFFF5555);
+                gg.fill(x, y, x + CELL, y + CELL, FlatTheme.MODAL_OVERLAY);
+                gg.drawCenteredString(font, String.valueOf(item.price()), x + CELL / 2, y + CELL / 2 - 4, FlatTheme.DANGER);
             }
         }
         super.render(gg, mouseX, mouseY, partialTick);

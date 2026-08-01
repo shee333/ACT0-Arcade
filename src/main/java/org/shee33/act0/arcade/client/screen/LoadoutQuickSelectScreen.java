@@ -24,6 +24,7 @@ public final class LoadoutQuickSelectScreen extends Screen {
     private int top;
     private int panelW;
     private int panelH;
+    private final long openedAtMs = System.currentTimeMillis();
 
     public LoadoutQuickSelectScreen(LoadoutSet loadoutSet) {
         super(Component.literal("选择配装"));
@@ -41,7 +42,8 @@ public final class LoadoutQuickSelectScreen extends Screen {
     @Override
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         renderBackground(gg);
-        PixelTheme.panel(gg, left, top, panelW, panelH);
+        FlatTheme.Fade fade = FlatTheme.fadeIn(openedAtMs);
+        FlatTheme.panel(gg, left, top, panelW, panelH, fade.alpha());
         int cardX = left + (panelW - CARD_W) / 2;
         int startY = top + 12;
         for (int i = 0; i < LoadoutSet.MAX_SLOTS; i++) {
@@ -71,8 +73,8 @@ public final class LoadoutQuickSelectScreen extends Screen {
         boolean active = index == loadoutSet.activeIndex();
         boolean def = index == loadoutSet.defaultIndex();
         boolean hovered = mouseX >= x && mouseX <= x + CARD_W && mouseY >= y && mouseY <= y + CARD_H;
-        PixelTheme.row(gg, x, y, CARD_W, CARD_H, active || hovered);
-        int border = active ? PixelTheme.ACCENT : 0x55395B2F;
+        FlatTheme.row(gg, x, y, CARD_W, CARD_H, active || hovered);
+        int border = active ? FlatTheme.ACCENT : FlatTheme.BORDER;
         gg.fill(x, y, x + CARD_W, y + 1, border);
         gg.fill(x, y + CARD_H - 1, x + CARD_W, y + CARD_H, border);
         gg.fill(x, y, x + 1, y + CARD_H, border);
@@ -80,8 +82,8 @@ public final class LoadoutQuickSelectScreen extends Screen {
 
         Loadout loadout = loadoutSet.get(index);
         String tags = (def ? " §e默认" : "") + (active ? " §a已选" : "");
-        gg.drawString(font, "§f第 " + (index + 1) + " 套" + tags, x + 6, y + 5, PixelTheme.TEXT, false);
-        gg.drawString(font, "§7" + classLabel(loadout.classType()), x + 6, y + 17, PixelTheme.TEXT_DIM, false);
+        gg.drawString(font, "§f第 " + (index + 1) + " 套" + tags, x + 6, y + 5, FlatTheme.TEXT, false);
+        gg.drawString(font, "§7" + classLabel(loadout.classType()), x + 6, y + 17, FlatTheme.TEXT_DIM, false);
         renderWeapon(gg, loadout, LoadoutSlot.PRIMARY_WEAPON, x + 8, y + 34);
         renderWeapon(gg, loadout, LoadoutSlot.SECONDARY_WEAPON, x + 58, y + 34);
         renderWeapon(gg, loadout, LoadoutSlot.MELEE, x + 108, y + 34);
@@ -96,8 +98,8 @@ public final class LoadoutQuickSelectScreen extends Screen {
                 return;
             }
         }
-        gg.fill(x + 1, y + 1, x + 15, y + 15, 0x55000000);
-        gg.drawCenteredString(font, "-", x + 8, y + 4, PixelTheme.TEXT_DIM);
+        gg.fill(x + 1, y + 1, x + 15, y + 15, FlatTheme.SURFACE_DISABLED);
+        gg.drawCenteredString(font, "-", x + 8, y + 4, FlatTheme.TEXT_DIM);
     }
 
     private static String classLabel(PlayerClassType type) {

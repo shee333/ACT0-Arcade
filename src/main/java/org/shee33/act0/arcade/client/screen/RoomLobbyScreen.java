@@ -21,6 +21,7 @@ public final class RoomLobbyScreen extends Screen {
     private int left;
     private int top;
     private int refreshTimer;
+    private final long openedAtMs = System.currentTimeMillis();
 
     private int startX, startY, startW, startH;
     private int leaveX, leaveY, leaveW, leaveH;
@@ -69,11 +70,12 @@ public final class RoomLobbyScreen extends Screen {
     @Override
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         renderBackground(gg);
-        PixelTheme.panel(gg, left, top, W, H);
-        PixelTheme.titleBar(gg, left + 1, top + 1, W - 2, 24);
+        FlatTheme.Fade fade = FlatTheme.fadeIn(openedAtMs);
+        FlatTheme.panel(gg, left, top, W, H, fade.alpha());
+        FlatTheme.titleBar(gg, left, top, W, 24);
         RoomDto room = currentRoom();
         if (room == null) {
-            gg.drawCenteredString(font, "§c房间不存在或已关闭", left + W / 2, top + 92, 0xFFFFFFFF);
+            gg.drawCenteredString(font, "§c房间不存在或已关闭", left + W / 2, top + 92, FlatTheme.DANGER);
             renderButton(gg, left + W / 2 - 40, top + 125, 80, 20, "返回浏览器", mouseX, mouseY, true);
             browserX = left + W / 2 - 40;
             browserY = top + 125;
@@ -82,14 +84,14 @@ public final class RoomLobbyScreen extends Screen {
             return;
         }
 
-        gg.drawCenteredString(font, "§l房间大厅", left + W / 2, top + 9, PixelTheme.TEXT);
-        PixelTheme.card(gg, left + 12, top + 31, W - 24, 32, false);
-        gg.drawString(font, "§7模式 §f" + room.modeName() + " §8/ §7地图 §f" + room.arenaId(), left + 18, top + 37, PixelTheme.TEXT, false);
-        gg.drawString(font, "§7房主 §f" + room.hostName() + " §8/ §7目标 §f" + room.targetText(), left + 18, top + 49, PixelTheme.TEXT, false);
+        gg.drawCenteredString(font, "房间大厅", left + W / 2, top + 9, FlatTheme.TEXT_HEADER);
+        FlatTheme.card(gg, left + 12, top + 31, W - 24, 32, false);
+        gg.drawString(font, "§7模式 §f" + room.modeName() + " §8/ §7地图 §f" + room.arenaId(), left + 18, top + 37, FlatTheme.TEXT, false);
+        gg.drawString(font, "§7房主 §f" + room.hostName() + " §8/ §7目标 §f" + room.targetText(), left + 18, top + 49, FlatTheme.TEXT, false);
         int progressX = left + W - 82;
-        gg.drawString(font, "§f" + room.size() + "/" + room.capacity(), progressX + 52, top + 43, PixelTheme.SUCCESS, false);
-        PixelTheme.progress(gg, progressX, top + 47, 46, 4,
-            room.capacity() <= 0 ? 0f : room.size() / (float) room.capacity(), PixelTheme.SUCCESS);
+        gg.drawString(font, room.size() + "/" + room.capacity(), progressX + 52, top + 43, FlatTheme.SUCCESS, false);
+        FlatTheme.progress(gg, progressX, top + 47, 46, 4,
+            room.capacity() <= 0 ? 0f : room.size() / (float) room.capacity(), FlatTheme.SUCCESS);
 
         renderSlots(gg, room, mouseX, mouseY);
         renderControls(gg, room, mouseX, mouseY);
@@ -109,12 +111,12 @@ public final class RoomLobbyScreen extends Screen {
             int x = left + 14 + col * (slotW + 6);
             int y = startY + row * (slotH + 4);
             boolean filled = i < names.size();
-            PixelTheme.card(gg, x, y, slotW, slotH, filled);
+            FlatTheme.card(gg, x, y, slotW, slotH, filled);
             String text = filled ? "§a● §f" + trim(names.get(i), slotW - 18) : "§8空位 " + (i + 1);
-            gg.drawString(font, text, x + 5, y + 5, filled ? PixelTheme.TEXT : PixelTheme.TEXT_DIM, false);
+            gg.drawString(font, text, x + 5, y + 5, filled ? FlatTheme.TEXT : FlatTheme.TEXT_DIM, false);
         }
         if (room.capacity() > count) {
-            gg.drawString(font, "§8… 还有 " + (room.capacity() - count) + " 个槽位", left + 14, top + 145, PixelTheme.TEXT_DIM, false);
+            gg.drawString(font, "§8… 还有 " + (room.capacity() - count) + " 个槽位", left + 14, top + 145, FlatTheme.TEXT_DIM, false);
         }
         if (supportsTeamChoice(room)) {
             teamY = top + 154;
@@ -142,7 +144,7 @@ public final class RoomLobbyScreen extends Screen {
         adjustH = 20;
         plusX = minusX + adjustW + 64;
         renderButton(gg, minusX, adjustY, adjustW, adjustH, "-", mouseX, mouseY, host && room.capacity() > room.size());
-        gg.drawCenteredString(font, "§7人数", minusX + adjustW + 32, y + 6, PixelTheme.TEXT_DIM);
+        gg.drawCenteredString(font, "§7人数", minusX + adjustW + 32, y + 6, FlatTheme.TEXT_DIM);
         renderButton(gg, plusX, adjustY, adjustW, adjustH, "+", mouseX, mouseY, host && room.capacity() < 32);
 
         leaveW = 54;
@@ -160,13 +162,14 @@ public final class RoomLobbyScreen extends Screen {
 
     private void renderButton(GuiGraphics gg, int x, int y, int w, int h, String label, int mouseX, int mouseY, boolean enabled) {
         boolean hovered = enabled && inRect(mouseX, mouseY, x, y, w, h);
-        int border = enabled ? (hovered ? PixelTheme.ACCENT : PixelTheme.BEVEL_LIGHT) : PixelTheme.BEVEL_SHADOW;
-        int body = enabled ? (hovered ? PixelTheme.SURFACE_HOVER : PixelTheme.SURFACE) : 0xFF171A15;
-        gg.fill(x, y, x + w, y + h, PixelTheme.BORDER_DARK);
-        gg.fill(x + 1, y + 1, x + w - 1, y + h - 1, body);
-        gg.fill(x + 1, y + 1, x + w - 1, y + 2, border);
-        gg.fill(x + 1, y + 1, x + 2, y + h - 1, border);
-        int color = enabled ? PixelTheme.TEXT : PixelTheme.TEXT_DIM;
+        int body = enabled ? (hovered ? FlatTheme.SURFACE_HOVER : FlatTheme.SURFACE) : FlatTheme.SURFACE_DISABLED;
+        int border = enabled ? (hovered ? FlatTheme.ACCENT : FlatTheme.BORDER) : FlatTheme.DIVIDER;
+        gg.fill(x, y, x + w, y + h, body);
+        gg.fill(x, y, x + w, y + 1, border);
+        gg.fill(x, y + h - 1, x + w, y + h, border);
+        gg.fill(x, y, x + 1, y + h, border);
+        gg.fill(x + w - 1, y, x + w, y + h, border);
+        int color = enabled ? FlatTheme.TEXT : FlatTheme.TEXT_DIM;
         gg.drawCenteredString(font, label, x + w / 2, y + 6, color);
     }
 

@@ -78,14 +78,14 @@ public final class ApparelScreen extends Screen {
     @Override
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         renderBackground(gg);
-        PixelTheme.panel(gg, left, top, panelW, panelH);
-        gg.drawCenteredString(font, "§l共享服饰", left + panelW / 2, top + 10, PixelTheme.ACCENT);
-        gg.drawCenteredString(font, "§7所有配装共用这一套外观", left + panelW / 2, top + 26, PixelTheme.TEXT_DIM);
+        FlatTheme.panel(gg, left, top, panelW, panelH);
+        gg.drawCenteredString(font, "共享服饰", left + panelW / 2, top + 10, FlatTheme.TEXT_HEADER);
+        gg.drawCenteredString(font, "§7所有配装共用这一套外观", left + panelW / 2, top + 26, FlatTheme.TEXT_DIM);
 
         int y = rowY;
         for (ApparelSlot slot : ApparelSlot.values()) {
-            PixelTheme.row(gg, rowX, y - 2, rowW, 24, false);
-            gg.drawString(font, slot.displayName(), rowX + 6, y + 4, PixelTheme.TEXT_DIM, false);
+            FlatTheme.row(gg, rowX, y - 2, rowW, 24, false);
+            gg.drawString(font, slot.displayName(), rowX + 6, y + 4, FlatTheme.TEXT_DIM, false);
             String key = working.selectedKey(slot).orElse(null);
             String name = key == null ? "§8— 未选 —" : ClientApparel.registry().find(key).map(ApparelItem::displayName).orElse(key);
             if (key != null) {
@@ -95,7 +95,7 @@ public final class ApparelScreen extends Screen {
                 }
             }
             gg.drawString(font, trim(name, rowW - 128), rowX + 78, y + 4,
-                    key == null ? PixelTheme.TEXT_DIM : PixelTheme.TEXT, false);
+                    key == null ? FlatTheme.TEXT_DIM : FlatTheme.TEXT, false);
             y += rowH;
         }
         super.render(gg, mouseX, mouseY, partialTick);

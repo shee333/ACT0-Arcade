@@ -31,7 +31,7 @@ import java.util.List;
  *
  * <p>武器数量超过可视行数时，网格区域可用鼠标滚轮上下滚动，界面尺寸保持固定，不会随武器数量膨胀。
  *
- * <p>渲染基于 {@link GuiGraphics} + {@link PixelTheme} 程序化像素面板，不依赖外部贴图。
+ * <p>渲染基于 {@link GuiGraphics} + {@link FlatTheme} 程序化扁平面板，不依赖外部贴图。
  */
 public final class WeaponSelectScreen extends Screen {
 
@@ -57,6 +57,7 @@ public final class WeaponSelectScreen extends Screen {
     private int gridX;
     private int gridY;
     private int viewportH;
+    private final long openedAtMs = System.currentTimeMillis();
 
     /** 当前滚动偏移（以行为单位）。 */
     private int scrollRow;
@@ -69,7 +70,7 @@ public final class WeaponSelectScreen extends Screen {
     private long shownFeedbackTs;
     /** 界面内提示文本与颜色（来自购买反馈）。 */
     private String message;
-    private int messageColor = 0xFFFFFFFF;
+    private int messageColor = FlatTheme.TEXT_HEADER;
     private long messageUntilMs;
 
     /**
@@ -281,9 +282,10 @@ public final class WeaponSelectScreen extends Screen {
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         renderBackground(gg);
         pollFeedback();
-        PixelTheme.panel(gg, left, top, panelW, panelH);
+        FlatTheme.Fade fade = FlatTheme.fadeIn(openedAtMs);
+        FlatTheme.panel(gg, left, top, panelW, panelH, fade.alpha());
 
-        gg.drawCenteredString(font, "§l" + headerLabel(), left + panelW / 2, top + 10, PixelTheme.ACCENT);
+        gg.drawCenteredString(font, headerLabel(), left + panelW / 2, top + 10, FlatTheme.TEXT_HEADER);
 
         String selectedKey = working.slotItemKey(slot).orElse(null);
         LoadoutItem hovered = null;
@@ -301,7 +303,7 @@ public final class WeaponSelectScreen extends Screen {
             boolean selected = item.key().equals(selectedKey);
 
             // 单元底纹（选中高亮）
-            PixelTheme.row(gg, cx, cy, CELL, CELL, selected);
+            FlatTheme.row(gg, cx, cy, CELL, CELL, selected);
 
             // 物品图标居中
             ItemStack icon = ClientCatalog.iconFor(item);
@@ -313,13 +315,13 @@ public final class WeaponSelectScreen extends Screen {
 
             // 武器名（截断）
             String name = trim(item.displayName(), CELL - 6);
-            int nameColor = locked ? PixelTheme.TEXT_DIM : PixelTheme.TEXT;
+            int nameColor = locked ? FlatTheme.TEXT_DIM : FlatTheme.TEXT;
             gg.drawCenteredString(font, name, cx + CELL / 2, cy + CELL - 24, nameColor);
 
             if (locked) {
-                // 灰色蒙版 + 红字「未解锁」
+                // 灰色蒙版 + 橙字「未解锁」（危险/警示色统一用橙，不用纯红）
                 gg.fill(cx, cy, cx + CELL, cy + CELL, LOCK_OVERLAY);
-                gg.drawCenteredString(font, "§c未解锁", cx + CELL / 2, cy + CELL / 2 - 4, 0xFFFF5555);
+                gg.drawCenteredString(font, "未解锁", cx + CELL / 2, cy + CELL / 2 - 4, FlatTheme.DANGER);
             }
 
             if (mouseX >= cx && mouseX < cx + CELL && mouseY >= cy && mouseY < cy + CELL) {
@@ -357,11 +359,11 @@ public final class WeaponSelectScreen extends Screen {
         shownFeedbackTs = ts;
         BuyOutcome outcome = ClientBuyFeedback.outcome();
         switch (outcome) {
-            case SUCCESS -> setMessage("§a购买成功", 0xFF8AE66B);
-            case ALREADY_OWNED -> setMessage("§a已拥有", 0xFF8AE66B);
-            case INSUFFICIENT -> setMessage("§c余额不足", 0xFFFF5555);
-            case UNAVAILABLE -> setMessage("§c当前无法购买", 0xFFFF5555);
-            default -> setMessage("§c购买失败", 0xFFFF5555);
+            case SUCCESS -> setMessage("购买成功", FlatTheme.SUCCESS);
+            case ALREADY_OWNED -> setMessage("已拥有", FlatTheme.SUCCESS);
+            case INSUFFICIENT -> setMessage("余额不足", FlatTheme.DANGER);
+            case UNAVAILABLE -> setMessage("当前无法购买", FlatTheme.DANGER);
+            default -> setMessage("购买失败", FlatTheme.DANGER);
         }
     }
 
@@ -374,17 +376,16 @@ public final class WeaponSelectScreen extends Screen {
     private void renderActionDialog(GuiGraphics gg, int mouseX, int mouseY) {
         gg.pose().pushPose();
         gg.pose().translate(0, 0, 300);
-        gg.fill(0, 0, this.width, this.height, 0xCC000000);
+        gg.fill(0, 0, this.width, this.height, FlatTheme.MODAL_OVERLAY);
 
         int boxW = Math.min(panelW - 20, 220);
         int boxH = 86;
         int bx = left + (panelW - boxW) / 2;
         int by = top + (panelH - boxH) / 2;
-        gg.fill(bx, by, bx + boxW, by + boxH, 0xFF000000);
-        PixelTheme.panel(gg, bx, by, boxW, boxH);
+        FlatTheme.panel(gg, bx, by, boxW, boxH);
 
-        gg.drawCenteredString(font, pendingAction.displayName(), left + panelW / 2, by + 10, PixelTheme.ACCENT);
-        gg.drawCenteredString(font, "§7选择此武器，或进入改装", left + panelW / 2, by + 24, PixelTheme.TEXT_DIM);
+        gg.drawCenteredString(font, pendingAction.displayName(), left + panelW / 2, by + 10, FlatTheme.TEXT_HEADER);
+        gg.drawCenteredString(font, "§7选择此武器，或进入改装", left + panelW / 2, by + 24, FlatTheme.TEXT_DIM);
 
         drawTextButton(gg, actionModifyRect(), "§e改装", mouseX, mouseY);
         drawTextButton(gg, actionChooseRect(), "§a选择", mouseX, mouseY);
@@ -421,20 +422,18 @@ public final class WeaponSelectScreen extends Screen {
         gg.pose().pushPose();
         gg.pose().translate(0, 0, 300);
 
-        // 整屏暗化（模态遮罩）
-        gg.fill(0, 0, this.width, this.height, 0xCC000000);
+        // 整屏暗化（模态遮罩，深色系而非纯黑）
+        gg.fill(0, 0, this.width, this.height, FlatTheme.MODAL_OVERLAY);
 
         int boxW = Math.min(panelW - 20, 200);
         int boxH = 80;
         int bx = left + (panelW - boxW) / 2;
         int by = top + (panelH - boxH) / 2;
-        // 先铺一层不透明底，再画面板，杜绝半透明背景透字
-        gg.fill(bx, by, bx + boxW, by + boxH, 0xFF000000);
-        PixelTheme.panel(gg, bx, by, boxW, boxH);
+        FlatTheme.panel(gg, bx, by, boxW, boxH);
 
-        gg.drawCenteredString(font, "§l购买确认", left + panelW / 2, by + 8, PixelTheme.ACCENT);
-        gg.drawCenteredString(font, pendingPurchase.displayName(), left + panelW / 2, by + 22, PixelTheme.TEXT);
-        gg.drawCenteredString(font, "§e花费 " + pendingPurchase.price(), left + panelW / 2, by + 34, 0xFFE6C84B);
+        gg.drawCenteredString(font, "购买确认", left + panelW / 2, by + 8, FlatTheme.TEXT_HEADER);
+        gg.drawCenteredString(font, pendingPurchase.displayName(), left + panelW / 2, by + 22, FlatTheme.TEXT);
+        gg.drawCenteredString(font, "花费 " + pendingPurchase.price(), left + panelW / 2, by + 34, FlatTheme.DANGER);
 
         int[] confirm = confirmButtonRect();
         int[] cancel = cancelButtonRect();
@@ -446,9 +445,9 @@ public final class WeaponSelectScreen extends Screen {
 
     private void drawTextButton(GuiGraphics gg, int[] r, String label, int mouseX, int mouseY) {
         boolean hover = inRect(mouseX, mouseY, r);
-        gg.fill(r[0], r[1], r[0] + r[2], r[1] + r[3], hover ? 0xFF3A4A2A : 0xFF26301C);
-        gg.fill(r[0], r[1], r[0] + r[2], r[1] + 1, PixelTheme.BEVEL_LIGHT);
-        gg.drawCenteredString(font, label, r[0] + r[2] / 2, r[1] + (r[3] - 8) / 2, PixelTheme.TEXT);
+        gg.fill(r[0], r[1], r[0] + r[2], r[1] + r[3], hover ? FlatTheme.SURFACE_HOVER : FlatTheme.SURFACE);
+        gg.fill(r[0], r[1], r[0] + r[2], r[1] + 1, hover ? FlatTheme.ACCENT : FlatTheme.BORDER);
+        gg.drawCenteredString(font, label, r[0] + r[2] / 2, r[1] + (r[3] - 8) / 2, FlatTheme.TEXT);
     }
 
     private String trim(String text, int maxWidth) {
@@ -478,13 +477,13 @@ public final class WeaponSelectScreen extends Screen {
         int trackX = left + panelW - 8;
         int trackY = gridY;
         int trackH = viewportH;
-        gg.fill(trackX, trackY, trackX + 3, trackY + trackH, 0x40000000);
+        gg.fill(trackX, trackY, trackX + 3, trackY + trackH, FlatTheme.SURFACE_DISABLED);
 
         int total = totalRows();
         int thumbH = Math.max(12, trackH * VISIBLE_ROWS / total);
         int range = trackH - thumbH;
         int thumbY = trackY + (range * scrollRow / maxScrollRow());
-        gg.fill(trackX, thumbY, trackX + 3, thumbY + thumbH, PixelTheme.BEVEL_LIGHT);
+        gg.fill(trackX, thumbY, trackX + 3, thumbY + thumbH, FlatTheme.ACCENT);
     }
 
     private static String slotLabel(LoadoutSlot slot) {
