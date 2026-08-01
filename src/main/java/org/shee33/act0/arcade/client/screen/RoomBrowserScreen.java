@@ -147,6 +147,13 @@ public final class RoomBrowserScreen extends Screen {
             onClose();
             return;
         }
+        if (room.roomId().startsWith("bt@")) {
+            // ACT0-Battlefield 突破模式目前没有 quickjoin 命令（也没有按 key 加入指定对局的命令），
+            // 只有 /breakthrough join attacker|defender 这一对真实存在的候选名单命令，故以进攻方为默认。
+            minecraft.player.connection.sendCommand("breakthrough join attacker");
+            onClose();
+            return;
+        }
         if (room.youAreMember()) {
             minecraft.player.connection.sendCommand("arcade room leave");
         } else {
