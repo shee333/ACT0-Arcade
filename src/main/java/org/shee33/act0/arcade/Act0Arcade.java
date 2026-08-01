@@ -104,7 +104,9 @@ public final class Act0Arcade {
             ArcadeNetwork.syncCatalog(player, SERVICES.registry());
             ArcadeNetwork.syncApparel(player);
             ArcadeNetwork.syncAttachmentCatalog(player);
-            // 若属于某进行中的对局，则重连归位
+            // 登入不做对局自动归位：玩家掉线时已被 ArcadeMatch.onPlayerLeft 从对局侧数据中移除，
+            // 重新上线后如需继续对局必须走"中途加入"流程（由 RoomManager / 命令触发）。
+            // 见 MatchManager#onPlayerLogin 的注释。
             SERVICES.matches().onPlayerLogin(player);
         }
     }

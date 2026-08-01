@@ -144,7 +144,13 @@ public final class MatchManager {
         matchByPlayer.remove(playerId);
     }
 
-    /** 玩家登入：不再自动归位；玩家可通过浏览器中途加入。 */
+    /**
+     * 玩家登入：对局不会自动把玩家"归位"——
+     * 因为 {@link #onPlayerLogout} 在掉线时已通过 {@link ArcadeMatch#onPlayerLeft} 把该玩家从
+     * 对局的 {@code sideOf} 中完全移除，对局内已不再保留该玩家的座位/装备/HUD 状态。
+     * 重新进入对局只能走"中途加入"流程（{@link ArcadeMatch#addLatecomer}），
+     * 由 {@code RoomManager} / 玩家手动触发，本方法保持空实现以避免误导性自动恢复。
+     */
     public void onPlayerLogin(ServerPlayer player) {
     }
 

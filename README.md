@@ -2,7 +2,7 @@
 
 ACT0 街机对战玩法模组（Forge 1.20.1 / Forge 47.4.10，Java 17）。
 
-提供统一配装系统与四种街机对战模式：**单挑 1v1、2v2、团队死斗、个人乱斗**。
+提供统一配装系统与八种街机对战模式：**单挑 1v1、2v2、团队死斗、热区、个人乱斗、跳狙飞人、军备竞赛、军备竞赛 团队**。
 设计文档见 [../docs/ARCADE_MODES_DESIGN.md](../docs/ARCADE_MODES_DESIGN.md)。
 
 > 独立、可编译、可单测的全新实现。配装与多玩法框架为净室自研
@@ -32,7 +32,7 @@ org.shee33.act0.arcade
 │   └── PhaseTimer        刻级倒计时（到点边沿触发）
 ├── mode/                 模式描述层（MC-free，可单测）
 │   ├── ScoringMode       ROUND_WIN（决斗）/ KILL_COUNT（死斗）
-│   └── MatchSettings     模式描述符 + 四模式预设
+│       └── MatchSettings     模式描述符 + 八模式预设
 ├── arena/                竞技场数据（MC-free）
 │   ├── SpawnPoint        维度 + 坐标 + 朝向
 │   └── ArcadeArena       按方出生点 / 随机复活池 / 返回点 / 校验
@@ -43,7 +43,7 @@ org.shee33.act0.arcade
 │   ├── ArenaRegistry     按 arenaId 持久化竞技场
 │   └── LoadoutCatalogIO  装备目录 JSON 数据驱动读写（config/act0_arcade/loadout/*.json）
 ├── command/              接入层
-│   └── ArcadeCommand     /arcade arena|loadout|start|stop|list|browse|reload
+│   └── ArcadeCommand     /arcade arena|loadout|room|queue|armory|settings|hologram|money|start|stop|list|browse|reload
 ├── network/              网络
 │   ├── ArcadeNetwork     SimpleChannel + 数据包注册 + 目录同步入口
 │   ├── OpenLoadoutPacket S→C 打开配装界面
@@ -55,16 +55,18 @@ org.shee33.act0.arcade
 │   ├── ClientLoadoutScreenOpener
 │   ├── ClientBrowserScreenOpener
 │   └── screen/
-│       ├── PixelTheme    像素风配色 + 程序化九宫格面板（无需贴图）
+│       ├── PixelTheme    像素风配色 + 程序化像素面板（无需贴图，零资源依赖）
 │       ├── LoadoutScreen 像素风配装编辑界面（渲染真实物品图标）
 │       └── ModeBrowserScreen 像素风游戏浏览器（模式/竞技场选择）
 └── match/                对局运行时（MC 层）
     ├── ArcadeServices    服务持有者（注册表/应用器/管理器/队列）
     ├── TeleportHelper    维度解析 + 跨维度传送
-    ├── ArcadeMatch       通用对局编排（单一实现驱动全部四模式）+ Title/ActionBar/Bossbar/音效 反馈
+    ├── ArcadeMatch     通用对局编排（单一实现驱动全部八模式）+ Title/ActionBar/Bossbar/音效 反馈
     ├── MatchScoreboard   每对局私有侧边栏计分板（直接发包，不污染全局计分板）
-    ├── MatchLauncher     启局工厂（命令与队列共用：查场/构模式/校验/登记/开局）
+    ├── MatchLauncher     启局工厂（命令、队列、房间共用：查场/构模式/校验/登记/开局）
     ├── MatchQueue        匹配队列（按 模式@竞技场 排队，凑够人数自动开局）
+    ├── RoomManager       房间/大厅：创建/加入/离开/开始；满员自动开局，进行中弹性模式允许中途补人
+    ├── ArcadeRoom        房间数据（房主/成员/模式/竞技场/容量/可配置项/状态）
     └── MatchManager      Forge 事件路由（ServerTick + LivingDeath）+ 对局回收
 ```
 
@@ -78,16 +80,20 @@ org.shee33.act0.arcade
 - **Bossbar**：顶部血条集中显示阶段、比分与倒计时进度（倒计时按时间、战斗按比分）。
 - **侧边栏计分板**：实时显示赛制目标与各方比分（胜方加 ▶ 标记）；每对局独立、互不干扰。
 
-## 四种模式
+## 八种模式
 
 | 模式 | id | 方数×人数 | 计分 | 赛制（默认） | 复活 |
 |------|----|----------|------|------|------|
-| 单挑 | `duel_1v1` | 2×1 | 赢回合 | 5 局 3 胜 | 固定出生点 |
-| 2v2 | `duel_2v2` | 2×2 | 赢回合 | 5 局 3 胜 | 队友附近 |
-| 团队死斗 | `team_deathmatch` | 2×N | 击杀 | 先到 N 杀 | 队友附近 |
-| 个人乱斗 | `free_for_all` | N×1 | 击杀 | 先到 N 杀 | 随机 |
+| 单挑 | `duel_1v1` | 2×1 | 赢回合 | 先到 3 胜 | 固定出生点 |
+| 2v2 | `duel_2v2` | 2×2 | 赢回合 | 先到 3 胜 | 队友附近 |
+| 团队死斗 | `team_deathmatch` | 2×N | 击杀 | 先到 30 杀 | 队友附近 |
+| 热区 | `hot_zone` | 2×N | 占点得分 | 先到 150 分 | 队友附近 |
+| 个人乱斗 | `free_for_all` | N×1 | 击杀 | 先到 20 杀 | 随机 |
+| 跳狙飞人 | `jump_sniper` | 2×N | 赢回合 | 先到 5 胜 | 固定出生点（蓄力跳 + 随机狙击） |
+| 军备竞赛 | `arms_race` | N×1 | 升级 | 8 级连杀 | 随机 |
+| 军备竞赛 团队 | `team_arms_race` | 2×N | 升级 | 8 级连杀 | 队友附近 |
 
-四模式共用 `LoadoutRuleset.ARCADE`，对战场兵种专属道具"无缝禁用"，配装数据与战场模式共享。
+全部模式共用 `LoadoutRuleset.ARCADE`，对战场兵种专属道具"无缝禁用"，配装数据与战场模式共享。
 
 ## 构建与测试（离线环境）
 
@@ -98,7 +104,7 @@ cd D:\MiencraftDEV\ACT0DEV\ACT0-Arcade
 & 'D:\MiencraftDEV\ACT0DEV\Custom_loadouts\gradle_dl\gradle-8.5\bin\gradle.bat' compileJava test --no-daemon --console=plain
 ```
 
-- 18 个单测覆盖 MC-free 核心（loadout / round / mode）。
+- 17 个单测方法分布于 3 个测试类（`RoundFrameworkTest` / `LoadoutRuleEngineTest` / `MatchSettingsTest`），覆盖 MC-free 核心（loadout / round / mode）。
 - MC 依赖仅集中在 `loadout/mc`、`match`、`storage`、`command`、`network`、`client`。
 - `gradle build` 可产出可加载 jar。
 
@@ -108,7 +114,10 @@ cd D:\MiencraftDEV\ACT0DEV\ACT0-Arcade
 # 竞技场（需 OP）：在目标位置站好后录入出生点
 /arcade arena create <id>        # 以当前位置为返回点新建竞技场
 /arcade arena addspawn <id>      # 添加一个阵营固定出生点（决斗/团队按方取用）
+/arcade arena addrespawn <id>    # 添加一个阵营普通复活点
+/arcade arena addhotzone <id>    # 添加一个热区占点（热区模式用）
 /arcade arena addrandom <id>     # 添加一个随机复活点（个人乱斗用）
+/arcade arena setreturn <id>     # 重新设置竞技场返回点
 /arcade arena list|info <id>|remove <id>
 
 # 配装（任意玩家，持久化、街机/战地共享）
@@ -127,18 +136,23 @@ cd D:\MiencraftDEV\ACT0DEV\ACT0-Arcade
 /arcade queue status             # 查看各队列人数
 
 # 对局（需 OP）
-/arcade start duel_1v1 <arena> <玩家>          # 需 2 人
-/arcade start duel_2v2 <arena> <玩家>          # 需 4 人
-/arcade start team_deathmatch <arena> <玩家>   # 偶数人分两队，先到 30 杀
-/arcade start free_for_all <arena> <玩家>      # N 人混战，先到 20 杀
-/arcade stop <matchId> | list
+/arcade start <模式> <arena> <玩家…>          # 8 种模式均支持，按模式默认规则校验人数
+/arcade stop <matchId> | list                 # 终止 / 列出进行中的对局
+
+# 房间 / 大厅（房主或管理员；满员自动开局）
+/arcade room create <模式> <arena> [目标] [限时] [随机] [容量] [血量] [复活] [友伤] [补给%] [热区…]
+/arcade room size <N> [roomId]                # 调整房间容量
+/arcade room join <roomId>                    # 加入指定房间（满员即开局）
+/arcade room team blue|red                    # 团队/跳狙/军备团队模式选边
+/arcade room leave | start | list             # 离开 / 手动开局 / 列出房间
 ```
 
 ## 装备目录（JSON 数据驱动）
 
 装备目录由服务端 `config/act0_arcade/loadout/*.json` **数据驱动**：
 
-- 首次启动时，若目录为空会自动写出 `default.json`（含原版占位 + 一批 TaCZ 真枪示例）作为可编辑模板。
+- 模组**不再内置任何占位武器**——`DefaultLoadoutCatalog` 留空，新服务器得到的是空目录；
+  管理员需通过武器库（`/arcade armory …`）上架或在 `config/act0_arcade/loadout/*.json` 中手动维护条目。
 - 服务端启动 / `/arcade reload` 时加载全部 JSON，并通过 `SyncCatalogPacket` 下发给客户端（GUI 以服务端为准）。
 - 枪械以物品 SNBT 表达，应用层直接还原，**无需对 TaCZ 编译期依赖**；未装 TaCZ 时相关条目静默跳过。
 
@@ -167,10 +181,15 @@ cd D:\MiencraftDEV\ACT0DEV\ACT0-Arcade
 3. `/arcade reload`（或重启服务端）生效；新目录会自动同步到在线玩家。
 4. 整个过程**无需改代码 / 重新编译**；多个 JSON 文件会合并加载，便于按枪包拆分管理。
 
-> 内置默认条目见 `DefaultLoadoutCatalog`：原版占位保证未装 TaCZ 也能端到端联调，
-> 同时附带 AK-47 / HK416D / MP5 / AWP / Glock 17 / 沙鹰 等 TaCZ 真枪示例供复制。
+> 内置默认条目（`DefaultLoadoutCatalog`）已停用，目录由管理员维护；新玩家首次开局的"默认配装"只挑选
+> 注册表中标记为 `isDefault=true` 的武器，未维护时整张配装为空槽，不影响加入对局。
 
-## 待办
+## 已替代 / 已实现的旧待办
 
-- 浏览器内细化玩家选择器（当前管理员一键开局以自身 `@s` 为目标，普通玩家走队列）。
-- 九宫格贴图美化（当前为程序化像素面板，无需贴图即可运行）。
+下列条目是早期 README 留存的待办，已被当前实现替代，列在此处仅为说明决策：
+
+- ~~浏览器内细化玩家选择器~~ — 已由房间/大厅流程（`RoomManager` + `CreateRoomScreen` / `RoomLobbyScreen`）替代：
+  房主创建房间并配置容量、计分目标、限时、随机武器、友伤、补给概率等，其他人通过房间列表或点击聊天中的"加入"按钮直接进入；
+  旧的"管理员一键开局以自身 `@s` 为目标"路径仍保留供命令行快速测试。
+- ~~九宫格贴图美化~~ — 已由 `PixelTheme` 以纯程序化绘制（`GuiGraphics.fill`）实现双层斜角像素面板，
+  刻意不依赖任何 PNG 资源；后续若需要可平滑切换为真正的 nine-patch 贴图，不影响当前显示效果。
