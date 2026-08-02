@@ -28,7 +28,10 @@ public final class RelativeTeamSync {
         friendly.setNameTagVisibility(Team.Visibility.ALWAYS);
         PlayerTeam enemy = board.addPlayerTeam(teamName(viewer, false));
         enemy.setColor(ChatFormatting.RED);
-        enemy.setNameTagVisibility(Team.Visibility.ALWAYS);
+        // 敌方名牌必须隐藏，否则穿墙也能看到：这个虚拟队伍分配包会在真实对局队伍(setupNameTagTeams,
+        // HIDE_FOR_OTHER_TEAMS)之后持续同步，若设为 ALWAYS 会覆盖客户端上的队伍归属，
+        // 反而让敌方名牌无视墙体强制显示，等于废掉了原有的隐藏机制。
+        enemy.setNameTagVisibility(Team.Visibility.NEVER);
 
         viewer.connection.send(ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(friendly, true));
         viewer.connection.send(ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(enemy, true));
