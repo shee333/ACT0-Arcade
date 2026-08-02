@@ -149,9 +149,7 @@ public final class RoomBrowserScreen extends Screen {
             return;
         }
         if (room.roomId().startsWith("bt@")) {
-            // ACT0-Battlefield 突破模式目前没有 quickjoin 命令（也没有按 key 加入指定对局的命令），
-            // 只有 /breakthrough join attacker|defender 这一对真实存在的候选名单命令，故以进攻方为默认。
-            minecraft.player.connection.sendCommand("breakthrough join attacker");
+            minecraft.player.connection.sendCommand("breakthrough quickjoin \"" + room.roomId() + "\"");
             onClose();
             return;
         }
@@ -224,7 +222,7 @@ public final class RoomBrowserScreen extends Screen {
         String label;
         int color;
         boolean buttonHovered = mouseX >= ax && mouseX <= ax + ACTION_W && mouseY >= ay && mouseY <= ay + ah;
-        if (room.roomId().startsWith("bf@") && room.youAreMember()) {
+        if ((room.roomId().startsWith("bf@") || room.roomId().startsWith("bt@")) && room.youAreMember()) {
             label = "已在";
             color = FlatTheme.TEXT_DIM;
         } else if (room.youAreMember()) {
