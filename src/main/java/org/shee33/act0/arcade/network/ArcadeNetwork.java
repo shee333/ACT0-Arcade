@@ -3,6 +3,7 @@ package org.shee33.act0.arcade.network;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraftforge.network.NetworkDirection;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
@@ -25,6 +26,7 @@ import org.shee33.act0.arcade.storage.LoadoutCatalogIO;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -33,7 +35,7 @@ import java.util.UUID;
  */
 public final class ArcadeNetwork {
 
-        private static final String PROTOCOL = "9";
+        private static final String PROTOCOL = "10";
 
     @SuppressWarnings("removal")
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
@@ -45,51 +47,79 @@ public final class ArcadeNetwork {
     private ArcadeNetwork() {
     }
 
-    /** 在模组构造期调用，注册所有数据包。 */
+    /**
+     * 在模组构造期调用，注册所有数据包。
+     *
+     * <p>每个包都显式声明 {@link NetworkDirection}：S→C 包（服务端下发、客户端 {@code DistExecutor}
+     * 处理）用 {@code PLAY_TO_CLIENT}；C→S 包（客户端发出、服务端 {@code context.getSender()} 处理）
+     * 用 {@code PLAY_TO_SERVER}。缺失方向声明会让 Forge 的 {@code NetworkHooks.validatePacketDirection}
+     * 校验永远通过（{@code expectedDirection} 为空时判断恒为 false），等同于完全关闭方向校验。
+     */
     public static void register() {
         int id = 0;
         CHANNEL.registerMessage(id++, OpenLoadoutPacket.class,
-                OpenLoadoutPacket::encode, OpenLoadoutPacket::decode, OpenLoadoutPacket::handle);
+                OpenLoadoutPacket::encode, OpenLoadoutPacket::decode, OpenLoadoutPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(id++, SaveLoadoutPacket.class,
-                SaveLoadoutPacket::encode, SaveLoadoutPacket::decode, SaveLoadoutPacket::handle);
+                SaveLoadoutPacket::encode, SaveLoadoutPacket::decode, SaveLoadoutPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
         CHANNEL.registerMessage(id++, SyncCatalogPacket.class,
-                SyncCatalogPacket::encode, SyncCatalogPacket::decode, SyncCatalogPacket::handle);
+                SyncCatalogPacket::encode, SyncCatalogPacket::decode, SyncCatalogPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(id++, SyncUnlocksPacket.class,
-                SyncUnlocksPacket::encode, SyncUnlocksPacket::decode, SyncUnlocksPacket::handle);
+                SyncUnlocksPacket::encode, SyncUnlocksPacket::decode, SyncUnlocksPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(id++, BuyResultPacket.class,
-                BuyResultPacket::encode, BuyResultPacket::decode, BuyResultPacket::handle);
+                BuyResultPacket::encode, BuyResultPacket::decode, BuyResultPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(id++, SyncRoomListPacket.class,
-                SyncRoomListPacket::encode, SyncRoomListPacket::decode, SyncRoomListPacket::handle);
+                SyncRoomListPacket::encode, SyncRoomListPacket::decode, SyncRoomListPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(id++, RequestRoomListPacket.class,
-                RequestRoomListPacket::encode, RequestRoomListPacket::decode, RequestRoomListPacket::handle);
+                RequestRoomListPacket::encode, RequestRoomListPacket::decode, RequestRoomListPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
         CHANNEL.registerMessage(id++, SyncAttachmentCatalogPacket.class,
-                SyncAttachmentCatalogPacket::encode, SyncAttachmentCatalogPacket::decode, SyncAttachmentCatalogPacket::handle);
+                SyncAttachmentCatalogPacket::encode, SyncAttachmentCatalogPacket::decode, SyncAttachmentCatalogPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(id++, RequestModificationPacket.class,
-                RequestModificationPacket::encode, RequestModificationPacket::decode, RequestModificationPacket::handle);
+                RequestModificationPacket::encode, RequestModificationPacket::decode, RequestModificationPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
         CHANNEL.registerMessage(id++, SyncModificationPacket.class,
-                SyncModificationPacket::encode, SyncModificationPacket::decode, SyncModificationPacket::handle);
+                SyncModificationPacket::encode, SyncModificationPacket::decode, SyncModificationPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(id++, ModifyActionPacket.class,
-                ModifyActionPacket::encode, ModifyActionPacket::decode, ModifyActionPacket::handle);
+                ModifyActionPacket::encode, ModifyActionPacket::decode, ModifyActionPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
         CHANNEL.registerMessage(id++, BuyAttachmentPacket.class,
-                BuyAttachmentPacket::encode, BuyAttachmentPacket::decode, BuyAttachmentPacket::handle);
+                BuyAttachmentPacket::encode, BuyAttachmentPacket::decode, BuyAttachmentPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
         CHANNEL.registerMessage(id++, SyncSidebarPacket.class,
-                SyncSidebarPacket::encode, SyncSidebarPacket::decode, SyncSidebarPacket::handle);
+                SyncSidebarPacket::encode, SyncSidebarPacket::decode, SyncSidebarPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(id++, DeathCamPacket.class,
-                DeathCamPacket::encode, DeathCamPacket::decode, DeathCamPacket::handle);
+                DeathCamPacket::encode, DeathCamPacket::decode, DeathCamPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(id++, CloseRoomBrowserPacket.class,
-                CloseRoomBrowserPacket::encode, CloseRoomBrowserPacket::decode, CloseRoomBrowserPacket::handle);
+                CloseRoomBrowserPacket::encode, CloseRoomBrowserPacket::decode, CloseRoomBrowserPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(id++, RequestLoadoutPacket.class,
-                RequestLoadoutPacket::encode, RequestLoadoutPacket::decode, RequestLoadoutPacket::handle);
+                RequestLoadoutPacket::encode, RequestLoadoutPacket::decode, RequestLoadoutPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
         CHANNEL.registerMessage(id++, SelectLoadoutPacket.class,
-                SelectLoadoutPacket::encode, SelectLoadoutPacket::decode, SelectLoadoutPacket::handle);
+                SelectLoadoutPacket::encode, SelectLoadoutPacket::decode, SelectLoadoutPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
         CHANNEL.registerMessage(id++, SyncFireLockPacket.class,
-                SyncFireLockPacket::encode, SyncFireLockPacket::decode, SyncFireLockPacket::handle);
+                SyncFireLockPacket::encode, SyncFireLockPacket::decode, SyncFireLockPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(id++, SyncApparelPacket.class,
-                SyncApparelPacket::encode, SyncApparelPacket::decode, SyncApparelPacket::handle);
+                SyncApparelPacket::encode, SyncApparelPacket::decode, SyncApparelPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(id++, SaveApparelPacket.class,
-                SaveApparelPacket::encode, SaveApparelPacket::decode, SaveApparelPacket::handle);
+                SaveApparelPacket::encode, SaveApparelPacket::decode, SaveApparelPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
         CHANNEL.registerMessage(id++, JumpChargePacket.class,
-                JumpChargePacket::encode, JumpChargePacket::decode, JumpChargePacket::handle);
+                JumpChargePacket::encode, JumpChargePacket::decode, JumpChargePacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
     }
 
     /** 把服务端当前装备目录下发给指定玩家。 */

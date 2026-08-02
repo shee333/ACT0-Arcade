@@ -16,6 +16,8 @@ import java.util.function.Supplier;
  */
 public final class SyncCatalogPacket {
 
+    private static final int MAX_LIST_ENTRIES = 256;
+
     private final List<CatalogEntryDto> entries;
 
     public SyncCatalogPacket(List<CatalogEntryDto> entries) {
@@ -41,7 +43,7 @@ public final class SyncCatalogPacket {
     }
 
     public static SyncCatalogPacket decode(FriendlyByteBuf buf) {
-        int n = buf.readVarInt();
+        int n = Math.max(0, Math.min(buf.readVarInt(), MAX_LIST_ENTRIES));
         List<CatalogEntryDto> list = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
             CatalogEntryDto dto = new CatalogEntryDto();
@@ -52,7 +54,7 @@ public final class SyncCatalogPacket {
             dto.ammo = buf.readVarInt();
             dto.isDefault = buf.readBoolean();
             dto.snbt = buf.readUtf();
-            int cn = buf.readVarInt();
+            int cn = Math.max(0, Math.min(buf.readVarInt(), MAX_LIST_ENTRIES));
             List<String> classes = new ArrayList<>(cn);
             for (int j = 0; j < cn; j++) {
                 classes.add(buf.readUtf());

@@ -20,6 +20,8 @@ import java.util.function.Supplier;
  */
 public final class SyncSidebarPacket {
 
+    private static final int MAX_LIST_ENTRIES = 256;
+
     private final boolean show;
     private final String title;
     private final List<String> lines;
@@ -42,7 +44,7 @@ public final class SyncSidebarPacket {
     public static SyncSidebarPacket decode(FriendlyByteBuf buf) {
         boolean show = buf.readBoolean();
         String title = buf.readUtf();
-        int n = buf.readVarInt();
+        int n = Math.max(0, Math.min(buf.readVarInt(), MAX_LIST_ENTRIES));
         List<String> lines = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
             lines.add(buf.readUtf());

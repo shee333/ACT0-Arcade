@@ -16,6 +16,8 @@ import java.util.function.Supplier;
  */
 public final class SyncUnlocksPacket {
 
+    private static final int MAX_LIST_ENTRIES = 256;
+
     private final List<String> keys;
 
     public SyncUnlocksPacket(Collection<String> keys) {
@@ -30,7 +32,7 @@ public final class SyncUnlocksPacket {
     }
 
     public static SyncUnlocksPacket decode(FriendlyByteBuf buf) {
-        int n = buf.readVarInt();
+        int n = Math.max(0, Math.min(buf.readVarInt(), MAX_LIST_ENTRIES));
         List<String> list = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
             list.add(buf.readUtf());

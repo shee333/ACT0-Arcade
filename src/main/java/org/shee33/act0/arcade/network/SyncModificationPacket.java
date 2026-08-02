@@ -15,6 +15,8 @@ import java.util.function.Supplier;
  */
 public final class SyncModificationPacket {
 
+    private static final int MAX_LIST_ENTRIES = 256;
+
     private final ModificationDto dto;
 
     public SyncModificationPacket(ModificationDto dto) {
@@ -39,11 +41,11 @@ public final class SyncModificationPacket {
 
     public static SyncModificationPacket decode(FriendlyByteBuf buf) {
         ModificationDto dto = new ModificationDto(buf.readUtf());
-        int n = buf.readVarInt();
+        int n = Math.max(0, Math.min(buf.readVarInt(), MAX_LIST_ENTRIES));
         for (int i = 0; i < n; i++) {
             ModificationDto.SlotDto slot = new ModificationDto.SlotDto(buf.readUtf());
             slot.installedKey = buf.readUtf();
-            int cn = buf.readVarInt();
+            int cn = Math.max(0, Math.min(buf.readVarInt(), MAX_LIST_ENTRIES));
             List<String> compat = new ArrayList<>(cn);
             for (int j = 0; j < cn; j++) {
                 compat.add(buf.readUtf());

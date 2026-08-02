@@ -19,6 +19,8 @@ import java.util.function.Supplier;
  */
 public final class SyncRoomListPacket {
 
+    private static final int MAX_LIST_ENTRIES = 256;
+
     private final boolean canManage;
     private final boolean open;
     private final List<String> arenaIds;
@@ -47,12 +49,12 @@ public final class SyncRoomListPacket {
     public static SyncRoomListPacket decode(FriendlyByteBuf buf) {
         boolean canManage = buf.readBoolean();
         boolean open = buf.readBoolean();
-        int an = buf.readVarInt();
+        int an = Math.max(0, Math.min(buf.readVarInt(), MAX_LIST_ENTRIES));
         List<String> arenaIds = new ArrayList<>(an);
         for (int i = 0; i < an; i++) {
             arenaIds.add(buf.readUtf());
         }
-        int rn = buf.readVarInt();
+        int rn = Math.max(0, Math.min(buf.readVarInt(), MAX_LIST_ENTRIES));
         List<RoomDto> rooms = new ArrayList<>(rn);
         for (int i = 0; i < rn; i++) {
             rooms.add(RoomDto.decode(buf));

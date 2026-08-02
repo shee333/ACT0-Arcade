@@ -16,6 +16,8 @@ import java.util.function.Supplier;
 
 /** S→C：同步服饰目录和玩家当前共享服饰选择。 */
 public final class SyncApparelPacket {
+    private static final int MAX_LIST_ENTRIES = 256;
+
     private final List<ApparelCatalogIO.ApparelEntryDto> entries;
     private final CompoundTag selectionTag;
 
@@ -43,7 +45,7 @@ public final class SyncApparelPacket {
     }
 
     public static SyncApparelPacket decode(FriendlyByteBuf buf) {
-        int n = buf.readVarInt();
+        int n = Math.max(0, Math.min(buf.readVarInt(), MAX_LIST_ENTRIES));
         List<ApparelCatalogIO.ApparelEntryDto> list = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
             ApparelCatalogIO.ApparelEntryDto dto = new ApparelCatalogIO.ApparelEntryDto();

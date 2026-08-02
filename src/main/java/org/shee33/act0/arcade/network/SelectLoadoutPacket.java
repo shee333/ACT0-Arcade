@@ -39,7 +39,12 @@ public final class SelectLoadoutPacket {
     }
 
     public static SelectLoadoutPacket decode(FriendlyByteBuf buf) {
-        return new SelectLoadoutPacket(buf.readVarInt(), buf.readEnum(Action.class), buf.readBoolean());
+        int index = buf.readVarInt();
+        int ordinal = buf.readVarInt();
+        Action[] actions = Action.values();
+        Action action = (ordinal >= 0 && ordinal < actions.length) ? actions[ordinal] : Action.SELECT_NEXT;
+        boolean matchContext = buf.readBoolean();
+        return new SelectLoadoutPacket(index, action, matchContext);
     }
 
     public static void handle(SelectLoadoutPacket msg, Supplier<NetworkEvent.Context> ctx) {

@@ -16,6 +16,8 @@ import java.util.function.Supplier;
  */
 public final class SyncAttachmentCatalogPacket {
 
+    private static final int MAX_LIST_ENTRIES = 256;
+
     private final List<AttachmentEntryDto> entries;
 
     public SyncAttachmentCatalogPacket(List<AttachmentEntryDto> entries) {
@@ -36,7 +38,7 @@ public final class SyncAttachmentCatalogPacket {
     }
 
     public static SyncAttachmentCatalogPacket decode(FriendlyByteBuf buf) {
-        int n = buf.readVarInt();
+        int n = Math.max(0, Math.min(buf.readVarInt(), MAX_LIST_ENTRIES));
         List<AttachmentEntryDto> list = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
             AttachmentEntryDto dto = new AttachmentEntryDto();
