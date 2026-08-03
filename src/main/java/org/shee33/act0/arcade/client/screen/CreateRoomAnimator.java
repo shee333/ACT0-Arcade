@@ -82,6 +82,16 @@ final class CreateRoomAnimator {
     final MenuTween.Anim createSweep;
     /** 创建按钮颜色过渡（金 → 绿）：150ms outCubic。 */
     final MenuTween.Anim createColorShift;
+    /** 创建按钮"✓已创建"文案的展示时长，色变完成后启动，到期即还原（规格 §5：1100ms）。 */
+    final MenuTween.Anim createRevert;
+
+    /**
+     * 所有轻量数值控件 + 幽灵按钮共享的按压回弹反馈（§5：scale 0.82→1，220ms outBack）。
+     * 每个可独立按压的控件占数组一位，索引语义由调用方（{@code CreateRoomScreen}）的常量定义
+     * （计分±/限时±/人数±/竞技场◀▶/对局设定/返回/创建，共 {@value #PRESS_COUNT} 个）。
+     */
+    static final int PRESS_COUNT = 11;
+    final MenuTween.Anim[] press;
 
     /**
      * 构造时即按规格文档铺设所有 {@link MenuTween.Anim}，并在 {@code nowMs} 启动
@@ -127,6 +137,12 @@ final class CreateRoomAnimator {
         arenaSlide = new MenuTween.Anim(220L, 0L);
         createSweep = new MenuTween.Anim(350L, 0L);
         createColorShift = new MenuTween.Anim(150L, 0L);
+        createRevert = new MenuTween.Anim(1100L, 0L);
+
+        press = new MenuTween.Anim[PRESS_COUNT];
+        for (int i = 0; i < press.length; i++) {
+            press[i] = new MenuTween.Anim(220L, 0L);
+        }
 
         // 启动开场级联（#1 ~ #6）。其它字段按用户交互在具体操作时再单独 start()。
         backdrop.start(nowMs);
