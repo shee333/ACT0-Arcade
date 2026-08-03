@@ -140,4 +140,109 @@ class CreateRoomAnimatorTest {
         // 与 CreateRoomScreen.MODES 同为 8（防止两个文件漂移；具体值见规格 §2.3）
         assertEquals(8, CreateRoomAnimator.defaultModeCount());
     }
+
+    // ============================================================
+    // 回归测试（P1⑥）：模式数超过原先硬编码的 10 不应导致左栏级联数组越界
+    // ============================================================
+
+    @Test
+    void constructor_modeCountAboveTen_leftColumnGrowsWithoutOverflow() {
+        CreateRoomAnimator a = new CreateRoomAnimator(0L, 12);
+        assertEquals(14, a.leftColumn.length, "leftColumn must be modeCount + 2 (label + N modes + settings button)");
+        assertEquals(12, a.hoverProgress.length);
+    }
+
+    @Test
+    void constructor_modeCountEight_leftColumnStillTen() {
+        // 8 模式时 leftColumn 长度应与旧硬编码常量 10 保持一致，不因重构改变现有行为
+        CreateRoomAnimator a = new CreateRoomAnimator(0L, 8);
+        assertEquals(10, a.leftColumn.length);
+    }
+
+    // ============================================================
+    // expandProgress —— 房间人数区块收展方向（P0②回归）
+    // ============================================================
+
+    @Test
+    void expandProgress_visibleTrue_followsEasedDirectly() {
+        assertEquals(0f, CreateRoomAnimator.expandProgress(true, 0f), EPS);
+        assertEquals(0.5f, CreateRoomAnimator.expandProgress(true, 0.5f), EPS);
+        assertEquals(1f, CreateRoomAnimator.expandProgress(true, 1f), EPS);
+    }
+
+    @Test
+    void expandProgress_visibleFalse_invertsEased() {
+        // 收起时必须是 1→0（随 eased 增大而减小），不能和展开用同一方向，否则区块会反向跳变
+        assertEquals(1f, CreateRoomAnimator.expandProgress(false, 0f), EPS);
+        assertEquals(0.5f, CreateRoomAnimator.expandProgress(false, 0.5f), EPS);
+        assertEquals(0f, CreateRoomAnimator.expandProgress(false, 1f), EPS);
+    }
+
+    // ============================================================
+    // hoverState —— 模式列表项悬停进入/离开的目标 padding / 文字透明度（§4.3）
+    // ============================================================
+
+    @Test
+    void hoverState_entering_startsAtBaseEndsAtHover() {
+        CreateRoomAnimator.HoverState start = CreateRoomAnimator.hoverState(true, 0f);
+        assertEquals(6f, start.padding(), EPS);
+        assertEquals(0.55f, start.textAlpha(), EPS);
+
+        CreateRoomAnimator.HoverState mid = CreateRoomAnimator.hoverState(true, 0.5f);
+        assertEquals(8f, mid.padding(), EPS);
+        assertEquals(0.725f, mid.textAlpha(), EPS);
+
+        CreateRoomAnimator.HoverState end = CreateRoomAnimator.hoverState(true, 1f);
+        assertEquals(10f, end.padding(), EPS);
+        assertEquals(0.9f, end.textAlpha(), EPS);
+    }
+
+    @Test
+    void hoverState_leaving_isSymmetricReverseOfEntering() {
+        CreateRoomAnimator.HoverState start = CreateRoomAnimator.hoverState(false, 0f);
+        assertEquals(10f, start.padding(), EPS);
+        assertEquals(0.9f, start.textAlpha(), EPS);
+
+        CreateRoomAnimator.HoverState mid = CreateRoomAnimator.hoverState(false, 0.5f);
+        assertEquals(8f, mid.padding(), EPS);
+        assertEquals(0.725f, mid.textAlpha(), EPS);
+
+        CreateRoomAnimator.HoverState end = CreateRoomAnimator.hoverState(false, 1f);
+        assertEquals(6f, end.padding(), EPS);
+        assertEquals(0.55f, end.textAlpha(), EPS);
+    }
+
+    // ============================================================
+    // rollOffset —— 数值滚轮/竞技场滑动的位移公式（P1⑤：振幅须覆盖裁剪区尺寸）
+    // ============================================================
+
+    @Test
+    void rollOffset_dirPositive_oldSlidesUp_newArrivesFromBelow() {
+        int clip = 18;
+        assertEquals(0f, CreateRoomAnimator.rollOffset(1, 0f, clip, true), EPS);
+        assertEquals(-9f, CreateRoomAnimator.rollOffset(1, 0.5f, clip, true), EPS);
+        assertEquals(-18f, CreateRoomAnimator.rollOffset(1, 1f, clip, true), EPS);
+
+        assertEquals(18f, CreateRoomAnimator.rollOffset(1, 0f, clip, false), EPS);
+        assertEquals(9f, CreateRoomAnimator.rollOffset(1, 0.5f, clip, false), EPS);
+        assertEquals(0f, CreateRoomAnimator.rollOffset(1, 1f, clip, false), EPS);
+    }
+
+    @Test
+    void rollOffset_dirNegative_isMirroredAcrossZero() {
+        int clip = 92;
+        assertEquals(0f, CreateRoomAnimator.rollOffset(-1, 0f, clip, true), EPS);
+        assertEquals(92f, CreateRoomAnimator.rollOffset(-1, 1f, clip, true), EPS);
+
+        assertEquals(-92f, CreateRoomAnimator.rollOffset(-1, 0f, clip, false), EPS);
+        assertEquals(0f, CreateRoomAnimator.rollOffset(-1, 1f, clip, false), EPS);
+    }
+
+    @Test
+    void rollOffset_atFullProgress_oldIsFullyClearOfClipSize() {
+        // e=1 时旧文案偏移量的绝对值必须等于裁剪区尺寸本身，否则会有一帧还残留在裁剪区内可见
+        int clip = 92;
+        assertEquals((float) clip, Math.abs(CreateRoomAnimator.rollOffset(1, 1f, clip, true)), EPS);
+        assertEquals((float) clip, Math.abs(CreateRoomAnimator.rollOffset(-1, 1f, clip, true)), EPS);
+    }
 }

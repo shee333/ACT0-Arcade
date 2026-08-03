@@ -28,8 +28,6 @@ package org.shee33.act0.arcade.client.screen;
  */
 final class CreateRoomAnimator {
 
-    /** 左栏 .li 项总数：标签("选择模式") + 8 个模式 + "对局设定"按钮。 */
-    private static final int LEFT_COLUMN_ITEMS = 10;
     /** 右栏 .sec 区块数：竞技场 / 计分目标 / 限时 / 房间人数 / 随机武器 / 底部说明。 */
     private static final int RIGHT_COLUMN_SECTIONS = 6;
     /** 可调节数值行的数量（计分 / 限时 / 房间人数），各自独立的方向性滚轮。 */
@@ -98,10 +96,12 @@ final class CreateRoomAnimator {
      * 开场级联（其余动效按用户交互在具体操作时再单独 {@code start}）。
      *
      * @param nowMs     开屏时刻（{@link MenuTween#now()} 或测试传入的固定时间戳）
-     * @param modeCount 模式项数（影响 {@link #hoverProgress} 长度）
+     * @param modeCount 模式项数（影响 {@link #hoverProgress} 长度，以及左栏级联项数
+     *                  {@code modeCount + 2} = 标签("选择模式") + N 个模式 + "对局设定"按钮，
+     *                  避免模式数变化时与硬编码常量脱节导致数组越界）
      */
     CreateRoomAnimator(long nowMs, int modeCount) {
-        this(nowMs, modeCount, LEFT_COLUMN_ITEMS, RIGHT_COLUMN_SECTIONS);
+        this(nowMs, modeCount, modeCount + 2, RIGHT_COLUMN_SECTIONS);
     }
 
     /** 完整构造器（测试可注入不同的级联规模）。 */
@@ -190,5 +190,44 @@ final class CreateRoomAnimator {
             return 0;
         }
         return Math.floorMod(current + dir, size);
+    }
+
+    /**
+     * 房间人数区块收展进度（规格 §4.2）：{@code visible=true} 时随 {@code eased} 从 0 展开到 1，
+     * {@code visible=false} 时从 1 收起到 0 —— 与 {@code visible} 无关地恒定用 {@code eased} 会导致
+     * 收起动画方向颠倒（先瞬间消失再淡入回来），必须按目标可见性取反。
+     */
+    static float expandProgress(boolean visible, float eased) {
+        float t = clamp01(eased);
+        return visible ? t : 1f - t;
+    }
+
+    /**
+     * 模式列表项悬停态的目标 padding / 文字透明度（规格 §4.3）：
+     * {@code entering=true}（鼠标进入）走 6→10px / 0.55→0.9，{@code entering=false}（鼠标离开）
+     * 走对称反向 10→6px / 0.9→0.55，140ms outCubic 同一条曲线全程补间，禁止瞬变。
+     */
+    record HoverState(float padding, float textAlpha) {
+    }
+
+    static HoverState hoverState(boolean entering, float eased) {
+        float t = clamp01(eased);
+        return entering
+                ? new HoverState(lerp(6f, 10f, t), lerp(0.55f, 0.9f, t))
+                : new HoverState(lerp(10f, 6f, t), lerp(0.9f, 0.55f, t));
+    }
+
+    /**
+     * 数值滚轮 / 竞技场滑动的位移量（规格 §5 源码 {@code roll()}/{@code slide()} 直译，Y/X 共用
+     * 同一公式，仅 {@code clipSize} 不同：Y 轴用裁剪区高度 18，X 轴用裁剪区宽度 92）。
+     *
+     * @param dir      方向：+1（新值自下/自右而来）、-1（反向）
+     * @param e        补间进度 [0,1]（outCubic 已应用）
+     * @param clipSize 振幅，应等于裁剪区尺寸，确保 e=1 时旧文案已完全移出裁剪区
+     * @param old      {@code true} 计算"旧文案（滑出）"的偏移，{@code false} 计算"新文案（滑入）"的偏移
+     */
+    static float rollOffset(int dir, float e, int clipSize, boolean old) {
+        float t = clamp01(e);
+        return old ? -dir * clipSize * t : dir * clipSize * (1f - t);
     }
 }

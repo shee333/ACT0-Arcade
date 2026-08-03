@@ -2,7 +2,9 @@ package org.shee33.act0.arcade.client.screen;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
 import org.shee33.act0.arcade.client.ClientRoomList;
 import org.shee33.act0.arcade.match.RoomManager;
 import org.shee33.act0.arcade.mode.CreateRoomModeCatalog;
@@ -50,6 +52,9 @@ public final class CreateRoomScreen extends Screen {
 
     private final RoomBrowserScreen parent;
     private CreateRoomAnimator anim;
+    /** 是否已经完整 init() 过一次：resize/GUI Scale 变更或从 MatchSettingsScreen 返回都会重跑
+     *  {@code init()}，此标记确保模型状态（人数/动画实例）只在真正首次打开时重置一次。 */
+    private boolean initialized;
 
     private int left;
     private int top;
@@ -160,13 +165,15 @@ public final class CreateRoomScreen extends Screen {
         timeY = top + 136;
         capY = top + 168;
         randomY = top + 200;
-        settingsY = modeListY + CreateRoomModeCatalog.MODES.size() * 22 + 6;
+        settingsY = Math.min(top + H - 56, modeListY + CreateRoomModeCatalog.MODES.size() * 22 + 6);
         footY = top + H - 26;
 
-        playersVisible = capacityEditable();
-        capacity = defaultCapacity();
-
-        anim = new CreateRoomAnimator(MenuTween.now(), CreateRoomModeCatalog.MODES.size());
+        if (!initialized) {
+            initialized = true;
+            playersVisible = capacityEditable();
+            capacity = defaultCapacity();
+            anim = new CreateRoomAnimator(MenuTween.now(), CreateRoomModeCatalog.MODES.size());
+        }
     }
 
     // ============================================================
@@ -263,10 +270,11 @@ public final class CreateRoomScreen extends Screen {
         if ("jump_sniper".equals(m.id())) {
             randomMode = RandomWeaponMode.SNIPER;
         }
+        playClick();
     }
 
     // ============================================================
-    // 交互：数值调整 / 竞技场切换（§5，边界静默）
+    // 交互：数值调整 / 竞技场切换（§5，边界静默——静默的分支提前 return，不播音效/不播动画）
     // ============================================================
 
     private void onScoreAdjust(int dir) {
@@ -282,6 +290,7 @@ public final class CreateRoomScreen extends Screen {
         scoreRollAnim = anim.scoreTimePlayersRoll[0];
         scoreRollAnim.start(now);
         anim.press[dir > 0 ? P_SCORE_PLUS : P_SCORE_MINUS].start(now);
+        playClick();
     }
 
     private void onTimeAdjust(int dir) {
@@ -295,6 +304,7 @@ public final class CreateRoomScreen extends Screen {
         timeDir = dir;
         anim.scoreTimePlayersRoll[1].start(now);
         anim.press[dir > 0 ? P_TIME_PLUS : P_TIME_MINUS].start(now);
+        playClick();
     }
 
     private void onPlayersAdjust(int dir) {
@@ -312,6 +322,7 @@ public final class CreateRoomScreen extends Screen {
         playersDir = dir;
         anim.scoreTimePlayersRoll[2].start(now);
         anim.press[dir > 0 ? P_PLAYERS_PLUS : P_PLAYERS_MINUS].start(now);
+        playClick();
     }
 
     private void onArenaAdjust(int dir) {
@@ -325,6 +336,7 @@ public final class CreateRoomScreen extends Screen {
         arenaDir = dir;
         anim.arenaSlide.start(now);
         anim.press[dir > 0 ? P_ARENA_RIGHT : P_ARENA_LEFT].start(now);
+        playClick();
     }
 
     private void onWeaponClicked() {
@@ -334,6 +346,7 @@ public final class CreateRoomScreen extends Screen {
         RandomWeaponMode[] modes = RandomWeaponMode.values();
         randomMode = modes[Math.floorMod(randomMode.ordinal() + 1, modes.length)];
         anim.weaponSweep.start(MenuTween.now());
+        playClick();
     }
 
     private void onSettingsClicked() {
@@ -342,6 +355,7 @@ public final class CreateRoomScreen extends Screen {
         }
         anim.press[P_SETTINGS].start(MenuTween.now());
         pendingNav = NAV_SETTINGS;
+        playClick();
     }
 
     private void onBackClicked() {
@@ -350,24 +364,37 @@ public final class CreateRoomScreen extends Screen {
         }
         anim.press[P_BACK].start(MenuTween.now());
         pendingNav = NAV_BACK;
+        playClick();
     }
 
     private void onCreateClicked() {
-        if (createArmed || minecraft == null || minecraft.player == null || arenas().isEmpty()) {
+        if (createArmed || minecraft == null || minecraft.player == null) {
             return;
         }
-        sendCreateCommand();
+        List<String> a = arenas();
+        if (a.isEmpty()) {
+            return;
+        }
+        sendCreateCommand(a);
         long now = MenuTween.now();
         createArmed = true;
         createConfirmed = false;
         anim.press[P_CREATE].start(now);
         anim.createSweep.start(now);
         anim.createColorShift.start(now);
+        playClick();
     }
 
-    private void sendCreateCommand() {
-        List<String> a = arenas();
-        String arena = a.get(Math.min(selectedArena, a.size() - 1));
+    /**
+     * 只发 {@code arcade room create}——{@code arcade browse} 故意不在这里发：服务端处理
+     * browse 只需约一个 tick(~50ms)就会把界面切成 {@link RoomLobbyScreen}，而创建按钮的三连
+     * 反馈(扫光 350ms + 变绿 150ms + "✓已创建" 展示 1100ms)加起来接近 1.6s，若在此处同步发出
+     * browse，动画播到一半界面就被换掉，"✓已创建"和还原逻辑永远够不到执行时机。真正的
+     * {@code arcade browse} 挪到 {@link #render} 里 {@code createRevert.isDone} 那个分支，
+     * 紧跟在 {@link #onClose()} 之前发出，让玩家先看完确认反馈。
+     */
+    private void sendCreateCommand(List<String> arenaSnapshot) {
+        String arena = arenaSnapshot.get(Math.min(selectedArena, arenaSnapshot.size() - 1));
         int cap = capacityEditable() ? capacity : defaultCapacity();
         RandomWeaponMode submitRandom = "jump_sniper".equals(mode().id()) ? RandomWeaponMode.SNIPER : randomMode;
         minecraft.player.connection.sendCommand(
@@ -380,7 +407,13 @@ public final class CreateRoomScreen extends Screen {
                         + " " + settingsHotZoneRotateSeconds
                         + " " + settingsHotZoneRadius
                         + " " + settingsHotZoneScorePerSecond);
-        minecraft.player.connection.sendCommand("arcade browse");
+    }
+
+    /** 手动命中检测取代原版 Button 后丢失的点击音效反馈；边界静默的调整不经过这里。 */
+    private void playClick() {
+        if (minecraft != null) {
+            minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
+        }
     }
 
     // ============================================================
@@ -573,6 +606,9 @@ public final class CreateRoomScreen extends Screen {
         if (createArmed && createConfirmed && anim.createRevert.isDone(now)) {
             createArmed = false;
             createConfirmed = false;
+            if (minecraft != null && minecraft.player != null) {
+                minecraft.player.connection.sendCommand("arcade browse");
+            }
             onClose();
             return;
         }
@@ -605,11 +641,10 @@ public final class CreateRoomScreen extends Screen {
 
     private void updateModeHover(int mouseX, int mouseY, long now) {
         for (int i = 0; i < CreateRoomModeCatalog.MODES.size(); i++) {
-            if (i == selectedMode) {
-                hoveredPrev[i] = false;
-                continue;
-            }
-            boolean hoveredNow = inRect(mouseX, mouseY, modeListX - 2, itemTop(i), 114, 20);
+            // 选中项强制视为"未悬停"，但仍走同一套跟踪逻辑——否则一个正处于悬停完成态(padding
+            // 10/alpha 0.9)的项被选中后，会因为提前 continue 跳过状态更新而永久卡在悬停态，
+            // 再也无法收到"离开"事件把它补间回 6/0.55。
+            boolean hoveredNow = i != selectedMode && inRect(mouseX, mouseY, modeListX - 2, itemTop(i), 114, 20);
             if (hoveredNow != hoveredPrev[i]) {
                 hoveredPrev[i] = hoveredNow;
                 hoverEntering[i] = hoveredNow;
@@ -673,15 +708,10 @@ public final class CreateRoomScreen extends Screen {
                 padding = 6f;
                 textAlpha = 1.0f;
             } else {
-                MenuTween.Anim hover = anim.hoverProgress[i];
-                float hoverE = hover.easedT(now, MenuTween.Ease.OUT_CUBIC);
-                if (hoverEntering[i]) {
-                    padding = CreateRoomAnimator.lerp(6f, 10f, hoverE);
-                    textAlpha = CreateRoomAnimator.lerp(0.55f, 0.9f, hoverE);
-                } else {
-                    padding = CreateRoomAnimator.lerp(10f, 6f, hoverE);
-                    textAlpha = CreateRoomAnimator.lerp(0.9f, 0.55f, hoverE);
-                }
+                float hoverE = anim.hoverProgress[i].easedT(now, MenuTween.Ease.OUT_CUBIC);
+                CreateRoomAnimator.HoverState hs = CreateRoomAnimator.hoverState(hoverEntering[i], hoverE);
+                padding = hs.padding();
+                textAlpha = hs.textAlpha();
             }
             int textX = modeListX + xOffset + Math.round(padding);
             int textY = itemTop(i) + 6;
@@ -805,7 +835,8 @@ public final class CreateRoomScreen extends Screen {
         float expandE;
         boolean expanding = anim.playersExpand.isRunning() && !anim.playersExpand.isDone(now);
         if (expanding) {
-            expandE = anim.playersExpand.easedT(now, MenuTween.Ease.OUT_CUBIC);
+            float eased = anim.playersExpand.easedT(now, MenuTween.Ease.OUT_CUBIC);
+            expandE = CreateRoomAnimator.expandProgress(playersVisible, eased);
         } else {
             expandE = playersVisible ? 1f : 0f;
         }
@@ -848,8 +879,8 @@ public final class CreateRoomScreen extends Screen {
         float e = sectionAlpha(5, now);
         int yOff = sectionYOffset(e);
         float alpha = e * panelAlpha;
-        gg.drawString(font, "满员将自动开局，房主也可提前开始", rx, top + 228 + yOff, withAlpha(TEXT_BASE, 0.35f * alpha), false);
-        gg.drawString(font, "限时到则领先者胜，平分则平局", rx, top + 240 + yOff, withAlpha(TEXT_BASE, 0.35f * alpha), false);
+        gg.drawString(font, "满员将自动开局，房主也可提前开始", rx, top + 220 + yOff, withAlpha(TEXT_BASE, 0.35f * alpha), false);
+        gg.drawString(font, "限时到则领先者胜，平分则平局", rx, top + 232 + yOff, withAlpha(TEXT_BASE, 0.35f * alpha), false);
     }
 
     // ------------------------------------------------------------
@@ -944,29 +975,31 @@ public final class CreateRoomScreen extends Screen {
         }
     }
 
-    /** 纵向数字滚轮：旧值滑出 + 新值滑入（规格 §5 `roll()`，dir=1 新值自下而上）。 */
+    /** 纵向数字滚轮：旧值滑出 + 新值滑入（规格 §5 `roll()`，dir=1 新值自下而上）。
+     *  振幅取裁剪区高度 18px，确保 e=1 时旧文案已完全移出裁剪区，不会有一帧跳变。 */
     private void drawRollY(GuiGraphics gg, int cx, int cy, String oldText, String newText, int dir,
                             MenuTween.Anim rollAnim, long now, int color) {
         float e = rollAnim.easedT(now, MenuTween.Ease.OUT_CUBIC);
-        int amp = 10;
+        int clip = 18;
         if (e < 1f && oldText != null && !oldText.isEmpty()) {
-            int oy = cy + Math.round(-dir * amp * e);
+            int oy = cy + Math.round(CreateRoomAnimator.rollOffset(dir, e, clip, true));
             gg.drawCenteredString(font, oldText, cx, oy - 4, color);
         }
-        int ny = cy + Math.round(dir * amp * (1f - e));
+        int ny = cy + Math.round(CreateRoomAnimator.rollOffset(dir, e, clip, false));
         gg.drawCenteredString(font, newText, cx, ny - 4, color);
     }
 
-    /** 横向滑动（竞技场，规格 §5 `slide()`，dir=1 ▶ 新值自右滑入）。 */
+    /** 横向滑动（竞技场，规格 §5 `slide()`，dir=1 ▶ 新值自右滑入）。
+     *  振幅取裁剪区宽度 92px（rx+18 到 rx+110），同样确保完全滑出裁剪区。 */
     private void drawSlideX(GuiGraphics gg, int cx, int cy, String oldText, String newText, int dir,
                              MenuTween.Anim slideAnim, long now, int color) {
         float e = slideAnim.easedT(now, MenuTween.Ease.OUT_CUBIC);
-        int amp = 46;
+        int clip = 92;
         if (e < 1f && oldText != null && !oldText.isEmpty()) {
-            int ox = cx + Math.round(-dir * amp * e);
+            int ox = cx + Math.round(CreateRoomAnimator.rollOffset(dir, e, clip, true));
             gg.drawCenteredString(font, oldText, ox, cy - 4, color);
         }
-        int nx = cx + Math.round(dir * amp * (1f - e));
+        int nx = cx + Math.round(CreateRoomAnimator.rollOffset(dir, e, clip, false));
         gg.drawCenteredString(font, newText, nx, cy - 4, color);
     }
 
