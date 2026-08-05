@@ -4,7 +4,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.item.ItemStack;
 import org.shee33.act0.arcade.client.ClientBuyFeedback;
 import org.shee33.act0.arcade.client.ClientCatalog;
@@ -31,7 +33,10 @@ import java.util.List;
  *
  * <p>武器数量超过可视行数时，网格区域可用鼠标滚轮上下滚动，界面尺寸保持固定，不会随武器数量膨胀。
  *
- * <p>渲染基于 {@link GuiGraphics} + {@link FlatTheme} 程序化扁平面板，不依赖外部贴图。
+ * <p>渲染基于 {@link GuiGraphics} + {@link FlatTheme} 程序化扁平面板，不依赖外部贴图；
+ * 菜单层金色强调（弹层按钮 / 滚动条强调色 / 按压回弹 / 开场级联）由 {@link MenuChrome} +
+ * {@link MenuTween} 驱动，与 {@code CreateRoomScreen} 同款补间引擎、同一时间源
+ * （{@link System#currentTimeMillis()}，见 {@link #openedAtMs} 与 {@link FlatTheme#fadeIn(long)}）。
  */
 public final class WeaponSelectScreen extends Screen {
 
@@ -40,7 +45,17 @@ public final class WeaponSelectScreen extends Screen {
     private static final int CELL_GAP = 6;
     private static final int HEADER_H = 34;
     private static final int VISIBLE_ROWS = 3;
-    private static final int LOCK_OVERLAY = 0xB0101010;
+
+    /** 网格开场级联：每行错峰 40ms，单格 200ms outCubic（与 CreateRoomAnimator 级联手感一致）。 */
+    private static final long CELL_CASCADE_STEP_MS = 40L;
+    private static final long CELL_CASCADE_DUR_MS = 200L;
+    /** 网格/弹层按钮按压回弹：220ms（{@link MenuChrome#pressScale} 内部固定用 outBack 曲线）。 */
+    private static final long PRESS_DUR_MS = 220L;
+
+    /** 提示 toast 淡入/淡出各 180ms，中间保持 2140ms，总时长 2500ms（与旧版硬边界时长一致）。 */
+    private static final long TOAST_FADE_MS = 180L;
+    private static final long TOAST_HOLD_MS = 2140L;
+    private static final long TOAST_TOTAL_MS = TOAST_FADE_MS * 2 + TOAST_HOLD_MS;
 
     private final LoadoutScreen parent;
     private final Screen backScreen;
@@ -62,6 +77,19 @@ public final class WeaponSelectScreen extends Screen {
     /** 当前滚动偏移（以行为单位）。 */
     private int scrollRow;
 
+    /** 每个网格单元的开场级联淡入（按行错峰）；随 {@link #init()} 重建 {@link #options} 同步重建。 */
+    private MenuTween.Anim[] cellCascade = new MenuTween.Anim[0];
+    /** 每个网格单元的点击按压回弹；随 {@link #options} 同步重建。 */
+    private MenuTween.Anim[] cellPress = new MenuTween.Anim[0];
+
+    /** 动作弹层三个按钮（改装/选择/取消）各自的按压回弹。 */
+    private final MenuTween.Anim actionModifyPress = new MenuTween.Anim(PRESS_DUR_MS, 0L);
+    private final MenuTween.Anim actionChoosePress = new MenuTween.Anim(PRESS_DUR_MS, 0L);
+    private final MenuTween.Anim actionCancelPress = new MenuTween.Anim(PRESS_DUR_MS, 0L);
+    /** 购买确认弹层两个按钮（确认/取消）各自的按压回弹。 */
+    private final MenuTween.Anim confirmPress = new MenuTween.Anim(PRESS_DUR_MS, 0L);
+    private final MenuTween.Anim confirmCancelPress = new MenuTween.Anim(PRESS_DUR_MS, 0L);
+
     /** 待确认购买的武器（非空时显示确认弹层）。 */
     private LoadoutItem pendingPurchase;
     /** 待选择/改装的已解锁枪械（非空时显示动作弹层）。 */
@@ -71,7 +99,8 @@ public final class WeaponSelectScreen extends Screen {
     /** 界面内提示文本与颜色（来自购买反馈）。 */
     private String message;
     private int messageColor = FlatTheme.TEXT_HEADER;
-    private long messageUntilMs;
+    /** 提示 toast 的补间状态：{@link #setMessage} 时 {@code start}，{@link #toastAlpha} 逐帧采样。 */
+    private final MenuTween.Anim toastAnim = new MenuTween.Anim(TOAST_TOTAL_MS, 0L);
 
     /**
      * @param parent     配装主界面（选中武器后返回到此）
@@ -122,6 +151,17 @@ public final class WeaponSelectScreen extends Screen {
         this.gridX = left + 12;
         this.gridY = top + HEADER_H;
 
+        // 网格开场级联：按行错峰，重建 options 时一并重建（滚动进入视口的单元不会重播，仅首次出现时播放）
+        long now = MenuTween.now();
+        cellCascade = new MenuTween.Anim[options.size()];
+        cellPress = new MenuTween.Anim[options.size()];
+        for (int i = 0; i < options.size(); i++) {
+            int row = i / COLS;
+            cellCascade[i] = new MenuTween.Anim(CELL_CASCADE_DUR_MS, row * CELL_CASCADE_STEP_MS);
+            cellCascade[i].start(now);
+            cellPress[i] = new MenuTween.Anim(PRESS_DUR_MS, 0L);
+        }
+
         // 底部：清空该槽位 / 返回
         int footY = top + panelH - 26;
         addRenderableWidget(Button.builder(Component.literal("清空"), b -> clearAndBack())
@@ -133,6 +173,13 @@ public final class WeaponSelectScreen extends Screen {
     private void clearAndBack() {
         working.setSlot(slot, null);
         Minecraft.getInstance().setScreen(parent);
+    }
+
+    /** 手动命中检测的自绘控件缺省点击音效，补齐取代原版 Button 后丢失的反馈。 */
+    private void playClick() {
+        if (minecraft != null) {
+            minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
+        }
     }
 
     @Override
@@ -171,19 +218,26 @@ public final class WeaponSelectScreen extends Screen {
             int[] modify = actionModifyRect();
             int[] choose = actionChooseRect();
             int[] cancel = actionCancelRect();
+            long now = MenuTween.now();
             if (inRect(mouseX, mouseY, modify)) {
+                actionModifyPress.start(now);
+                playClick();
                 LoadoutItem item = pendingAction;
                 pendingAction = null;
                 openModify(item);
                 return true;
             }
             if (inRect(mouseX, mouseY, choose)) {
+                actionChoosePress.start(now);
+                playClick();
                 LoadoutItem item = pendingAction;
                 pendingAction = null;
                 chooseAndBack(item);
                 return true;
             }
             if (inRect(mouseX, mouseY, cancel)) {
+                actionCancelPress.start(now);
+                playClick();
                 pendingAction = null;
                 return true;
             }
@@ -193,12 +247,17 @@ public final class WeaponSelectScreen extends Screen {
             // 确认弹层激活：仅处理确认 / 取消区域
             int[] confirm = confirmButtonRect();
             int[] cancel = cancelButtonRect();
+            long now = MenuTween.now();
             if (inRect(mouseX, mouseY, confirm)) {
+                confirmPress.start(now);
+                playClick();
                 doPurchase(pendingPurchase);
                 pendingPurchase = null;
                 return true;
             }
             if (inRect(mouseX, mouseY, cancel)) {
+                confirmCancelPress.start(now);
+                playClick();
                 pendingPurchase = null;
                 return true;
             }
@@ -212,6 +271,10 @@ public final class WeaponSelectScreen extends Screen {
                 int cx = cellX(i);
                 int cy = cellY(i);
                 if (mouseX >= cx && mouseX < cx + CELL && mouseY >= cy && mouseY < cy + CELL) {
+                    if (i < cellPress.length) {
+                        cellPress[i].start(MenuTween.now());
+                    }
+                    playClick();
                     onPick(options.get(i));
                     return true;
                 }
@@ -282,6 +345,7 @@ public final class WeaponSelectScreen extends Screen {
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         renderBackground(gg);
         pollFeedback();
+        long now = MenuTween.now();
         FlatTheme.Fade fade = FlatTheme.fadeIn(openedAtMs);
         FlatTheme.panel(gg, left, top, panelW, panelH, fade.alpha());
 
@@ -302,27 +366,42 @@ public final class WeaponSelectScreen extends Screen {
             boolean locked = isLocked(item);
             boolean selected = item.key().equals(selectedKey);
 
-            // 单元底纹（选中高亮）
-            FlatTheme.row(gg, cx, cy, CELL, CELL, selected);
+            // 开场级联：按行错峰的淡入 + 轻微上移；点击按压回弹叠加在同一单元上
+            float cascadeE = i < cellCascade.length
+                    ? cellCascade[i].easedT(now, MenuTween.Ease.OUT_CUBIC)
+                    : 1f;
+            float cellAlpha = fade.alpha() * cascadeE;
+            int slideY = Math.round(4 * (1f - cascadeE));
+            float pressScale = i < cellPress.length ? MenuChrome.pressScale(cellPress[i], now) : 1f;
+            int cellTop = cy + slideY;
 
-            // 物品图标居中
-            ItemStack icon = ClientCatalog.iconFor(item);
-            int iconX = cx + (CELL - 16) / 2;
-            int iconY = cy + 8;
-            if (!icon.isEmpty()) {
-                gg.renderItem(icon, iconX, iconY);
-            }
+            MenuChrome.drawScaled(gg, cx + CELL / 2, cellTop + CELL / 2, pressScale, () -> {
+                // 单元底纹（选中高亮），随开场级联淡入（等价于 FlatTheme.row，叠加 cellAlpha）
+                int bg = FlatTheme.withAlpha(selected ? FlatTheme.SURFACE_HOVER : FlatTheme.SURFACE, cellAlpha);
+                int line = FlatTheme.withAlpha(selected ? FlatTheme.ACCENT : FlatTheme.DIVIDER, cellAlpha);
+                gg.fill(cx, cellTop, cx + CELL, cellTop + CELL, bg);
+                gg.fill(cx, cellTop, cx + CELL, cellTop + 1, line);
 
-            // 武器名（截断）
-            String name = trim(item.displayName(), CELL - 6);
-            int nameColor = locked ? FlatTheme.TEXT_DIM : FlatTheme.TEXT;
-            gg.drawCenteredString(font, name, cx + CELL / 2, cy + CELL - 24, nameColor);
+                // 物品图标居中
+                ItemStack icon = ClientCatalog.iconFor(item);
+                int iconX = cx + (CELL - 16) / 2;
+                int iconY = cellTop + 8;
+                if (!icon.isEmpty()) {
+                    gg.renderItem(icon, iconX, iconY);
+                }
 
-            if (locked) {
-                // 灰色蒙版 + 橙字「未解锁」（危险/警示色统一用橙，不用纯红）
-                gg.fill(cx, cy, cx + CELL, cy + CELL, LOCK_OVERLAY);
-                gg.drawCenteredString(font, "未解锁", cx + CELL / 2, cy + CELL / 2 - 4, FlatTheme.DANGER);
-            }
+                // 武器名（截断）
+                String name = trim(item.displayName(), CELL - 6);
+                int nameColor = FlatTheme.withAlpha(locked ? FlatTheme.TEXT_DIM : FlatTheme.TEXT, cellAlpha);
+                gg.drawCenteredString(font, name, cx + CELL / 2, cellTop + CELL - 24, nameColor);
+
+                if (locked) {
+                    // 灰色蒙版 + 橙字「未解锁」（危险/警示色统一用橙，不用纯红），共享 MenuChrome.LOCK_OVERLAY
+                    gg.fill(cx, cellTop, cx + CELL, cellTop + CELL, FlatTheme.withAlpha(MenuChrome.LOCK_OVERLAY, cellAlpha));
+                    gg.drawCenteredString(font, "未解锁", cx + CELL / 2, cellTop + CELL / 2 - 4,
+                            FlatTheme.withAlpha(FlatTheme.DANGER, cellAlpha));
+                }
+            });
 
             if (mouseX >= cx && mouseX < cx + CELL && mouseY >= cy && mouseY < cy + CELL) {
                 hovered = item;
@@ -333,9 +412,11 @@ public final class WeaponSelectScreen extends Screen {
         // 滚动条（仅在内容超出视口时显示）
         renderScrollbar(gg);
 
-        // 界面内提示（购买反馈）
-        if (message != null && System.currentTimeMillis() < messageUntilMs) {
-            gg.drawCenteredString(font, message, left + panelW / 2, top + panelH - 40, messageColor);
+        // 界面内提示（购买反馈）：淡入→保持→淡出的补间序列，取代原先硬切的布尔门
+        float toastAlpha = toastAlpha(now);
+        if (message != null && toastAlpha > 0f) {
+            gg.drawCenteredString(font, message, left + panelW / 2, top + panelH - 40,
+                    FlatTheme.withAlpha(messageColor, toastAlpha));
         }
 
         super.render(gg, mouseX, mouseY, partialTick);
@@ -370,7 +451,32 @@ public final class WeaponSelectScreen extends Screen {
     private void setMessage(String text, int color) {
         this.message = text;
         this.messageColor = color;
-        this.messageUntilMs = System.currentTimeMillis() + 2500;
+        toastAnim.start(MenuTween.now());
+    }
+
+    /**
+     * 提示 toast 的补间透明度：{@value #TOAST_FADE_MS}ms ease-out 淡入 → 保持
+     * {@value #TOAST_HOLD_MS}ms → {@value #TOAST_FADE_MS}ms 淡出，取代原先
+     * {@code now < messageUntilMs} 的硬边界布尔门，不再硬切入/硬切出。
+     */
+    private float toastAlpha(long now) {
+        if (message == null || !toastAnim.isRunning()) {
+            return 0f;
+        }
+        float raw = toastAnim.rawT(now);
+        float fadeInFrac = TOAST_FADE_MS / (float) TOAST_TOTAL_MS;
+        float holdEndFrac = 1f - fadeInFrac;
+        if (raw < fadeInFrac) {
+            return FlatTheme.easeOut(raw / fadeInFrac);
+        }
+        if (raw < holdEndFrac) {
+            return 1f;
+        }
+        if (raw >= 1f) {
+            return 0f;
+        }
+        float outT = (raw - holdEndFrac) / fadeInFrac;
+        return 1f - FlatTheme.easeOut(outT);
     }
 
     private void renderActionDialog(GuiGraphics gg, int mouseX, int mouseY) {
@@ -387,9 +493,26 @@ public final class WeaponSelectScreen extends Screen {
         gg.drawCenteredString(font, pendingAction.displayName(), left + panelW / 2, by + 10, FlatTheme.TEXT_HEADER);
         gg.drawCenteredString(font, "§7选择此武器，或进入改装", left + panelW / 2, by + 24, FlatTheme.TEXT_DIM);
 
-        drawTextButton(gg, actionModifyRect(), "§e改装", mouseX, mouseY);
-        drawTextButton(gg, actionChooseRect(), "§a选择", mouseX, mouseY);
-        drawTextButton(gg, actionCancelRect(), "取消", mouseX, mouseY);
+        long now = MenuTween.now();
+        int[] modify = actionModifyRect();
+        int[] choose = actionChooseRect();
+        int[] cancel = actionCancelRect();
+        boolean modifyHover = inRect(mouseX, mouseY, modify);
+        boolean chooseHover = inRect(mouseX, mouseY, choose);
+        boolean cancelHover = inRect(mouseX, mouseY, cancel);
+
+        // 改装 / 选择：金色主按钮（drawPrimaryButton），取代原先纯文字按钮
+        MenuChrome.drawPrimaryButton(gg, font, modify[0], modify[1], modify[2], modify[3], "§e改装",
+                modifyHover, true, false, 0f, 0f, MenuChrome.pressScale(actionModifyPress, now));
+        MenuChrome.drawPrimaryButton(gg, font, choose[0], choose[1], choose[2], choose[3], "§a选择",
+                chooseHover, true, false, 0f, 0f, MenuChrome.pressScale(actionChoosePress, now));
+        // 取消：幽灵按钮，外部套按压缩放包裹（drawGhostButton 本身不带 pressScale 入参）
+        int cancelCx = cancel[0] + cancel[2] / 2;
+        int cancelCy = cancel[1] + cancel[3] / 2;
+        MenuChrome.drawScaled(gg, cancelCx, cancelCy, MenuChrome.pressScale(actionCancelPress, now), () ->
+                MenuChrome.drawGhostButton(gg, font, cancel[0], cancel[1], cancel[2], cancel[3], "取消",
+                        cancelHover, true, 1f));
+
         gg.pose().popPose();
     }
 
@@ -435,19 +558,22 @@ public final class WeaponSelectScreen extends Screen {
         gg.drawCenteredString(font, pendingPurchase.displayName(), left + panelW / 2, by + 22, FlatTheme.TEXT);
         gg.drawCenteredString(font, "花费 " + pendingPurchase.price(), left + panelW / 2, by + 34, FlatTheme.DANGER);
 
+        long now = MenuTween.now();
         int[] confirm = confirmButtonRect();
         int[] cancel = cancelButtonRect();
-        drawTextButton(gg, confirm, "§a确认", mouseX, mouseY);
-        drawTextButton(gg, cancel, "取消", mouseX, mouseY);
+        boolean confirmHover = inRect(mouseX, mouseY, confirm);
+        boolean cancelHover = inRect(mouseX, mouseY, cancel);
+
+        // 确认：金色主按钮；取消：幽灵按钮（外部套按压缩放包裹）
+        MenuChrome.drawPrimaryButton(gg, font, confirm[0], confirm[1], confirm[2], confirm[3], "§a确认",
+                confirmHover, true, false, 0f, 0f, MenuChrome.pressScale(confirmPress, now));
+        int cancelCx = cancel[0] + cancel[2] / 2;
+        int cancelCy = cancel[1] + cancel[3] / 2;
+        MenuChrome.drawScaled(gg, cancelCx, cancelCy, MenuChrome.pressScale(confirmCancelPress, now), () ->
+                MenuChrome.drawGhostButton(gg, font, cancel[0], cancel[1], cancel[2], cancel[3], "取消",
+                        cancelHover, true, 1f));
 
         gg.pose().popPose();
-    }
-
-    private void drawTextButton(GuiGraphics gg, int[] r, String label, int mouseX, int mouseY) {
-        boolean hover = inRect(mouseX, mouseY, r);
-        gg.fill(r[0], r[1], r[0] + r[2], r[1] + r[3], hover ? FlatTheme.SURFACE_HOVER : FlatTheme.SURFACE);
-        gg.fill(r[0], r[1], r[0] + r[2], r[1] + 1, hover ? FlatTheme.ACCENT : FlatTheme.BORDER);
-        gg.drawCenteredString(font, label, r[0] + r[2] / 2, r[1] + (r[3] - 8) / 2, FlatTheme.TEXT);
     }
 
     private String trim(String text, int maxWidth) {
@@ -469,7 +595,7 @@ public final class WeaponSelectScreen extends Screen {
         return category != null ? category.displayName() : slotLabel(slot);
     }
 
-    /** 在面板右侧绘制滚动条（内容超出视口时）。 */
+    /** 在面板右侧绘制滚动条（内容超出视口时）；滑块改用 MenuChrome 金色强调色，轨道保持中性深灰。 */
     private void renderScrollbar(GuiGraphics gg) {
         if (maxScrollRow() <= 0) {
             return;
@@ -483,7 +609,7 @@ public final class WeaponSelectScreen extends Screen {
         int thumbH = Math.max(12, trackH * VISIBLE_ROWS / total);
         int range = trackH - thumbH;
         int thumbY = trackY + (range * scrollRow / maxScrollRow());
-        gg.fill(trackX, thumbY, trackX + 3, thumbY + thumbH, FlatTheme.ACCENT);
+        gg.fill(trackX, thumbY, trackX + 3, thumbY + thumbH, MenuChrome.GOLD);
     }
 
     private static String slotLabel(LoadoutSlot slot) {
