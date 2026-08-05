@@ -32,8 +32,6 @@ public final class CreateRoomScreen extends Screen {
     private static final int WHITE = 0xFFFFFFFF;
     private static final int TEXT_BASE = 0xFFE8EDF2;
     private static final int GOLD = 0xFFFFD76A;
-    private static final int GOLD_TEXT = 0xFF14181D;
-    private static final int GREEN = 0xFF7EE2A8;
     private static final int PANEL_BG = 0xFF1A1F26;
     private static final int OVERLAY_BLACK = 0xFF000000;
 
@@ -184,22 +182,8 @@ public final class CreateRoomScreen extends Screen {
         return modeListY + idx * 22 - 1;
     }
 
-    private static boolean inRect(double mx, double my, int x, int y, int w, int h) {
-        return mx >= x && mx < x + w && my >= y && my < y + h;
-    }
-
     private static int withAlpha(int color, float alpha) {
         return FlatTheme.withAlpha(color, alpha);
-    }
-
-    private static int lerpColor(int c1, int c2, float t) {
-        float tc = CreateRoomAnimator.clamp01(t);
-        int r1 = (c1 >> 16) & 0xFF, g1 = (c1 >> 8) & 0xFF, b1 = c1 & 0xFF;
-        int r2 = (c2 >> 16) & 0xFF, g2 = (c2 >> 8) & 0xFF, b2 = c2 & 0xFF;
-        int r = Math.round(r1 + (r2 - r1) * tc);
-        int g = Math.round(g1 + (g2 - g1) * tc);
-        int b = Math.round(b1 + (b2 - b1) * tc);
-        return 0xFF000000 | (r << 16) | (g << 8) | b;
     }
 
     // ============================================================
@@ -519,60 +503,60 @@ public final class CreateRoomScreen extends Screen {
         }
 
         for (int i = 0; i < CreateRoomModeCatalog.MODES.size(); i++) {
-            if (inRect(mouseX, mouseY, modeListX - 2, itemTop(i), 114, 20)) {
+            if (MenuChrome.inRect(mouseX, mouseY, modeListX - 2, itemTop(i), 114, 20)) {
                 onSelectMode(i);
                 return true;
             }
         }
-        if (inRect(mouseX, mouseY, modeListX, settingsY, 110, 18)) {
+        if (MenuChrome.inRect(mouseX, mouseY, modeListX, settingsY, 110, 18)) {
             onSettingsClicked();
             return true;
         }
 
-        if (inRect(mouseX, mouseY, rx, arenaY, 18, 18)) {
+        if (MenuChrome.inRect(mouseX, mouseY, rx, arenaY, 18, 18)) {
             onArenaAdjust(-1);
             return true;
         }
-        if (inRect(mouseX, mouseY, rx + 110, arenaY, 18, 18)) {
+        if (MenuChrome.inRect(mouseX, mouseY, rx + 110, arenaY, 18, 18)) {
             onArenaAdjust(1);
             return true;
         }
-        if (inRect(mouseX, mouseY, rx, targetY, 18, 18)) {
+        if (MenuChrome.inRect(mouseX, mouseY, rx, targetY, 18, 18)) {
             onScoreAdjust(-1);
             return true;
         }
-        if (inRect(mouseX, mouseY, rx + 110, targetY, 18, 18)) {
+        if (MenuChrome.inRect(mouseX, mouseY, rx + 110, targetY, 18, 18)) {
             onScoreAdjust(1);
             return true;
         }
-        if (inRect(mouseX, mouseY, rx, timeY, 18, 18)) {
+        if (MenuChrome.inRect(mouseX, mouseY, rx, timeY, 18, 18)) {
             onTimeAdjust(-1);
             return true;
         }
-        if (inRect(mouseX, mouseY, rx + 110, timeY, 18, 18)) {
+        if (MenuChrome.inRect(mouseX, mouseY, rx + 110, timeY, 18, 18)) {
             onTimeAdjust(1);
             return true;
         }
         if (playersVisible) {
-            if (inRect(mouseX, mouseY, rx, capY, 18, 18)) {
+            if (MenuChrome.inRect(mouseX, mouseY, rx, capY, 18, 18)) {
                 onPlayersAdjust(-1);
                 return true;
             }
-            if (inRect(mouseX, mouseY, rx + 110, capY, 18, 18)) {
+            if (MenuChrome.inRect(mouseX, mouseY, rx + 110, capY, 18, 18)) {
                 onPlayersAdjust(1);
                 return true;
             }
         }
-        if (inRect(mouseX, mouseY, rx, randomY, 128, 18)) {
+        if (MenuChrome.inRect(mouseX, mouseY, rx, randomY, 128, 18)) {
             onWeaponClicked();
             return true;
         }
 
-        if (inRect(mouseX, mouseY, modeListX, footY, 60, 18)) {
+        if (MenuChrome.inRect(mouseX, mouseY, modeListX, footY, 60, 18)) {
             onBackClicked();
             return true;
         }
-        if (inRect(mouseX, mouseY, rx, footY, 80, 18) && !arenas().isEmpty()) {
+        if (MenuChrome.inRect(mouseX, mouseY, rx, footY, 80, 18) && !arenas().isEmpty()) {
             onCreateClicked();
             return true;
         }
@@ -644,7 +628,7 @@ public final class CreateRoomScreen extends Screen {
             // 选中项强制视为"未悬停"，但仍走同一套跟踪逻辑——否则一个正处于悬停完成态(padding
             // 10/alpha 0.9)的项被选中后，会因为提前 continue 跳过状态更新而永久卡在悬停态，
             // 再也无法收到"离开"事件把它补间回 6/0.55。
-            boolean hoveredNow = i != selectedMode && inRect(mouseX, mouseY, modeListX - 2, itemTop(i), 114, 20);
+            boolean hoveredNow = i != selectedMode && MenuChrome.inRect(mouseX, mouseY, modeListX - 2, itemTop(i), 114, 20);
             if (hoveredNow != hoveredPrev[i]) {
                 hoveredPrev[i] = hoveredNow;
                 hoverEntering[i] = hoveredNow;
@@ -721,10 +705,10 @@ public final class CreateRoomScreen extends Screen {
 
         float settingsE = anim.leftColumn[modes.size() + 1].easedT(now, MenuTween.Ease.OUT_CUBIC);
         int settingsX = modeListX + Math.round(-12 * (1 - settingsE));
-        boolean settingsHovered = pendingNav == NAV_NONE && inRect(mouseX, mouseY, modeListX, settingsY, 110, 18);
-        float settingsPress = pressScale(P_SETTINGS, now);
-        drawScaled(gg, modeListX + 55, settingsY + 9, settingsPress, () ->
-                drawGhostButton(gg, settingsX, settingsY, 110, 18, "对局设定", settingsHovered, true, settingsE * panelAlpha));
+        boolean settingsHovered = pendingNav == NAV_NONE && MenuChrome.inRect(mouseX, mouseY, modeListX, settingsY, 110, 18);
+        float settingsPress = MenuChrome.pressScale(anim.press[P_SETTINGS], now);
+        MenuChrome.drawScaled(gg, modeListX + 55, settingsY + 9, settingsPress, () ->
+                MenuChrome.drawGhostButton(gg, font, settingsX, settingsY, 110, 18, "对局设定", settingsHovered, true, settingsE * panelAlpha));
     }
 
     private void drawIndicator(GuiGraphics gg, long now, float panelAlpha) {
@@ -743,7 +727,7 @@ public final class CreateRoomScreen extends Screen {
         }
         int cx = x + w / 2;
         int cy = yTop + h / 2;
-        drawScaledAxis(gg, cx, cy, 1f, stretch, () -> {
+        MenuChrome.drawScaledAxis(gg, cx, cy, 1f, stretch, () -> {
             gg.fill(x, yTop, x + w, yTop + h, withAlpha(WHITE, 0.06f * panelAlpha));
             gg.fill(x, yTop, x + 2, yTop + h, withAlpha(GOLD, panelAlpha));
         });
@@ -776,18 +760,20 @@ public final class CreateRoomScreen extends Screen {
         float alpha = e * panelAlpha;
         gg.drawString(font, "竞技场", rx, top + 44 + yOff, withAlpha(TEXT_BASE, 0.4f * alpha), false);
 
-        boolean leftHover = inRect(mouseX, mouseY, rx, arenaY + yOff, 18, 18);
-        boolean rightHover = inRect(mouseX, mouseY, rx + 110, arenaY + yOff, 18, 18);
+        boolean leftHover = MenuChrome.inRect(mouseX, mouseY, rx, arenaY + yOff, 18, 18);
+        boolean rightHover = MenuChrome.inRect(mouseX, mouseY, rx + 110, arenaY + yOff, 18, 18);
         boolean canCycle = arenas().size() > 1;
-        drawArrow(gg, rx, arenaY + yOff, "◀", leftHover, canCycle, P_ARENA_LEFT, now, alpha);
-        drawArrow(gg, rx + 110, arenaY + yOff, "▶", rightHover, canCycle, P_ARENA_RIGHT, now, alpha);
+        MenuChrome.drawLightControl(gg, font, rx, arenaY + yOff, 18, 18, "◀", leftHover, canCycle,
+                MenuChrome.pressScale(anim.press[P_ARENA_LEFT], now), alpha);
+        MenuChrome.drawLightControl(gg, font, rx + 110, arenaY + yOff, 18, 18, "▶", rightHover, canCycle,
+                MenuChrome.pressScale(anim.press[P_ARENA_RIGHT], now), alpha);
 
         int cx = rx + 64;
         int cy = arenaY + yOff + 9;
         int clipY1 = arenaY + yOff;
         int clipY2 = arenaY + yOff + 18;
         gg.enableScissor(rx + 18, clipY1, rx + 110, clipY2);
-        drawSlideX(gg, cx, cy, arenaOldText, arenaText(), arenaDir, anim.arenaSlide, now, withAlpha(TEXT_BASE, alpha));
+        MenuChrome.drawSlideX(gg, font, cx, cy, arenaOldText, arenaText(), arenaDir, anim.arenaSlide, now, withAlpha(TEXT_BASE, alpha), 92);
         gg.disableScissor();
     }
 
@@ -797,16 +783,18 @@ public final class CreateRoomScreen extends Screen {
         float alpha = e * panelAlpha;
         gg.drawString(font, "计分目标", rx, top + 84 + yOff, withAlpha(TEXT_BASE, 0.4f * alpha), false);
 
-        boolean minusHover = inRect(mouseX, mouseY, rx, targetY + yOff, 18, 18);
-        boolean plusHover = inRect(mouseX, mouseY, rx + 110, targetY + yOff, 18, 18);
-        drawArrow(gg, rx, targetY + yOff, "-", minusHover, true, P_SCORE_MINUS, now, alpha);
-        drawArrow(gg, rx + 110, targetY + yOff, "+", plusHover, true, P_SCORE_PLUS, now, alpha);
+        boolean minusHover = MenuChrome.inRect(mouseX, mouseY, rx, targetY + yOff, 18, 18);
+        boolean plusHover = MenuChrome.inRect(mouseX, mouseY, rx + 110, targetY + yOff, 18, 18);
+        MenuChrome.drawLightControl(gg, font, rx, targetY + yOff, 18, 18, "-", minusHover, true,
+                MenuChrome.pressScale(anim.press[P_SCORE_MINUS], now), alpha);
+        MenuChrome.drawLightControl(gg, font, rx + 110, targetY + yOff, 18, 18, "+", plusHover, true,
+                MenuChrome.pressScale(anim.press[P_SCORE_PLUS], now), alpha);
 
         int cx = rx + 64;
         int cy = targetY + yOff + 9;
         gg.enableScissor(rx + 18, targetY + yOff, rx + 110, targetY + yOff + 18);
         MenuTween.Anim rollAnim = scoreRollAnim != null ? scoreRollAnim : anim.scoreTimePlayersRoll[0];
-        drawRollY(gg, cx, cy, scoreOldText, scoreText(target, mode().targetUnit()), scoreDir, rollAnim, now, withAlpha(TEXT_BASE, alpha));
+        MenuChrome.drawRollY(gg, font, cx, cy, scoreOldText, scoreText(target, mode().targetUnit()), scoreDir, rollAnim, now, withAlpha(TEXT_BASE, alpha), 18);
         gg.disableScissor();
     }
 
@@ -816,15 +804,17 @@ public final class CreateRoomScreen extends Screen {
         float alpha = e * panelAlpha;
         gg.drawString(font, "对局限时", rx, top + 124 + yOff, withAlpha(TEXT_BASE, 0.4f * alpha), false);
 
-        boolean minusHover = inRect(mouseX, mouseY, rx, timeY + yOff, 18, 18);
-        boolean plusHover = inRect(mouseX, mouseY, rx + 110, timeY + yOff, 18, 18);
-        drawArrow(gg, rx, timeY + yOff, "-", minusHover, true, P_TIME_MINUS, now, alpha);
-        drawArrow(gg, rx + 110, timeY + yOff, "+", plusHover, true, P_TIME_PLUS, now, alpha);
+        boolean minusHover = MenuChrome.inRect(mouseX, mouseY, rx, timeY + yOff, 18, 18);
+        boolean plusHover = MenuChrome.inRect(mouseX, mouseY, rx + 110, timeY + yOff, 18, 18);
+        MenuChrome.drawLightControl(gg, font, rx, timeY + yOff, 18, 18, "-", minusHover, true,
+                MenuChrome.pressScale(anim.press[P_TIME_MINUS], now), alpha);
+        MenuChrome.drawLightControl(gg, font, rx + 110, timeY + yOff, 18, 18, "+", plusHover, true,
+                MenuChrome.pressScale(anim.press[P_TIME_PLUS], now), alpha);
 
         int cx = rx + 64;
         int cy = timeY + yOff + 9;
         gg.enableScissor(rx + 18, timeY + yOff, rx + 110, timeY + yOff + 18);
-        drawRollY(gg, cx, cy, timeOldText, timeText(), timeDir, anim.scoreTimePlayersRoll[1], now, withAlpha(TEXT_BASE, alpha));
+        MenuChrome.drawRollY(gg, font, cx, cy, timeOldText, timeText(), timeDir, anim.scoreTimePlayersRoll[1], now, withAlpha(TEXT_BASE, alpha), 18);
         gg.disableScissor();
     }
 
@@ -847,15 +837,17 @@ public final class CreateRoomScreen extends Screen {
 
         gg.drawString(font, "房间人数", rx, top + 156 + yOff, withAlpha(TEXT_BASE, 0.4f * alpha), false);
 
-        boolean minusHover = inRect(mouseX, mouseY, rx, capY + yOff, 18, 18);
-        boolean plusHover = inRect(mouseX, mouseY, rx + 110, capY + yOff, 18, 18);
-        drawArrow(gg, rx, capY + yOff, "-", minusHover, playersVisible, P_PLAYERS_MINUS, now, alpha);
-        drawArrow(gg, rx + 110, capY + yOff, "+", plusHover, playersVisible, P_PLAYERS_PLUS, now, alpha);
+        boolean minusHover = MenuChrome.inRect(mouseX, mouseY, rx, capY + yOff, 18, 18);
+        boolean plusHover = MenuChrome.inRect(mouseX, mouseY, rx + 110, capY + yOff, 18, 18);
+        MenuChrome.drawLightControl(gg, font, rx, capY + yOff, 18, 18, "-", minusHover, playersVisible,
+                MenuChrome.pressScale(anim.press[P_PLAYERS_MINUS], now), alpha);
+        MenuChrome.drawLightControl(gg, font, rx + 110, capY + yOff, 18, 18, "+", plusHover, playersVisible,
+                MenuChrome.pressScale(anim.press[P_PLAYERS_PLUS], now), alpha);
 
         int cx = rx + 64;
         int cy = capY + yOff + 9;
         gg.enableScissor(rx + 18, capY + yOff, rx + 110, capY + yOff + 18);
-        drawRollY(gg, cx, cy, playersOldText, playersText(), playersDir, anim.scoreTimePlayersRoll[2], now, withAlpha(TEXT_BASE, alpha));
+        MenuChrome.drawRollY(gg, font, cx, cy, playersOldText, playersText(), playersDir, anim.scoreTimePlayersRoll[2], now, withAlpha(TEXT_BASE, alpha), 18);
         gg.disableScissor();
     }
 
@@ -866,12 +858,12 @@ public final class CreateRoomScreen extends Screen {
         float lockAlpha = locked ? 0.45f : 1.0f;
         float alpha = e * panelAlpha * lockAlpha;
 
-        boolean hovered = !locked && inRect(mouseX, mouseY, rx, randomY + yOff, 128, 18);
-        drawGhostButton(gg, rx, randomY + yOff, 128, 18, weaponText(), hovered, !locked, alpha);
+        boolean hovered = !locked && MenuChrome.inRect(mouseX, mouseY, rx, randomY + yOff, 128, 18);
+        MenuChrome.drawGhostButton(gg, font, rx, randomY + yOff, 128, 18, weaponText(), hovered, !locked, alpha);
 
         if (anim.weaponSweep.isRunning()) {
             float sweepE = anim.weaponSweep.easedT(now, MenuTween.Ease.OUT_CUBIC);
-            drawSweep(gg, rx, randomY + yOff, 128, 18, sweepE, 0.25f * panelAlpha);
+            MenuChrome.drawSweep(gg, rx, randomY + yOff, 128, 18, sweepE, 0.25f * panelAlpha);
         }
     }
 
@@ -891,141 +883,33 @@ public final class CreateRoomScreen extends Screen {
         float e = anim.footer.easedT(now, MenuTween.Ease.OUT_CUBIC);
         float alpha = e * panelAlpha;
 
-        boolean backHovered = pendingNav == NAV_NONE && inRect(mouseX, mouseY, modeListX, footY, 60, 18);
-        float backPress = pressScale(P_BACK, now);
-        drawScaled(gg, modeListX + 30, footY + 9, backPress, () ->
-                drawGhostButton(gg, modeListX, footY, 60, 18, "返回", backHovered, true, alpha));
+        boolean backHovered = pendingNav == NAV_NONE && MenuChrome.inRect(mouseX, mouseY, modeListX, footY, 60, 18);
+        float backPress = MenuChrome.pressScale(anim.press[P_BACK], now);
+        MenuChrome.drawScaled(gg, modeListX + 30, footY + 9, backPress, () ->
+                MenuChrome.drawGhostButton(gg, font, modeListX, footY, 60, 18, "返回", backHovered, true, alpha));
 
         boolean createEnabled = !arenas().isEmpty();
-        boolean createHovered = createEnabled && !createArmed && inRect(mouseX, mouseY, rx, footY, 80, 18);
-        float createPress = pressScale(P_CREATE, now);
-        drawScaled(gg, rx + 40, footY + 9, createPress, () -> drawCreateButton(gg, now, alpha, createHovered, createEnabled));
+        boolean createHovered = createEnabled && !createArmed && MenuChrome.inRect(mouseX, mouseY, rx, footY, 80, 18);
+        drawCreateButton(gg, now, createHovered, createEnabled);
     }
 
-    private void drawCreateButton(GuiGraphics gg, long now, float panelAlpha, boolean hovered, boolean enabled) {
+    /**
+     * “创建”按钮的状态计算包装：负责三连状态机推进（色变完成后解锁 ✓ 已创建 + 启动
+     * {@code createRevert}）与文案/颜色进度采样，实际绘制交给纯函数
+     * {@link MenuChrome#drawPrimaryButton}。
+     */
+    private void drawCreateButton(GuiGraphics gg, long now, boolean hovered, boolean enabled) {
         int x = rx, y = footY, w = 80, h = 18;
-        float colorT;
-        String label;
-        if (createArmed) {
-            if (!createConfirmed && anim.createColorShift.isDone(now)) {
-                createConfirmed = true;
-                anim.createRevert.start(now);
-            }
-            colorT = createConfirmed ? 1f : anim.createColorShift.easedT(now, MenuTween.Ease.OUT_CUBIC);
-            label = createConfirmed ? "✓ 已创建" : "创 建";
-        } else {
-            colorT = 0f;
-            label = "创 建";
+        if (createArmed && !createConfirmed && anim.createColorShift.isDone(now)) {
+            createConfirmed = true;
+            anim.createRevert.start(now);
         }
-        int bg = enabled ? lerpColor(GOLD, GREEN, colorT) : withAlpha(GOLD, 0.35f);
-        gg.fill(x, y, x + w, y + h, withAlpha(bg, panelAlpha));
-        if (hovered) {
-            gg.fill(x, y, x + w, y + 1, withAlpha(WHITE, 0.5f * panelAlpha));
-        }
-        gg.drawCenteredString(font, label, x + w / 2, y + 5, withAlpha(GOLD_TEXT, panelAlpha));
-
-        if (createArmed && anim.createSweep.isRunning()) {
-            float sweepE = anim.createSweep.easedT(now, MenuTween.Ease.OUT_CUBIC);
-            drawSweep(gg, x, y, w, h, sweepE, 0.5f * panelAlpha);
-        }
-    }
-
-    // ============================================================
-    // 通用绘制原语
-    // ============================================================
-
-    private void drawArrow(GuiGraphics gg, int x, int y, String glyph, boolean hovered, boolean enabled,
-                            int pressIdx, long now, float alpha) {
-        float scale = pressScale(pressIdx, now);
-        int cx = x + 9, cy = y + 9;
-        drawScaled(gg, cx, cy, scale, () -> {
-            int bg = withAlpha(WHITE, (enabled ? (hovered ? 0.12f : 0.05f) : 0.03f) * alpha);
-            gg.fill(x, y, x + 18, y + 18, bg);
-            int col = enabled ? (hovered ? withAlpha(WHITE, alpha) : withAlpha(TEXT_BASE, 0.7f * alpha))
-                    : withAlpha(TEXT_BASE, 0.25f * alpha);
-            gg.drawCenteredString(font, glyph, x + 9, y + 5, col);
-        });
-    }
-
-    private void drawGhostButton(GuiGraphics gg, int x, int y, int w, int h, String label,
-                                  boolean hovered, boolean enabled, float alpha) {
-        float borderA = (enabled ? (hovered ? 0.4f : 0.15f) : 0.08f) * alpha;
-        int border = withAlpha(WHITE, borderA);
-        gg.fill(x, y, x + w, y + 1, border);
-        gg.fill(x, y + h - 1, x + w, y + h, border);
-        gg.fill(x, y, x + 1, y + h, border);
-        gg.fill(x + w - 1, y, x + w, y + h, border);
-        int textColor = enabled
-                ? (hovered ? withAlpha(WHITE, alpha) : withAlpha(TEXT_BASE, 0.7f * alpha))
-                : withAlpha(TEXT_BASE, 0.3f * alpha);
-        gg.drawCenteredString(font, label, x + w / 2, y + 5, textColor);
-    }
-
-    private void drawSweep(GuiGraphics gg, int x, int y, int w, int h, float e, float maxAlpha) {
-        if (e <= 0f || e >= 1f) {
-            return;
-        }
-        float centerFrac = -0.4f + 1.8f * e;
-        int barCenter = x + Math.round(centerFrac * w);
-        int half = Math.max(1, Math.round(w * 0.15f));
-        int bx1 = Math.max(x, barCenter - half);
-        int bx2 = Math.min(x + w, barCenter + half);
-        if (bx2 > bx1) {
-            gg.fill(bx1, y, bx2, y + h, withAlpha(WHITE, maxAlpha));
-        }
-    }
-
-    /** 纵向数字滚轮：旧值滑出 + 新值滑入（规格 §5 `roll()`，dir=1 新值自下而上）。
-     *  振幅取裁剪区高度 18px，确保 e=1 时旧文案已完全移出裁剪区，不会有一帧跳变。 */
-    private void drawRollY(GuiGraphics gg, int cx, int cy, String oldText, String newText, int dir,
-                            MenuTween.Anim rollAnim, long now, int color) {
-        float e = rollAnim.easedT(now, MenuTween.Ease.OUT_CUBIC);
-        int clip = 18;
-        if (e < 1f && oldText != null && !oldText.isEmpty()) {
-            int oy = cy + Math.round(CreateRoomAnimator.rollOffset(dir, e, clip, true));
-            gg.drawCenteredString(font, oldText, cx, oy - 4, color);
-        }
-        int ny = cy + Math.round(CreateRoomAnimator.rollOffset(dir, e, clip, false));
-        gg.drawCenteredString(font, newText, cx, ny - 4, color);
-    }
-
-    /** 横向滑动（竞技场，规格 §5 `slide()`，dir=1 ▶ 新值自右滑入）。
-     *  振幅取裁剪区宽度 92px（rx+18 到 rx+110），同样确保完全滑出裁剪区。 */
-    private void drawSlideX(GuiGraphics gg, int cx, int cy, String oldText, String newText, int dir,
-                             MenuTween.Anim slideAnim, long now, int color) {
-        float e = slideAnim.easedT(now, MenuTween.Ease.OUT_CUBIC);
-        int clip = 92;
-        if (e < 1f && oldText != null && !oldText.isEmpty()) {
-            int ox = cx + Math.round(CreateRoomAnimator.rollOffset(dir, e, clip, true));
-            gg.drawCenteredString(font, oldText, ox, cy - 4, color);
-        }
-        int nx = cx + Math.round(CreateRoomAnimator.rollOffset(dir, e, clip, false));
-        gg.drawCenteredString(font, newText, nx, cy - 4, color);
-    }
-
-    private float pressScale(int idx, long now) {
-        MenuTween.Anim a = anim.press[idx];
-        if (!a.isRunning()) {
-            return 1f;
-        }
-        return 0.82f + 0.18f * a.easedT(now, MenuTween.Ease.OUT_BACK);
-    }
-
-    private void drawScaled(GuiGraphics gg, int cx, int cy, float scale, Runnable draw) {
-        drawScaledAxis(gg, cx, cy, scale, scale, draw);
-    }
-
-    private void drawScaledAxis(GuiGraphics gg, int cx, int cy, float sx, float sy, Runnable draw) {
-        if (Math.abs(sx - 1f) < 0.001f && Math.abs(sy - 1f) < 0.001f) {
-            draw.run();
-            return;
-        }
-        gg.pose().pushPose();
-        gg.pose().translate(cx, cy, 0);
-        gg.pose().scale(sx, sy, 1f);
-        gg.pose().translate(-cx, -cy, 0);
-        draw.run();
-        gg.pose().popPose();
+        float colorShiftE = createArmed ? anim.createColorShift.easedT(now, MenuTween.Ease.OUT_CUBIC) : 0f;
+        float sweepE = createArmed ? anim.createSweep.easedT(now, MenuTween.Ease.OUT_CUBIC) : 0f;
+        String label = createConfirmed ? "✓ 已创建" : "创 建";
+        float pressScale = MenuChrome.pressScale(anim.press[P_CREATE], now);
+        MenuChrome.drawPrimaryButton(gg, font, x, y, w, h, label, hovered, enabled, createConfirmed,
+                colorShiftE, sweepE, pressScale);
     }
 
     @Override
