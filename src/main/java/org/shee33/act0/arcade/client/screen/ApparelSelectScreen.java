@@ -84,7 +84,7 @@ public final class ApparelSelectScreen extends Screen {
             gg.drawCenteredString(font, trim(item.displayName(), CELL - 4), x + CELL / 2, y + CELL - 18,
                     locked ? FlatTheme.TEXT_DIM : FlatTheme.TEXT);
             if (locked) {
-                gg.fill(x, y, x + CELL, y + CELL, FlatTheme.MODAL_OVERLAY);
+                gg.fill(x, y, x + CELL, y + CELL, MenuChrome.LOCK_OVERLAY);
                 gg.drawCenteredString(font, String.valueOf(item.price()), x + CELL / 2, y + CELL / 2 - 4, FlatTheme.DANGER);
             }
         }
