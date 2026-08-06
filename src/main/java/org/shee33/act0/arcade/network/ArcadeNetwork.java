@@ -124,6 +124,9 @@ public final class ArcadeNetwork {
         CHANNEL.registerMessage(id++, HotZoneAreaPacket.class,
                 HotZoneAreaPacket::encode, HotZoneAreaPacket::decode, HotZoneAreaPacket::handle,
                 Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(id++, ClearHotZonePacket.class,
+                ClearHotZonePacket::encode, ClearHotZonePacket::decode, ClearHotZonePacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
     }
 
     /** 把服务端当前装备目录下发给指定玩家。 */
@@ -147,6 +150,14 @@ public final class ArcadeNetwork {
     /** 向玩家下发热区矩形边界，供客户端存入 {@code ClientHotZoneState} 供后续渲染读取。 */
     public static void sendHotZoneArea(ServerPlayer player, HotZoneArea area) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new HotZoneAreaPacket(area));
+    }
+
+    /**
+     * 通知玩家清空客户端缓存的热区矩形边界（对局结束/主动退出对局时调用），防止世界渲染的
+     * 选区高亮框残留在已经离开的对局场景里。
+     */
+    public static void sendClearHotZone(ServerPlayer player) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new ClearHotZonePacket());
     }
 
         public static void sendFireLock(ServerPlayer player, boolean locked) {

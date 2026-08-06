@@ -1021,6 +1021,9 @@ public final class ArcadeMatch {
                 player.getInventory().clearContent();
                 sidebar.hideFrom(player);
                 removeBossBarPlayer(player);
+                if (isHotZoneMode()) {
+                    ArcadeNetwork.sendClearHotZone(player);
+                }
                 String result = draw
                         ? "§7本局平局，已送你回大厅。"
                         : (sideOf.get(id) != null && sideOf.get(id) == winnerSide
@@ -1139,6 +1142,9 @@ public final class ArcadeMatch {
         sidebar.hideFrom(player);
         removeBossBarPlayer(player);
         ArcadeNetwork.sendFireLock(player, false);
+        if (isHotZoneMode()) {
+            ArcadeNetwork.sendClearHotZone(player);
+        }
         broadcast("§e" + player.getGameProfile().getName() + " §7退出了本对局。");
         player.sendSystemMessage(Component.literal("§7已退出对局，返回大厅。"));
         setupNameTagTeams();
