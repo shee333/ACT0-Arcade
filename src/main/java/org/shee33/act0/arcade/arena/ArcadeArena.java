@@ -14,6 +14,8 @@ import java.util.Objects;
  * <ul>
  *   <li>决斗/团队：每方一个固定出生点（{@code sideSpawns.get(sideIndex)}）。</li>
  *   <li>个人乱斗：使用 {@link #randomSpawns} 手动候选池取点。</li>
+ *   <li>热区模式：使用 {@link #hotZone} 这一个固定矩形区域（可为 {@code null} 表示未设置），
+ *       与 {@link #randomSpawns} 完全独立，不再复用、不再轮转。</li>
  * </ul>
  */
 public final class ArcadeArena {
@@ -22,15 +24,25 @@ public final class ArcadeArena {
     private final List<SpawnPoint> sideSpawns;
     private final List<SpawnPoint> randomSpawns;
     private final SpawnPoint returnSpawn;
+    private final HotZoneArea hotZone;
 
     public ArcadeArena(String arenaId,
                        List<SpawnPoint> sideSpawns,
                        List<SpawnPoint> randomSpawns,
                        SpawnPoint returnSpawn) {
+        this(arenaId, sideSpawns, randomSpawns, returnSpawn, null);
+    }
+
+    public ArcadeArena(String arenaId,
+                       List<SpawnPoint> sideSpawns,
+                       List<SpawnPoint> randomSpawns,
+                       SpawnPoint returnSpawn,
+                       HotZoneArea hotZone) {
         this.arenaId = Objects.requireNonNull(arenaId, "arenaId");
         this.sideSpawns = List.copyOf(Objects.requireNonNull(sideSpawns, "sideSpawns"));
         this.randomSpawns = randomSpawns == null ? List.of() : List.copyOf(randomSpawns);
         this.returnSpawn = returnSpawn;
+        this.hotZone = hotZone;
     }
 
     public String arenaId() {
@@ -61,6 +73,11 @@ public final class ArcadeArena {
 
     public boolean hasReturnSpawn() {
         return returnSpawn != null;
+    }
+
+    /** 热区模式使用的固定矩形区域；{@code null} 表示尚未设置。 */
+    public HotZoneArea hotZone() {
+        return hotZone;
     }
 
     /**
@@ -119,6 +136,7 @@ public final class ArcadeArena {
         private final List<SpawnPoint> sideSpawns = new ArrayList<>();
         private final List<SpawnPoint> randomSpawns = new ArrayList<>();
         private SpawnPoint returnSpawn;
+        private HotZoneArea hotZone;
 
         public Builder(String arenaId) {
             this.arenaId = arenaId;
@@ -139,8 +157,13 @@ public final class ArcadeArena {
             return this;
         }
 
+        public Builder hotZone(HotZoneArea hotZone) {
+            this.hotZone = hotZone;
+            return this;
+        }
+
         public ArcadeArena build() {
-            return new ArcadeArena(arenaId, sideSpawns, randomSpawns, returnSpawn);
+            return new ArcadeArena(arenaId, sideSpawns, randomSpawns, returnSpawn, hotZone);
         }
     }
 }

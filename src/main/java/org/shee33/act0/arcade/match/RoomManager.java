@@ -136,13 +136,13 @@ public final class RoomManager {
         public String create(MinecraftServer server, ServerPlayer host, String mode, String arenaId,
                  Integer winTarget, int timeLimitSeconds, RandomWeaponMode randomMode, Integer requestedCapacity) {
         return create(server, host, mode, arenaId, winTarget, timeLimitSeconds, randomMode, requestedCapacity,
-                0.0D, 3, false, 25, 60, 6.0D, 1);
+                0.0D, 3, false, 25, 1);
     }
 
         public String create(MinecraftServer server, ServerPlayer host, String mode, String arenaId,
                  Integer winTarget, int timeLimitSeconds, RandomWeaponMode randomMode, Integer requestedCapacity,
                  double healthOverride, int respawnDelaySeconds, boolean friendlyFire, int ammoCrateChancePercent,
-                 int hotZoneRotateSeconds, double hotZoneRadius, int hotZoneScorePerSecond) {
+                 int hotZoneScorePerSecond) {
         int capacity = requestedCapacity != null ? normalizeCapacity(mode, requestedCapacity) : capacityFor(mode);
         if (capacity <= 0) {
             return "§c未知模式：" + mode;
@@ -163,7 +163,7 @@ public final class RoomManager {
         Integer target = winTarget != null ? Math.max(1, Math.min(maxTargetFor(mode), winTarget)) : null;
         MatchOptions options = new MatchOptions(target, timeLimitSeconds, randomMode,
                 healthOverride, respawnDelaySeconds, friendlyFire, ammoCrateChancePercent,
-                hotZoneRotateSeconds, hotZoneRadius, hotZoneScorePerSecond, null);
+                hotZoneScorePerSecond, null);
 
         String roomId = nextRoomId();
         ArcadeRoom room = new ArcadeRoom(roomId, id, host.getGameProfile().getName(),

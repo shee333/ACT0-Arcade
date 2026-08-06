@@ -88,9 +88,7 @@ class MatchSettingsTest {
         assertEquals(RespawnPolicy.NEAR_TEAMMATE, s.respawnPolicy());
         assertEquals(LoadoutRuleset.ARCADE, s.ruleset());
         assertTrue(s.flexible());
-        // 未显式设置热区参数时应落到 Builder 默认值
-        assertEquals(60 * 20, s.hotZoneRotateTicks());
-        assertEquals(6.0D, s.hotZoneRadius());
+        // 未显式设置热区得分速率时应落到 Builder 默认值
         assertEquals(1, s.hotZoneScorePerSecond());
     }
 
@@ -205,25 +203,15 @@ class MatchSettingsTest {
     }
 
     @Test
-    void hotZoneParametersAreClampedToDocumentedRange() {
+    void hotZoneScorePerSecondIsClampedToDocumentedRange() {
         MatchSettings belowRange = MatchSettings.builder("hot_zone", "热区")
-                .hotZoneRotateSeconds(1)
-                .hotZoneRadius(999)
                 .hotZoneScorePerSecond(99)
                 .build();
-
-        assertEquals(15 * 20, belowRange.hotZoneRotateTicks());
-        assertEquals(16.0D, belowRange.hotZoneRadius());
         assertEquals(5, belowRange.hotZoneScorePerSecond());
 
         MatchSettings aboveRange = MatchSettings.builder("hot_zone", "热区")
-                .hotZoneRotateSeconds(999)
-                .hotZoneRadius(0)
                 .hotZoneScorePerSecond(0)
                 .build();
-
-        assertEquals(180 * 20, aboveRange.hotZoneRotateTicks());
-        assertEquals(2.0D, aboveRange.hotZoneRadius());
         assertEquals(1, aboveRange.hotZoneScorePerSecond());
     }
 

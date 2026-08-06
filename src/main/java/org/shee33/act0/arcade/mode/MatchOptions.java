@@ -14,8 +14,6 @@ public record MatchOptions(Integer winTarget,
                            int respawnDelaySeconds,
                            boolean friendlyFire,
                            int ammoCrateChancePercent,
-                           int hotZoneRotateSeconds,
-                           double hotZoneRadius,
                            int hotZoneScorePerSecond,
                            java.util.List<ArmsRaceLevel> armsRaceLevels) {
 
@@ -25,7 +23,7 @@ public record MatchOptions(Integer winTarget,
 
     public MatchOptions(Integer winTarget, int timeLimitSeconds, RandomWeaponMode randomMode) {
         this(winTarget, timeLimitSeconds, randomMode,
-                0.0D, 3, false, 25, 60, 6.0D, 1, null);
+                0.0D, 3, false, 25, 1, null);
     }
 
     public MatchOptions {
@@ -34,8 +32,6 @@ public record MatchOptions(Integer winTarget,
         healthOverride = healthOverride <= 0.0D ? 0.0D : Math.max(1.0D, Math.min(200.0D, healthOverride));
         respawnDelaySeconds = Math.max(0, Math.min(20, respawnDelaySeconds));
         ammoCrateChancePercent = Math.max(0, Math.min(100, ammoCrateChancePercent));
-        hotZoneRotateSeconds = Math.max(15, Math.min(180, hotZoneRotateSeconds));
-        hotZoneRadius = Math.max(2.0D, Math.min(16.0D, hotZoneRadius));
         hotZoneScorePerSecond = Math.max(1, Math.min(5, hotZoneScorePerSecond));
         armsRaceLevels = armsRaceLevels != null && !armsRaceLevels.isEmpty()
                 ? java.util.List.copyOf(armsRaceLevels) : null;

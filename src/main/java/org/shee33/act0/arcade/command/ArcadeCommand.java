@@ -21,6 +21,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.shee33.act0.arcade.Act0Arcade;
 import org.shee33.act0.arcade.arena.ArcadeArena;
+import org.shee33.act0.arcade.arena.HotZoneWandHandler;
 import org.shee33.act0.arcade.arena.SpawnPoint;
 import org.shee33.act0.arcade.economy.ArcadeEconomy;
 import org.shee33.act0.arcade.economy.BuyOutcome;
@@ -335,14 +336,10 @@ public final class ArcadeCommand {
         var respawn = Commands.argument("respawn", IntegerArgumentType.integer(0, 20));
         var friendly = Commands.argument("friendly", StringArgumentType.word());
         var crate = Commands.argument("crate", IntegerArgumentType.integer(0, 100));
-        var hotTime = Commands.argument("hotTime", IntegerArgumentType.integer(15, 180));
-        var hotRadius = Commands.argument("hotRadius", DoubleArgumentType.doubleArg(2.0D, 16.0D));
         var hotScore = Commands.argument("hotScore", IntegerArgumentType.integer(1, 5))
                 .executes(ctx -> roomCreate(ctx, mode));
 
-        hotRadius.then(hotScore);
-        hotTime.then(hotRadius);
-        crate.then(hotTime);
+        crate.then(hotScore);
         friendly.then(crate);
         respawn.then(friendly);
         health.then(respawn);
@@ -366,11 +363,9 @@ public final class ArcadeCommand {
         int respawn = optIntOr(ctx, "respawn", 3);
         boolean friendly = optBool(ctx, "friendly", false);
         int crate = optIntOr(ctx, "crate", 25);
-        int hotTime = optIntOr(ctx, "hotTime", 60);
-        double hotRadius = optDoubleOr(ctx, "hotRadius", 6.0D);
         int hotScore = optIntOr(ctx, "hotScore", 1);
         String feedback = services().rooms().create(server, player, mode, arena, target, time, random, capacity,
-            health, respawn, friendly, crate, hotTime, hotRadius, hotScore);
+            health, respawn, friendly, crate, hotScore);
         ctx.getSource().sendSuccess(() -> Component.literal(feedback), false);
         ArcadeNetwork.broadcastRoomList(server);
         return 1;
@@ -398,14 +393,6 @@ public final class ArcadeCommand {
     private static int optIntOr(CommandContext<CommandSourceStack> ctx, String name, int def) {
         Integer v = optInt(ctx, name);
         return v != null ? v : def;
-    }
-
-    private static double optDoubleOr(CommandContext<CommandSourceStack> ctx, String name, double def) {
-        try {
-            return DoubleArgumentType.getDouble(ctx, name);
-        } catch (IllegalArgumentException e) {
-            return def;
-        }
     }
 
     private static boolean optBool(CommandContext<CommandSourceStack> ctx, String name, boolean def) {
@@ -517,12 +504,12 @@ public final class ArcadeCommand {
                 .then(Commands.literal("addrespawn")
                     .then(Commands.argument("id", StringArgumentType.string()).suggests(ARENA_IDS)
                         .executes(ArcadeCommand::arenaAddRandomSpawn)))
-                .then(Commands.literal("addhotzone")
-                    .then(Commands.argument("id", StringArgumentType.string()).suggests(ARENA_IDS)
-                        .executes(ArcadeCommand::arenaAddHotZone)))
                 .then(Commands.literal("addrandom")
                         .then(Commands.argument("id", StringArgumentType.string()).suggests(ARENA_IDS)
                                 .executes(ArcadeCommand::arenaAddRandomSpawn)))
+                .then(Commands.literal("hotzonewand")
+                        .then(Commands.argument("id", StringArgumentType.string()).suggests(ARENA_IDS)
+                                .executes(ArcadeCommand::arenaHotZoneWand)))
                 .then(Commands.literal("list")
                         .executes(ArcadeCommand::arenaList))
                 .then(Commands.literal("info")
@@ -558,7 +545,7 @@ public final class ArcadeCommand {
             return 0;
         }
         ArcadeArena old = existing.get();
-        ArcadeArena.Builder builder = new ArcadeArena.Builder(id).returnSpawn(spawnAt(player));
+        ArcadeArena.Builder builder = new ArcadeArena.Builder(id).returnSpawn(spawnAt(player)).hotZone(old.hotZone());
         old.sideSpawns().forEach(builder::addSideSpawn);
         old.randomSpawns().forEach(builder::addRandomSpawn);
         ArcadeArena updated = builder.build();
@@ -578,7 +565,7 @@ public final class ArcadeCommand {
             return 0;
         }
         ArcadeArena old = existing.get();
-        ArcadeArena.Builder builder = new ArcadeArena.Builder(id).returnSpawn(old.returnSpawn());
+        ArcadeArena.Builder builder = new ArcadeArena.Builder(id).returnSpawn(old.returnSpawn()).hotZone(old.hotZone());
         old.sideSpawns().forEach(builder::addSideSpawn);
         old.randomSpawns().forEach(builder::addRandomSpawn);
         builder.addSideSpawn(spawnAt(player));
@@ -593,10 +580,6 @@ public final class ArcadeCommand {
         return arenaAddRandomLikePoint(ctx, "§a已为 §e%s §a添加个人乱斗手动复活点 #%d");
     }
 
-    private static int arenaAddHotZone(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
-        return arenaAddRandomLikePoint(ctx, "§a已为 §e%s §a添加热区点 #%d");
-    }
-
     private static int arenaAddRandomLikePoint(CommandContext<CommandSourceStack> ctx, String successFormat) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
         String id = StringArgumentType.getString(ctx, "id");
@@ -607,7 +590,7 @@ public final class ArcadeCommand {
             return 0;
         }
         ArcadeArena old = existing.get();
-        ArcadeArena.Builder builder = new ArcadeArena.Builder(id).returnSpawn(old.returnSpawn());
+        ArcadeArena.Builder builder = new ArcadeArena.Builder(id).returnSpawn(old.returnSpawn()).hotZone(old.hotZone());
         old.sideSpawns().forEach(builder::addSideSpawn);
         old.randomSpawns().forEach(builder::addRandomSpawn);
         builder.addRandomSpawn(spawnAt(player));
@@ -615,6 +598,26 @@ public final class ArcadeCommand {
         registry.put(updated);
         ctx.getSource().sendSuccess(() -> Component.literal(
             String.format(successFormat, id, updated.randomSpawns().size())), true);
+        return 1;
+    }
+
+    /**
+     * 发放热区框选道具并开始一次编辑会话：管理员随后左键点方块记录角 1、右键点方块记录角 2，
+     * 两角都记录后 {@link HotZoneWandHandler} 会自动归一化生成 {@link org.shee33.act0.arcade.arena.HotZoneArea}
+     * 并写回该竞技场。
+     */
+    private static int arenaHotZoneWand(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        String id = StringArgumentType.getString(ctx, "id");
+        ArenaRegistry registry = ArenaRegistry.get(ctx.getSource().getServer());
+        if (registry.find(id).isEmpty()) {
+            ctx.getSource().sendFailure(Component.literal("竞技场不存在：" + id));
+            return 0;
+        }
+        HotZoneWandHandler.INSTANCE.beginEditing(player.getUUID(), id);
+        player.getInventory().add(HotZoneWandHandler.createWand());
+        ctx.getSource().sendSuccess(() -> Component.literal(
+                "§a已发放热区框选道具 §7(竞技场 §e" + id + "§7)§a，左键点击一个方块记录角1，右键点击另一个方块记录角2。"), true);
         return 1;
     }
 
@@ -638,10 +641,12 @@ public final class ArcadeCommand {
         }
         ArcadeArena a = arena.get();
         String ret = a.hasReturnSpawn() ? a.returnSpawn().toString() : "§c未设置";
+        String hotZone = a.hotZone() != null ? a.hotZone().toString() : "§c未设置";
         ctx.getSource().sendSuccess(() -> Component.literal(
                 "§e" + id + "§f：阵营出生点 " + a.sideSpawns().size()
                 + "，个人乱斗复活点 " + a.randomSpawns().size()
-                + "，返回点 " + ret), false);
+                + "，返回点 " + ret
+                + "，热区 " + hotZone), false);
         return 1;
     }
 

@@ -84,8 +84,6 @@ public final class CreateRoomScreen extends Screen {
     private int settingsRespawnDelaySeconds = 3;
     private boolean settingsFriendlyFire = false;
     private int settingsAmmoCrateChancePercent = 25;
-    private int settingsHotZoneRotateSeconds = 60;
-    private double settingsHotZoneRadius = 6.0D;
     private int settingsHotZoneScorePerSecond = 1;
 
     // ============================================================
@@ -388,8 +386,6 @@ public final class CreateRoomScreen extends Screen {
                         + " " + settingsRespawnDelaySeconds
                         + " " + (settingsFriendlyFire ? "true" : "false")
                         + " " + settingsAmmoCrateChancePercent
-                        + " " + settingsHotZoneRotateSeconds
-                        + " " + settingsHotZoneRadius
                         + " " + settingsHotZoneScorePerSecond);
     }
 
@@ -422,14 +418,6 @@ public final class CreateRoomScreen extends Screen {
 
     int settingsAmmoCrateChancePercent() {
         return settingsAmmoCrateChancePercent;
-    }
-
-    int settingsHotZoneRotateSeconds() {
-        return settingsHotZoneRotateSeconds;
-    }
-
-    double settingsHotZoneRadius() {
-        return settingsHotZoneRadius;
     }
 
     int settingsHotZoneScorePerSecond() {
@@ -465,18 +453,6 @@ public final class CreateRoomScreen extends Screen {
         int[] values = {0, 25, 50, 100};
         int idx = CreateRoomModeCatalog.nearestIndex(values, settingsAmmoCrateChancePercent);
         settingsAmmoCrateChancePercent = values[Math.floorMod(idx + dir, values.length)];
-    }
-
-    void adjustSettingsHotZoneRotate(int dir) {
-        int[] values = {30, 45, 60, 90, 120};
-        int idx = CreateRoomModeCatalog.nearestIndex(values, settingsHotZoneRotateSeconds);
-        settingsHotZoneRotateSeconds = values[Math.floorMod(idx + dir, values.length)];
-    }
-
-    void adjustSettingsHotZoneRadius(int dir) {
-        double[] values = {4, 6, 8, 10, 12};
-        int idx = CreateRoomModeCatalog.nearestIndex(values, settingsHotZoneRadius);
-        settingsHotZoneRadius = values[Math.floorMod(idx + dir, values.length)];
     }
 
     void adjustSettingsHotZoneScore(int dir) {

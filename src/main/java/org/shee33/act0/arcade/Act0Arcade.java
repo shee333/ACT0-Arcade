@@ -14,6 +14,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import org.shee33.act0.arcade.arena.HotZoneWandHandler;
 import org.shee33.act0.arcade.command.ArcadeCommand;
 import org.shee33.act0.arcade.hologram.ArcadeEntranceHolograms;
 import org.shee33.act0.arcade.match.ArcadeServices;
@@ -52,6 +53,7 @@ public final class Act0Arcade {
         MinecraftForge.EVENT_BUS.register(this);
         MinecraftForge.EVENT_BUS.register(SERVICES.matches());
     MinecraftForge.EVENT_BUS.register(ArcadeEntranceHolograms.INSTANCE);
+    MinecraftForge.EVENT_BUS.register(HotZoneWandHandler.INSTANCE);
 
         ArcadeNetwork.register();
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, ArcadeConfig.SPEC);

@@ -163,8 +163,6 @@ public final class MatchLauncher {
             .healthOverride(options.healthOverride())
             .friendlyFire(options.friendlyFire())
             .ammoCrateChancePercent(options.ammoCrateChancePercent())
-            .hotZoneRotateSeconds(options.hotZoneRotateSeconds())
-            .hotZoneRadius(options.hotZoneRadius())
             .hotZoneScorePerSecond(options.hotZoneScorePerSecond())
             .armsRaceLevels(options.armsRaceLevels())
                 .build();
@@ -266,8 +264,8 @@ public final class MatchLauncher {
             return Result.fail("个人乱斗复活点不足：需要至少 " + players.size()
                     + " 个，当前 " + arena.randomSpawns().size() + " 个。");
         }
-        if ("hot_zone".equals(mode) && arena.randomSpawns().isEmpty()) {
-            return Result.fail("该战场未配置热区点。");
+        if ("hot_zone".equals(mode) && arena.hotZone() == null) {
+            return Result.fail("该战场未配置热区（请管理员用 /arcade arena hotzonewand 设置）。");
         }
 
         String matchId = mode + "-" + UUID.randomUUID().toString().substring(0, 8);

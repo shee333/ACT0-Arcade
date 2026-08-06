@@ -8,6 +8,7 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 import org.shee33.act0.arcade.Act0Arcade;
+import org.shee33.act0.arcade.arena.HotZoneArea;
 import org.shee33.act0.arcade.economy.BuyOutcome;
 import org.shee33.act0.arcade.loadout.DefaultLoadoutCatalog;
 import org.shee33.act0.arcade.loadout.LoadoutRegistry;
@@ -120,6 +121,9 @@ public final class ArcadeNetwork {
         CHANNEL.registerMessage(id++, JumpChargePacket.class,
                 JumpChargePacket::encode, JumpChargePacket::decode, JumpChargePacket::handle,
                 Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(id++, HotZoneAreaPacket.class,
+                HotZoneAreaPacket::encode, HotZoneAreaPacket::decode, HotZoneAreaPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
     }
 
     /** 把服务端当前装备目录下发给指定玩家。 */
@@ -138,6 +142,11 @@ public final class ArcadeNetwork {
     /** 向玩家下发死亡相机/滤镜状态。 */
     public static void sendDeathCam(ServerPlayer player, boolean active, String killerName) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new DeathCamPacket(active, killerName));
+    }
+
+    /** 向玩家下发热区矩形边界，供客户端存入 {@code ClientHotZoneState} 供后续渲染读取。 */
+    public static void sendHotZoneArea(ServerPlayer player, HotZoneArea area) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new HotZoneAreaPacket(area));
     }
 
         public static void sendFireLock(ServerPlayer player, boolean locked) {

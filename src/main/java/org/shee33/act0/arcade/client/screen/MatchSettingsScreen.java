@@ -16,19 +16,20 @@ import org.shee33.act0.arcade.mode.RandomWeaponMode;
  * 每张设置卡片走 {@link MenuTween.Anim} 驱动的错峰级联淡入上移；◀/▶ 改为
  * {@link MenuChrome#drawLightControl} 灯态控件，数值变化时用 {@link MenuChrome#drawRollY}
  * 做方向性纵向滚轮（滚动方向与调整方向一致）；底部“返回”改为 {@link MenuChrome#drawGhostButton}，
- * 且所有 16 个 ◀/▶ 控件与返回按钮均带 {@link MenuChrome#pressScale} 按压回弹 + 点击音效，
+ * 且所有 ◀/▶ 控件与返回按钮均带 {@link MenuChrome#pressScale} 按压回弹 + 点击音效，
  * 与 {@code CreateRoomScreen} 的按压回弹延迟导航手法一致（返回动画播完才真正
  * {@code onClose()}）。
  *
- * <p><b>与 {@link CreateRoomScreen} 的耦合是单向只读的</b>：本屏只通过 16 个包私有
- * accessor/mutator 读写父屏状态（签名冻结，见 {@code CreateRoomScreen} 中对应注释），
- * 不向父屏暴露任何新的回调方法。
+ * <p><b>与 {@link CreateRoomScreen} 的耦合是单向只读的</b>：本屏只通过 {@link #ROW_COUNT} × 2
+ * 个包私有 accessor/mutator 读写父屏状态（签名冻结，见 {@code CreateRoomScreen} 中对应注释；
+ * 热区轮换秒数/半径两项设置随热区重构改为竞技场固定矩形数据后已整体删除，本屏由 8 行降为
+ * {@link #ROW_COUNT} 行，仅保留热区得分速率一项可调），不向父屏暴露任何新的回调方法。
  */
 public final class MatchSettingsScreen extends Screen {
     private static final int W = 300;
     private static final int H = 238;
     private static final int ROW_H = 22;
-    private static final int ROW_COUNT = 8;
+    private static final int ROW_COUNT = 6;
     private static final int CARD_H = 18;
 
     /** 每张设置卡片开场淡入+上移时长（三次方缓出，与 {@link CategorySelectScreen} 同款）。 */
@@ -43,7 +44,7 @@ public final class MatchSettingsScreen extends Screen {
     private static final long ROLL_DURATION_MS = 190L;
 
     private static final String[] LABELS = {
-            "玩家血量", "武器规则", "重生等待", "友伤", "补给箱", "热区轮换", "热区半径", "热区得分",
+            "玩家血量", "武器规则", "重生等待", "友伤", "补给箱", "热区得分",
     };
 
     private final CreateRoomScreen parent;
@@ -146,9 +147,7 @@ public final class MatchSettingsScreen extends Screen {
             case 2 -> parent.settingsRespawnDelaySeconds() + " 秒";
             case 3 -> parent.settingsFriendlyFire() ? "开启" : "关闭";
             case 4 -> parent.settingsAmmoCrateChancePercent() + "%";
-            case 5 -> parent.settingsHotZoneRotateSeconds() + " 秒";
-            case 6 -> String.format("%.0f 格", parent.settingsHotZoneRadius());
-            case 7 -> parent.settingsHotZoneScorePerSecond() + " / 秒";
+            case 5 -> parent.settingsHotZoneScorePerSecond() + " / 秒";
             default -> "";
         };
     }
@@ -269,9 +268,7 @@ public final class MatchSettingsScreen extends Screen {
             case 2 -> parent.adjustSettingsRespawn(dir);
             case 3 -> parent.toggleSettingsFriendlyFire();
             case 4 -> parent.adjustSettingsAmmoCrate(dir);
-            case 5 -> parent.adjustSettingsHotZoneRotate(dir);
-            case 6 -> parent.adjustSettingsHotZoneRadius(dir);
-            case 7 -> parent.adjustSettingsHotZoneScore(dir);
+            case 5 -> parent.adjustSettingsHotZoneScore(dir);
             default -> {
             }
         }

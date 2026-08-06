@@ -26,6 +26,7 @@ import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.Team;
 import org.shee33.act0.arcade.arena.ArcadeArena;
+import org.shee33.act0.arcade.arena.HotZoneArea;
 import org.shee33.act0.arcade.arena.SpawnPoint;
 import org.shee33.act0.arcade.integration.MatchResultBroadcaster;
 import org.shee33.act0.arcade.loadout.Loadout;
@@ -155,7 +156,6 @@ public final class ArcadeMatch {
     private static final double JUMP_CHARGE_MAX_VERTICAL = 1.35D;
     private static final double JUMP_CHARGE_MIN_HORIZONTAL = 0.35D;
     private static final double JUMP_CHARGE_MAX_HORIZONTAL = 1.05D;
-    private static final double HOT_ZONE_HEIGHT = 4.0D;
         private static final ChatFormatting[] FFA_COLORS = new ChatFormatting[]{
             ChatFormatting.RED,
             ChatFormatting.BLUE,
@@ -181,10 +181,6 @@ public final class ArcadeMatch {
     private int lastCountdownSecond = -1;
     /** 对局限时剩余刻（{@code <0} 表示不限时）。 */
     private int matchClockTicks = -1;
-    /** 当前热区索引（复用竞技场 randomSpawns 作为热区点）。 */
-    private int hotZoneIndex = -1;
-    /** 当前热区剩余 tick。 */
-    private int hotZoneTicksRemaining = 0;
     private long startedTick;
     private boolean draw = false;
     private final Map<UUID, ServerBossEvent> personalBossBars = new HashMap<>();
@@ -258,8 +254,22 @@ public final class ArcadeMatch {
         if (settings.timeLimitSeconds() > 0) {
             matchClockTicks = settings.timeLimitSeconds() * 20;
         }
+        broadcastHotZoneAreaToParticipants();
         updateSidebar();
         startRound();
+    }
+
+    /** 热区模式开局时把固定矩形区域下发给全体参战玩家，供客户端存入 {@code ClientHotZoneState}。 */
+    private void broadcastHotZoneAreaToParticipants() {
+        if (!isHotZoneMode() || arena.hotZone() == null) {
+            return;
+        }
+        for (UUID id : sideOf.keySet()) {
+            ServerPlayer player = player(id);
+            if (player != null) {
+                ArcadeNetwork.sendHotZoneArea(player, arena.hotZone());
+            }
+        }
     }
 
     /**
@@ -301,7 +311,6 @@ public final class ArcadeMatch {
         phase = MatchPhase.COUNTDOWN;
         phaseTotalTicks = Math.max(1, settings.countdownSeconds() * 20);
         lastCountdownSecond = -1;
-        resetHotZone();
         timer.startSeconds(settings.countdownSeconds());
         sendFireLockToAll(true);
         showTitle("§e准备", "§7" + roundLabel() + " · 倒计时 " + settings.countdownSeconds() + " 秒", 5, 30, 10);
@@ -479,51 +488,22 @@ public final class ArcadeMatch {
         return settings.scoringMode() == ScoringMode.HOT_ZONE;
     }
 
-    private void resetHotZone() {
-        if (!isHotZoneMode()) {
-            hotZoneIndex = -1;
-            hotZoneTicksRemaining = 0;
-            return;
-        }
-        hotZoneIndex = 0;
-        hotZoneTicksRemaining = settings.hotZoneRotateTicks();
-    }
-
-    private void rotateHotZone() {
-        List<SpawnPoint> zones = arena.randomSpawns();
-        if (zones.isEmpty()) {
-            return;
-        }
-        hotZoneIndex = hotZoneIndex < 0 ? 0 : (hotZoneIndex + 1) % zones.size();
-        hotZoneTicksRemaining = settings.hotZoneRotateTicks();
-        SpawnPoint zone = zones.get(hotZoneIndex);
-        broadcast("§6热区转移 §7» §e#" + (hotZoneIndex + 1)
-                + " §8(" + Math.round(zone.x()) + ", " + Math.round(zone.y()) + ", " + Math.round(zone.z()) + ")");
-        showTitle("§6热区转移", "§7前往新目标区域", 4, 28, 8);
-        playToAll(SoundEvents.NOTE_BLOCK_BELL.value(), 1.15f);
-        updateSidebar();
-    }
-
+    /**
+     * 热区计分：一张地图仅一个固定矩形区域（{@link ArcadeArena#hotZone()}），不再轮转。
+     * 每秒（20 tick）判定一次唯一控制方并按 {@link MatchSettings#hotZoneScorePerSecond()} 加分。
+     */
     private void tickHotZone() {
         if (!isHotZoneMode() || phase != MatchPhase.COMBAT) {
             return;
         }
-        List<SpawnPoint> zones = arena.randomSpawns();
-        if (zones.isEmpty()) {
-            return;
-        }
-        if (hotZoneIndex < 0 || hotZoneIndex >= zones.size()) {
-            resetHotZone();
-        }
-        hotZoneTicksRemaining--;
-        if (hotZoneTicksRemaining <= 0) {
-            rotateHotZone();
+        HotZoneArea zone = arena.hotZone();
+        if (zone == null) {
             return;
         }
         if (server.getTickCount() % 20L != 0L) {
             return;
         }
-        int controllingSide = hotZoneController(zones.get(hotZoneIndex));
+        int controllingSide = hotZoneController(zone);
         if (controllingSide < 0) {
             updateSidebar();
             return;
@@ -543,7 +523,7 @@ public final class ArcadeMatch {
     /**
      * @return 唯一控制热区的方；无人或多方争夺返回 -1
      */
-    private int hotZoneController(SpawnPoint zone) {
+    private int hotZoneController(HotZoneArea zone) {
         boolean[] present = new boolean[settings.sideCount()];
         int count = 0;
         for (Map.Entry<UUID, Integer> e : sideOf.entrySet()) {
@@ -572,16 +552,10 @@ public final class ArcadeMatch {
         return -1;
     }
 
-    private boolean isInsideHotZone(ServerPlayer player, SpawnPoint zone) {
-        ServerLevel zoneLevel = TeleportHelper.resolveLevel(server, zone.dimension());
-        if (zoneLevel == null || player.level() != zoneLevel) {
-            return false;
-        }
-        double dx = player.getX() - zone.x();
-        double dz = player.getZ() - zone.z();
-        double dy = Math.abs(player.getY() - zone.y());
-        double radius = settings.hotZoneRadius();
-        return dx * dx + dz * dz <= radius * radius && dy <= HOT_ZONE_HEIGHT;
+    /** 判定逻辑完全委托给 {@link HotZoneArea#contains}，AABB 数学不散落在本类里。 */
+    private boolean isInsideHotZone(ServerPlayer player, HotZoneArea zone) {
+        String dimension = player.level().dimension().location().toString();
+        return zone.contains(dimension, player.getX(), player.getY(), player.getZ());
     }
 
     private void actionBarSide(int side, String message) {
@@ -1186,6 +1160,9 @@ public final class ArcadeMatch {
         disconnected.remove(id);
         addBossBarPlayer(player);
         sidebar.showTo(player);
+        if (isHotZoneMode() && arena.hotZone() != null) {
+            ArcadeNetwork.sendHotZoneArea(player, arena.hotZone());
+        }
         int side = sideOf.getOrDefault(id, 0);
         if (phase == MatchPhase.COMBAT || phase == MatchPhase.COUNTDOWN) {
             exitSpectator(player);
@@ -1236,6 +1213,9 @@ public final class ArcadeMatch {
         setupNameTagTeams();
         addBossBarPlayer(player);
         sidebar.showTo(player);
+        if (isHotZoneMode() && arena.hotZone() != null) {
+            ArcadeNetwork.sendHotZoneArea(player, arena.hotZone());
+        }
         if (phase == MatchPhase.COMBAT || phase == MatchPhase.COUNTDOWN) {
             enterAdventureMode(player);
             clearJumpCharge(id);
@@ -2271,9 +2251,7 @@ public final class ArcadeMatch {
             lines.add("§7剩余: §f" + formatClock(matchClockTicks));
         }
         if (isHotZoneMode()) {
-            int zoneNo = hotZoneIndex >= 0 ? hotZoneIndex + 1 : 1;
-            int secs = Math.max(0, hotZoneTicksRemaining / 20);
-            lines.add("§6热区: §f#" + zoneNo + " §7" + secs + "秒");
+            lines.add("§6热区争夺中");
         }
         lines.add("§8 ");
         boolean ffa = (settings.scoringMode() == ScoringMode.KILL_COUNT || settings.scoringMode() == ScoringMode.ARMS_RACE)

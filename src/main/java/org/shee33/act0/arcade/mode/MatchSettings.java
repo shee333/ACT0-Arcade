@@ -31,8 +31,6 @@ public final class MatchSettings {
     private final double healthOverride;
     private final boolean friendlyFire;
     private final int ammoCrateChancePercent;
-    private final int hotZoneRotateSeconds;
-    private final double hotZoneRadius;
     private final int hotZoneScorePerSecond;
     private final java.util.List<ArmsRaceLevel> armsRaceLevels;
 
@@ -58,8 +56,6 @@ public final class MatchSettings {
         this.healthOverride = b.healthOverride <= 0.0D ? 0.0D : Math.max(1.0D, Math.min(200.0D, b.healthOverride));
         this.friendlyFire = b.friendlyFire;
         this.ammoCrateChancePercent = Math.max(0, Math.min(100, b.ammoCrateChancePercent));
-        this.hotZoneRotateSeconds = Math.max(15, Math.min(180, b.hotZoneRotateSeconds));
-        this.hotZoneRadius = Math.max(2.0D, Math.min(16.0D, b.hotZoneRadius));
         this.hotZoneScorePerSecond = Math.max(1, Math.min(5, b.hotZoneScorePerSecond));
         this.armsRaceLevels = b.armsRaceLevels != null && !b.armsRaceLevels.isEmpty()
                 ? java.util.List.copyOf(b.armsRaceLevels) : ArmsRaceLevel.defaultProgression();
@@ -183,14 +179,6 @@ public final class MatchSettings {
         return ammoCrateChancePercent / 100.0D;
     }
 
-    public int hotZoneRotateTicks() {
-        return hotZoneRotateSeconds * 20;
-    }
-
-    public double hotZoneRadius() {
-        return hotZoneRadius;
-    }
-
     public int hotZoneScorePerSecond() {
         return hotZoneScorePerSecond;
     }
@@ -237,8 +225,6 @@ public final class MatchSettings {
         private double healthOverride = 0.0D;
         private boolean friendlyFire = false;
         private int ammoCrateChancePercent = 25;
-        private int hotZoneRotateSeconds = 60;
-        private double hotZoneRadius = 6.0D;
         private int hotZoneScorePerSecond = 1;
         private java.util.List<ArmsRaceLevel> armsRaceLevels = null;
 
@@ -317,16 +303,6 @@ public final class MatchSettings {
 
         public Builder ammoCrateChancePercent(int ammoCrateChancePercent) {
             this.ammoCrateChancePercent = ammoCrateChancePercent;
-            return this;
-        }
-
-        public Builder hotZoneRotateSeconds(int hotZoneRotateSeconds) {
-            this.hotZoneRotateSeconds = hotZoneRotateSeconds;
-            return this;
-        }
-
-        public Builder hotZoneRadius(double hotZoneRadius) {
-            this.hotZoneRadius = hotZoneRadius;
             return this;
         }
 
