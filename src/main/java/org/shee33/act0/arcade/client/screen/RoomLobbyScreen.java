@@ -93,7 +93,7 @@ public final class RoomLobbyScreen extends Screen {
 
     private RoomDto currentRoom() {
         for (RoomDto room : ClientRoomList.rooms()) {
-            if (room.youAreMember() && !room.roomId().startsWith("bf@") && !room.roomId().startsWith("bt@")) {
+            if (room.youAreMember()) {
                 return room;
             }
         }

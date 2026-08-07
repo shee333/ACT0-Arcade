@@ -52,7 +52,7 @@ public final class ClientRoomList {
 
     private static boolean hasOwnArcadeRoom() {
         for (RoomDto room : rooms) {
-            if (room.youAreMember() && !room.roomId().startsWith("bf@") && !room.roomId().startsWith("bt@")) {
+            if (room.youAreMember()) {
                 return true;
             }
         }

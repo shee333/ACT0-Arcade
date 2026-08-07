@@ -16,6 +16,7 @@ import org.shee33.act0.arcade.loadout.LoadoutSet;
 import org.shee33.act0.arcade.match.ArcadeMatch;
 import org.shee33.act0.arcade.match.ArcadeRoom;
 import org.shee33.act0.arcade.match.RoomManager;
+import org.shee33.act0.arcade.mode.MatchSettings;
 import org.shee33.act0.arcade.storage.AttachmentCatalogIO;
 import org.shee33.act0.arcade.storage.ApparelCatalogIO;
 import org.shee33.act0.arcade.storage.ArcadeApparelStore;
@@ -238,85 +239,28 @@ public final class ArcadeNetwork {
                                 representedMatches.add(match.matchId());
                         }
             dtos.add(new RoomDto(
-                    room.roomId(), rooms.modeName(room), room.arenaId(), room.hostName(),
+                    room.roomId(), room.modeId(), rooms.modeName(room), room.arenaId(), room.hostName(),
                     room.size(), room.capacity(), rooms.targetText(room),
                                         room.contains(player.getUUID()), room.isInProgress(),
                                         match != null ? match.participantNames() : participantNames(player.getServer(), room.members()),
-                                        match != null ? match.elapsedSeconds() : 0));
+                                        match != null ? match.elapsedSeconds() : 0,
+                                        room.timeLimitSeconds(), room.randomWeapons(), room.options().friendlyFire()));
                 }
                 for (ArcadeMatch match : Act0Arcade.services().matches().all()) {
                         if (representedMatches.contains(match.matchId())) {
                                 continue;
                         }
+                        MatchSettings settings = match.settings();
                         dtos.add(new RoomDto(
-                                        match.matchId(), match.displayName(), match.arenaId(), "-",
+                                        match.matchId(), settings.modeId(), match.displayName(), match.arenaId(), "-",
                                         match.occupancy(), match.capacity(), match.targetText(),
                                         match.contains(player.getUUID()), true,
-                                        match.participantNames(), match.elapsedSeconds()));
+                                        match.participantNames(), match.elapsedSeconds(),
+                                        settings.timeLimitSeconds(), settings.randomWeapons(), settings.friendlyFire()));
         }
-                appendBattlefieldRows(player, dtos);
-                appendBreakthroughRows(player, dtos);
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
                 new SyncRoomListPacket(canManage, open, arenaIds, dtos));
     }
-
-        @SuppressWarnings("unchecked")
-        private static void appendBattlefieldRows(ServerPlayer player, List<RoomDto> dtos) {
-                try {
-                        Class<?> mod = Class.forName("org.shee33.act0.battlefield.Act0Battlefield");
-                        Object manager = mod.getMethod("manager").invoke(null);
-                        Object rows = manager.getClass().getMethod("browserRows", ServerPlayer.class).invoke(manager, player);
-                        if (!(rows instanceof List<?> list)) {
-                                return;
-                        }
-                        for (Object rowObj : list) {
-                                if (!(rowObj instanceof String[] row) || row.length < 11) {
-                                        continue;
-                                }
-                                dtos.add(new RoomDto(row[0], row[1], row[2], row[3],
-                                                parseInt(row[4]), parseInt(row[5]), row[6], Boolean.parseBoolean(row[7]),
-                                                Boolean.parseBoolean(row[8]), row[9], parseInt(row[10])));
-                        }
-                } catch (ReflectiveOperationException ignored) {
-                }
-        }
-
-        /**
-         * 反射读取 ACT0-Battlefield 突破模式（{@code bt@} 前缀）对局行，软依赖、异常即降级。
-         *
-         * <p>突破模式管理器在 {@code Act0Battlefield} 中以 {@code public static final} 字段
-         * {@code BREAKTHROUGH_MANAGER} 暴露（区别于征服模式的 {@code manager()} 静态方法），
-         * 因此这里用 {@code getField} 而非 {@code getMethod} 取值；{@code browserRows} 的签名与
-         * 返回的 11 列字符串行格式与 {@code ConquestManager} 完全一致，解析逻辑保持一致。
-         */
-        @SuppressWarnings("unchecked")
-        private static void appendBreakthroughRows(ServerPlayer player, List<RoomDto> dtos) {
-                try {
-                        Class<?> mod = Class.forName("org.shee33.act0.battlefield.Act0Battlefield");
-                        Object manager = mod.getField("BREAKTHROUGH_MANAGER").get(null);
-                        Object rows = manager.getClass().getMethod("browserRows", ServerPlayer.class).invoke(manager, player);
-                        if (!(rows instanceof List<?> list)) {
-                                return;
-                        }
-                        for (Object rowObj : list) {
-                                if (!(rowObj instanceof String[] row) || row.length < 11) {
-                                        continue;
-                                }
-                                dtos.add(new RoomDto(row[0], row[1], row[2], row[3],
-                                                parseInt(row[4]), parseInt(row[5]), row[6], Boolean.parseBoolean(row[7]),
-                                                Boolean.parseBoolean(row[8]), row[9], parseInt(row[10])));
-                        }
-                } catch (ReflectiveOperationException ignored) {
-                }
-        }
-
-        private static int parseInt(String raw) {
-                try {
-                        return Integer.parseInt(raw);
-                } catch (NumberFormatException e) {
-                        return 0;
-                }
-        }
 
         private static String participantNames(net.minecraft.server.MinecraftServer server, Set<UUID> ids) {
                 List<String> names = new ArrayList<>();
