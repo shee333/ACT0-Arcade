@@ -37,7 +37,14 @@ import java.util.UUID;
  */
 public final class ArcadeNetwork {
 
-        private static final String PROTOCOL = "10";
+    /**
+     * 通道协议版本。<b>任何改动包表都必须 +1</b>——不只是增删包，调整注册顺序、改动某个包的
+     * payload 结构（如给 RoomDto 加字段）同样算。忘记 bump 时两端版本字符串相同 → 握手放行
+     * → 玩家正常进服 → 之后按错位的索引/字段解码，症状远比"启动就报错"难查。
+     *
+     * <p>{@code NetworkProtocolFingerprintTest} 会锁住包表指纹，漏 bump 时直接测试失败。
+     */
+    private static final String PROTOCOL = "11";
 
     @SuppressWarnings("removal")
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
