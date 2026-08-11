@@ -1,5 +1,6 @@
 package org.shee33.act0.arcade.command;
 
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
@@ -17,6 +18,7 @@ import org.shee33.act0.arcade.bot.AimModel;
 import org.shee33.act0.arcade.bot.Steering;
 import org.shee33.act0.arcade.bot.mc.BotGunBridge;
 import org.shee33.act0.arcade.bot.mc.BotManager;
+import org.shee33.act0.arcade.bot.mc.BotPerception;
 import org.shee33.act0.arcade.bot.mc.BotPlayer;
 import org.shee33.act0.arcade.bot.mc.BotWeaponController;
 import org.shee33.act0.arcade.loadout.DefaultLoadoutCatalog;
@@ -66,6 +68,10 @@ public final class BotWeaponCommand {
                                         .executes(BotWeaponCommand::engage))))
                 .then(Commands.literal("disengage")
                         .then(botArg().executes(BotWeaponCommand::disengage)))
+                .then(Commands.literal("auto")
+                        .then(botArg()
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(BotWeaponCommand::setAuto))))
                 .then(Commands.literal("difficulty")
                         .then(botArg()
                                 .then(Commands.argument("tier", StringArgumentType.word()).suggests(DIFFICULTIES)
@@ -141,6 +147,20 @@ public final class BotWeaponCommand {
         AimModel.Difficulty tier = BotManager.INSTANCE.difficultyOf(name);
         ctx.getSource().sendSuccess(() -> Component.literal("§7" + name + " §a进入交火：目标 §e"
                 + target.getName().getString() + " §8(难度 " + tier + ")"), true);
+        return 1;
+    }
+
+    /** 开关自主选目标：开启后 bot 自行发现并挑选敌人，不再需要 {@code engage} 指定。 */
+    private static int setAuto(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        boolean enabled = BoolArgumentType.getBool(ctx, "enabled");
+        if (!BotManager.INSTANCE.setAutoTarget(name, enabled)) {
+            return BotCommand.notFound(ctx, name);
+        }
+        ctx.getSource().sendSuccess(() -> Component.literal("§7" + name + " §a自主选目标 → "
+                + (enabled
+                ? "§a开启 §8(搜索半径 " + (int) BotPerception.DEFAULT_SEARCH_RADIUS + " 格)"
+                : "§c关闭，并已脱离交火")), true);
         return 1;
     }
 
