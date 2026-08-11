@@ -14,9 +14,12 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
+import org.shee33.act0.arcade.arena.ArcadeArena;
+import org.shee33.act0.arcade.arena.SpawnPoint;
 import org.shee33.act0.arcade.bot.BotNames;
 import org.shee33.act0.arcade.bot.mc.BotManager;
 import org.shee33.act0.arcade.bot.mc.BotPlayer;
+import org.shee33.act0.arcade.storage.ArenaRegistry;
 
 import java.util.HashSet;
 import java.util.List;
@@ -39,6 +42,12 @@ public final class BotCommand {
 
     /** 生成时的散布半径（格），避免多个 bot 叠在同一格里互相挤开。 */
     private static final double SPAWN_SPREAD_RADIUS = 2.0D;
+
+    /** 测试竞技场两阵营出生点相距命令源的距离（格），取 15 使双方开局即在彼此视野与交火距离内。 */
+    private static final int TEST_ARENA_SIDE_OFFSET = 15;
+
+    /** 测试竞技场的随机复活点数量；乱斗类模式要求其不少于参战人数，8 覆盖调试所需规模。 */
+    private static final int TEST_ARENA_RANDOM_SPAWNS = 8;
 
     /** 在场 bot 名补全。 */
     private static final SuggestionProvider<CommandSourceStack> ACTIVE_BOTS = (ctx, builder) ->
@@ -65,8 +74,54 @@ public final class BotCommand {
                         .then(Commands.argument("name", StringArgumentType.word()).suggests(ACTIVE_BOTS)
                                 .executes(BotCommand::stop)))
                 .then(Commands.literal("list").executes(BotCommand::list))
-                .then(Commands.literal("clear").executes(BotCommand::clear));
+                .then(Commands.literal("clear").executes(BotCommand::clear))
+                .then(Commands.literal("testarena")
+                        .then(Commands.argument("id", StringArgumentType.string())
+                                .executes(BotCommand::createTestArena)));
         return BotWeaponCommand.attach(bot);
+    }
+
+    /**
+     * 按命令源位置一次性造出一个可开局的竞技场，仅供人机对战验证。
+     *
+     * <p>存在的唯一理由：既有的 {@code /arcade arena create|addspawn|setreturn} 全部要求玩家身份
+     * （{@code getPlayerOrException}），因此无头环境（RCON／命令方块）建不出竞技场，
+     * 带 bot 开局便无法自动化验证。此命令不改动那些既有指令的行为。
+     *
+     * <p>布点满足 {@code MatchLauncher} 的全部校验：两个对向阵营出生点（决斗与团队模式）、
+     * 一个返回点，以及 {@value #TEST_ARENA_RANDOM_SPAWNS} 个随机复活点
+     * （乱斗类模式要求其数量不少于参战人数）。
+     */
+    private static int createTestArena(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
+        String id = StringArgumentType.getString(ctx, "id");
+        ArenaRegistry registry = ArenaRegistry.get(source.getServer());
+        if (registry.find(id).isPresent()) {
+            source.sendFailure(Component.literal("§c竞技场已存在：§7" + id));
+            return 0;
+        }
+
+        Vec3 origin = source.getPosition();
+        String dimension = source.getLevel().dimension().location().toString();
+        ArcadeArena.Builder builder = new ArcadeArena.Builder(id)
+                .returnSpawn(new SpawnPoint(dimension, origin.x, origin.y, origin.z, 0.0F, 0.0F))
+                .addSideSpawn(new SpawnPoint(dimension,
+                        origin.x - TEST_ARENA_SIDE_OFFSET, origin.y, origin.z, -90.0F, 0.0F))
+                .addSideSpawn(new SpawnPoint(dimension,
+                        origin.x + TEST_ARENA_SIDE_OFFSET, origin.y, origin.z, 90.0F, 0.0F));
+        for (int i = 0; i < TEST_ARENA_RANDOM_SPAWNS; i++) {
+            double angle = 2.0D * Math.PI * i / TEST_ARENA_RANDOM_SPAWNS;
+            builder.addRandomSpawn(new SpawnPoint(dimension,
+                    origin.x + Math.cos(angle) * TEST_ARENA_SIDE_OFFSET, origin.y,
+                    origin.z + Math.sin(angle) * TEST_ARENA_SIDE_OFFSET, 0.0F, 0.0F));
+        }
+        registry.put(builder.build());
+
+        source.sendSuccess(() -> Component.literal(String.format(
+                "§a已创建测试竞技场 §e%s §8(阵营出生点 ±%d 格，随机点 %d 个，返回点 %.0f %.0f %.0f)",
+                id, TEST_ARENA_SIDE_OFFSET, TEST_ARENA_RANDOM_SPAWNS,
+                origin.x, origin.y, origin.z)), true);
+        return 1;
     }
 
     private static int spawn(CommandContext<CommandSourceStack> ctx, int count) {
