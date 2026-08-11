@@ -145,6 +145,7 @@ public final class ArcadeCommand {
         root.then(buildMoneyBranch());
         root.then(buildSettingsBranch());
         root.then(buildHologramBranch());
+        root.then(BotCommand.buildBranch());
         root.then(Commands.literal("buy")
                 .then(Commands.argument("item", StringArgumentType.word()).suggests(ITEM_KEYS)
                         .executes(ArcadeCommand::buy)));
