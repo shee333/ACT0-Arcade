@@ -252,6 +252,43 @@ class AimTest {
     }
 
     @Test
+    void aimOffsetNeverExceedsCurrentErrorCircle() {
+        AimModel m = model();
+        AimTracker tracker = new AimTracker(m, 11L);
+        for (int i = 0; i < 300; i++) {
+            tracker.tick(true);
+            if (tracker.canFire()) {
+                tracker.onShotFired();
+            }
+            AimTracker.AimOffset offset = tracker.rollAimOffset();
+            assertTrue(offset.magnitudeDegrees() <= tracker.errorDegrees() + EPS,
+                    "偏移 " + offset.magnitudeDegrees() + " 超出误差圆 " + tracker.errorDegrees());
+        }
+    }
+
+    @Test
+    void aimOffsetIsUniformOverDiscNotClusteredAtCentre() {
+        // r = R·√u 采样下，落在半径 R/2 内的样本占比应约为面积比 25%；
+        // 若误用 r = R·u，占比会变成约 50%，bot 命中率将显著高于误差圆所声称的水平。
+        AimModel m = model();
+        AimTracker tracker = new AimTracker(m, 2024L);
+        for (int i = 0; i < m.reactionTicks(); i++) {
+            tracker.tick(true);
+        }
+        float radius = tracker.errorDegrees();
+        int samples = 20000;
+        int inner = 0;
+        for (int i = 0; i < samples; i++) {
+            if (tracker.rollAimOffset().magnitudeDegrees() <= radius / 2.0F) {
+                inner++;
+            }
+        }
+        double fraction = (double) inner / samples;
+        assertTrue(fraction > 0.22D && fraction < 0.28D,
+                "内半径样本占比应约 0.25（面积比），实际 " + fraction);
+    }
+
+    @Test
     void sameSeedProducesSameBurstPattern() {
         AimModel m = model();
         assertEquals(burstPattern(m, 99L), burstPattern(m, 99L));

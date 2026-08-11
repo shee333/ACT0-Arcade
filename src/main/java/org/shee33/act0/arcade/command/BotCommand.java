@@ -9,23 +9,14 @@ import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
-import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.coordinates.Vec3Argument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
-import org.shee33.act0.arcade.Act0Arcade;
 import org.shee33.act0.arcade.bot.BotNames;
-import org.shee33.act0.arcade.bot.Steering;
-import org.shee33.act0.arcade.bot.mc.BotGunBridge;
 import org.shee33.act0.arcade.bot.mc.BotManager;
 import org.shee33.act0.arcade.bot.mc.BotPlayer;
-import org.shee33.act0.arcade.loadout.DefaultLoadoutCatalog;
-import org.shee33.act0.arcade.loadout.LoadoutRuleset;
-import org.shee33.act0.arcade.match.ArcadeServices;
-import org.shee33.act0.arcade.storage.ArcadePlayerUnlocks;
 
 import java.util.HashSet;
 import java.util.List;
@@ -57,7 +48,7 @@ public final class BotCommand {
     }
 
     public static LiteralArgumentBuilder<CommandSourceStack> buildBranch() {
-        return Commands.literal("bot")
+        LiteralArgumentBuilder<CommandSourceStack> bot = Commands.literal("bot")
                 .requires(src -> src.hasPermission(2))
                 .then(Commands.literal("spawn")
                         .executes(ctx -> spawn(ctx, 1))
@@ -73,69 +64,9 @@ public final class BotCommand {
                 .then(Commands.literal("stop")
                         .then(Commands.argument("name", StringArgumentType.word()).suggests(ACTIVE_BOTS)
                                 .executes(BotCommand::stop)))
-                .then(Commands.literal("gun")
-                        .then(Commands.argument("name", StringArgumentType.word()).suggests(ACTIVE_BOTS)
-                                .executes(BotCommand::giveGun)))
-                .then(Commands.literal("fireat")
-                        .then(Commands.argument("name", StringArgumentType.word()).suggests(ACTIVE_BOTS)
-                                .then(Commands.argument("target", EntityArgument.entity())
-                                        .executes(BotCommand::fireAt))))
                 .then(Commands.literal("list").executes(BotCommand::list))
                 .then(Commands.literal("clear").executes(BotCommand::clear));
-    }
-
-    private static int giveGun(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        BotPlayer bot = BotManager.INSTANCE.find(name);
-        if (bot == null) {
-            return notFound(ctx, name);
-        }
-        ArcadeServices services = Act0Arcade.services();
-        services.applier().apply(bot,
-                DefaultLoadoutCatalog.defaultLoadout(services.registry()),
-                LoadoutRuleset.ARCADE,
-                ArcadePlayerUnlocks.get(ctx.getSource().getServer()).unlocked(bot.getUUID()),
-                true);
-        boolean drawn = BotGunBridge.drawMainHand(bot);
-        ctx.getSource().sendSuccess(() -> Component.literal("§7" + name + " §a已发放默认配装；TaCZ 持枪登记："
-                + (drawn ? "§a成功" : "§c失败（TaCZ 未安装？）")), true);
-        return drawn ? 1 : 0;
-    }
-
-    /**
-     * 让 bot 朝目标开一枪，并回显 TaCZ 的结果枚举名。
-     *
-     * <p>回显原始枚举名而非"成功/失败"：{@code NOT_DRAW} / {@code NO_AMMO} / {@code COOL_DOWN} /
-     * {@code NETWORK_FAIL} 各自指向完全不同的排查方向，折叠成布尔会让调试无从下手。
-     */
-    private static int fireAt(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
-        String name = StringArgumentType.getString(ctx, "name");
-        BotPlayer bot = BotManager.INSTANCE.find(name);
-        if (bot == null) {
-            return notFound(ctx, name);
-        }
-        Entity target = EntityArgument.getEntity(ctx, "target");
-
-        // 瞄向目标胸口偏上，与后续瞄准模型的默认瞄点一致。
-        Vec3 eye = bot.getEyePosition();
-        Vec3 aimPoint = target.position().add(0.0D, target.getBbHeight() * 0.85D, 0.0D);
-        double dx = aimPoint.x - eye.x;
-        double dy = aimPoint.y - eye.y;
-        double dz = aimPoint.z - eye.z;
-        float yaw = Steering.yawToward(dx, dz);
-        float pitch = Steering.pitchToward(dy, Math.sqrt(dx * dx + dz * dz));
-
-        bot.setYRot(yaw);
-        bot.setYHeadRot(yaw);
-        bot.setYBodyRot(yaw);
-        bot.setXRot(pitch);
-
-        String result = BotGunBridge.shoot(bot, pitch, yaw);
-        boolean ok = BotGunBridge.RESULT_SUCCESS.equals(result);
-        ctx.getSource().sendSuccess(() -> Component.literal(String.format(
-                "§7%s §a开火 → %s%s §8(yaw %.1f, pitch %.1f)",
-                name, ok ? "§a" : "§c", result, yaw, pitch)), true);
-        return ok ? 1 : 0;
+        return BotWeaponCommand.attach(bot);
     }
 
     private static int spawn(CommandContext<CommandSourceStack> ctx, int count) {
@@ -216,7 +147,8 @@ public final class BotCommand {
         return removed;
     }
 
-    private static int notFound(CommandContext<CommandSourceStack> ctx, String name) {
+    /** 同包内的 {@link BotWeaponCommand} 共用同一条"查无此 bot"提示，避免两处文案漂移。 */
+    static int notFound(CommandContext<CommandSourceStack> ctx, String name) {
         ctx.getSource().sendFailure(Component.literal("§c没有在场的 AI 士兵：§7" + name));
         return 0;
     }

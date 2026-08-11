@@ -2,10 +2,12 @@ package org.shee33.act0.arcade.bot.mc;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import org.shee33.act0.arcade.bot.AimModel;
 import org.shee33.act0.arcade.bot.BotNames;
 
 import javax.annotation.Nullable;
@@ -26,11 +28,19 @@ import java.util.UUID;
  */
 public final class BotManager {
 
-    /** 每 tick 最大转向角（度）。日后按难度档位分级，此处仅为阶段 0 的中庸默认值。 */
+    /**
+     * 行进时每 tick 最大转向角（度）。
+     *
+     * <p>与 {@link AimModel#turnRateDegPerTick()} 刻意分开：那是交火时枪口追踪目标的速率、
+     * 属难度参数；这是行军时身体的转向速率，与强弱无关，四档共用一个值即可。
+     */
     private static final float DEFAULT_TURN_RATE = 12.0F;
 
     /** 抵达判定半径（格）。小于玩家碰撞箱宽度会导致到点后反复微调抖动。 */
     private static final double DEFAULT_ARRIVE_RADIUS = 0.6D;
+
+    /** 新生成 bot 的默认难度档。 */
+    private static final AimModel.Difficulty DEFAULT_DIFFICULTY = AimModel.Difficulty.NORMAL;
 
     public static final BotManager INSTANCE = new BotManager();
 
@@ -86,7 +96,7 @@ public final class BotManager {
         if (task == null) {
             return false;
         }
-        task.target = new Vec3(x, y, z);
+        task.waypoint = new Vec3(x, y, z);
         return true;
     }
 
@@ -96,9 +106,44 @@ public final class BotManager {
         if (task == null) {
             return false;
         }
-        task.target = null;
+        task.waypoint = null;
         BotMovementDriver.halt(task.bot);
         return true;
+    }
+
+    /** 命令某个 bot 与目标交火；{@code target} 为 {@code null} 表示脱离。返回是否确有其人。 */
+    public boolean engage(String name, @Nullable Entity target) {
+        BotTask task = tasks.get(BotNames.uuidOf(name));
+        if (task == null) {
+            return false;
+        }
+        task.weapon.setTarget(target);
+        return true;
+    }
+
+    /**
+     * 切换某个 bot 的难度档位；返回是否确有其人。
+     *
+     * <p>难度参数在 {@link org.shee33.act0.arcade.bot.AimTracker} 内不可变，故整体重建武器控制器，
+     * 并沿用原交火目标——避免"调难度顺手让 bot 脱战"这种意外副作用。
+     */
+    public boolean setDifficulty(String name, AimModel.Difficulty difficulty) {
+        BotTask task = tasks.get(BotNames.uuidOf(name));
+        if (task == null) {
+            return false;
+        }
+        Entity current = task.weapon.target();
+        task.weapon = new BotWeaponController(task.bot, difficulty.model(), task.bot.getUUID().hashCode());
+        task.weapon.setTarget(current);
+        task.difficulty = difficulty;
+        return true;
+    }
+
+    /** 某个 bot 当前难度档；不在场返回 {@code null}。 */
+    @Nullable
+    public AimModel.Difficulty difficultyOf(String name) {
+        BotTask task = tasks.get(BotNames.uuidOf(name));
+        return task != null ? task.difficulty : null;
     }
 
     /** 按名字取在场 bot；不在场返回 {@code null}。 */
@@ -139,14 +184,23 @@ public final class BotManager {
         }
         tasks.values().removeIf(task -> isStale(server, task));
         for (BotTask task : tasks.values()) {
-            if (task.target == null) {
+            task.weapon.tick();
+
+            // 交火时由武器控制器独占朝向——士兵瞄的是敌人，不是航点。
+            // 因此此时抑制移动，bot 停下开火；"行进中侧向射击"要等导航层引入侧移后
+            // 才能把前进量与朝向解耦，现在强行做只会得到边走边打却朝着航点开枪的错误画面。
+            if (task.weapon.target() != null) {
+                BotMovementDriver.halt(task.bot);
+                continue;
+            }
+            if (task.waypoint == null) {
                 continue;
             }
             boolean arrived = BotMovementDriver.driveTo(task.bot,
-                    task.target.x, task.target.y, task.target.z,
+                    task.waypoint.x, task.waypoint.y, task.waypoint.z,
                     DEFAULT_TURN_RATE, DEFAULT_ARRIVE_RADIUS, false);
             if (arrived) {
-                task.target = null;
+                task.waypoint = null;
             }
         }
     }
@@ -165,11 +219,17 @@ public final class BotManager {
     /** 单个 bot 的在场状态与当前指令。 */
     private static final class BotTask {
         private final BotPlayer bot;
+        private BotWeaponController weapon;
+        private AimModel.Difficulty difficulty = DEFAULT_DIFFICULTY;
         @Nullable
-        private Vec3 target;
+        private Vec3 waypoint;
 
         private BotTask(BotPlayer bot) {
             this.bot = bot;
+            // 用 UUID 派生随机种子：bot 身份稳定（见 BotNames），故其点射与瞄准抖动模式
+            // 跨重启可复现，便于对着同一个 bot 反复排查手感问题。
+            this.weapon = new BotWeaponController(bot, DEFAULT_DIFFICULTY.model(),
+                    bot.getUUID().hashCode());
         }
     }
 }

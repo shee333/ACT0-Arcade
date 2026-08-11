@@ -83,6 +83,31 @@ public final class AimTracker {
         }
     }
 
+    /**
+     * 在当前误差圆内均匀采样一个瞄准偏移。
+     *
+     * <p>用 {@code r = R·√u} 而非 {@code r = R·u} 采样半径：后者会让样本向圆心聚集，
+     * 使 bot 的实际命中率显著高于误差圆所声称的水平，难度标定随之失真。
+     *
+     * <p><b>偏移施加在 bot 的真实朝向上，而非只偏转弹道。</b>若朝向精确指向目标却让子弹偏出，
+     * 旁观者看到的是"枪口对着我却打不中"，观感是弹道出错；施加在朝向上则能看到 bot 的瞄准在抖动，
+     * 视觉与弹道一致。
+     */
+    public AimOffset rollAimOffset() {
+        float radius = errorDegrees();
+        double angle = random.nextDouble() * 2.0D * Math.PI;
+        double r = radius * Math.sqrt(random.nextDouble());
+        return new AimOffset((float) (Math.cos(angle) * r), (float) (Math.sin(angle) * r));
+    }
+
+    public record AimOffset(float yawDegrees, float pitchDegrees) {
+
+        /** 偏移的角距离，用于校验其落在误差圆内。 */
+        public float magnitudeDegrees() {
+            return (float) Math.hypot(yawDegrees, pitchDegrees);
+        }
+    }
+
     /** 失去视线后是否仍在目标记忆期内（决定 bot 该继续压制还是转为搜索）。 */
     public boolean hasTargetMemory() {
         return ticksOnTarget > 0 && ticksSinceSeen <= model.reacquireTicks();
