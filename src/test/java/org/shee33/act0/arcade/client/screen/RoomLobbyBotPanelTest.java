@@ -1,8 +1,10 @@
 package org.shee33.act0.arcade.client.screen;
 
 import org.junit.jupiter.api.Test;
+import org.shee33.act0.arcade.bot.AimModel;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -167,5 +169,47 @@ class RoomLobbyBotPanelTest {
     void visibleSlotRows_absurdlyTightLimit_stillShowsOneRow() {
         assertEquals(1, RoomLobbyBotPanel.visibleSlotRows(SLOT_TOP_DY, SLOT_PITCH, 0, 6));
         assertFalse(RoomLobbyBotPanel.visibleSlotRows(SLOT_TOP_DY, SLOT_PITCH, 0, 6) == 0);
+    }
+
+    // ============================================================
+    // 难度档位：客户端副本必须与 AimModel.Difficulty 完全对齐
+    // ============================================================
+
+    @Test
+    void difficultyArraysCoverEveryEnumConstant() {
+        int expected = AimModel.Difficulty.values().length;
+        assertEquals(expected, RoomLobbyBotPanel.DIFFICULTY_NAMES.length,
+                "新增难度档后客户端展示名数组未同步，大厅将循环不到该档");
+        assertEquals(expected, RoomLobbyBotPanel.DIFFICULTY_ARGS.length,
+                "新增难度档后客户端指令参数数组未同步");
+    }
+
+    @Test
+    void difficultyArgsMatchCommandLiterals() {
+        AimModel.Difficulty[] tiers = AimModel.Difficulty.values();
+        for (int i = 0; i < tiers.length; i++) {
+            // ArcadeCommand 按 tier.name().toLowerCase(Locale.ROOT) 生成命令字面量
+            assertEquals(tiers[i].name().toLowerCase(Locale.ROOT), RoomLobbyBotPanel.DIFFICULTY_ARGS[i],
+                    "第 " + i + " 档的指令参数与服务端命令树不一致，点击后服务端将拒绝该指令");
+        }
+    }
+
+    @Test
+    void difficultyNamesMatchServerDisplayNames() {
+        AimModel.Difficulty[] tiers = AimModel.Difficulty.values();
+        for (int i = 0; i < tiers.length; i++) {
+            // 服务端经 RoomDto.botDifficulty() 下发的正是 displayName()，对不上则滚轮方向判定失效
+            assertEquals(tiers[i].displayName(), RoomLobbyBotPanel.DIFFICULTY_NAMES[i],
+                    "第 " + i + " 档的展示名与服务端下发值不一致");
+        }
+    }
+
+    @Test
+    void difficultyIndexResolvesEveryServerDisplayName() {
+        AimModel.Difficulty[] tiers = AimModel.Difficulty.values();
+        for (int i = 0; i < tiers.length; i++) {
+            assertEquals(i, RoomLobbyBotPanel.difficultyIndex(tiers[i].displayName()),
+                    "服务端下发的展示名在客户端解析不出档位下标");
+        }
     }
 }
