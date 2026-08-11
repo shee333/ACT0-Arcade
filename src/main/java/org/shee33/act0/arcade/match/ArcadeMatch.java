@@ -28,6 +28,7 @@ import net.minecraft.world.scores.Team;
 import org.shee33.act0.arcade.arena.ArcadeArena;
 import org.shee33.act0.arcade.arena.HotZoneArea;
 import org.shee33.act0.arcade.arena.SpawnPoint;
+import org.shee33.act0.arcade.bot.mc.BotSpawner;
 import org.shee33.act0.arcade.integration.MatchResultBroadcaster;
 import org.shee33.act0.arcade.loadout.Loadout;
 import org.shee33.act0.arcade.loadout.LoadoutItem;
@@ -2166,9 +2167,21 @@ public final class ArcadeMatch {
         return server.getPlayerList().getPlayer(id);
     }
 
+    /**
+     * 参战者在播报文本中的显示名；AI 士兵前置 {@code [BOT]}。
+     *
+     * <p>战场上的悬浮名牌刻意<b>不</b>加此标记——名牌持续出现在视野里，标出"这是假人"会不断
+     * 提醒玩家在打 AI，破坏沉浸感。而"我刚被谁杀了"这个时刻玩家最需要诚实的信息，故在此标注。
+     *
+     * <p>不带颜色码：调用方会在其前面拼阵营色，自带颜色会打断该上下文。
+     */
     private String nameOf(UUID id) {
         ServerPlayer p = player(id);
-        return p != null ? p.getGameProfile().getName() : id.toString().substring(0, 8);
+        if (p == null) {
+            return id.toString().substring(0, 8);
+        }
+        String name = p.getGameProfile().getName();
+        return BotSpawner.isBot(p) ? "[BOT] " + name : name;
     }
 
     private void broadcast(String message) {
