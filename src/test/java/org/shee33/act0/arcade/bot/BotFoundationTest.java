@@ -162,4 +162,75 @@ class BotFoundationTest {
         assertEquals(90.0F, Steering.angleBetween(0.0F, 90.0F), EPS);
         assertEquals(0.0F, Steering.angleBetween(45.0F, 45.0F), EPS);
     }
+
+    // ============================================================
+    // moveInput —— 边瞄边动的分解数学
+    // ============================================================
+
+    @Test
+    void moveInputIsPureForwardWhenMovingWhereTheBodyFaces() {
+        // yaw 0 面朝 +Z，往 +Z 走应是纯前进
+        Steering.MoveInput m = Steering.moveInput(0.0D, 1.0D, 0.0F);
+        assertEquals(1.0F, m.forward(), EPS);
+        assertEquals(0.0F, m.strafe(), EPS);
+    }
+
+    @Test
+    void moveInputIsPureStrafeWhenMovingPerpendicularToFacing() {
+        // yaw 0 面朝 +Z，往 +X 走应是纯侧移
+        Steering.MoveInput m = Steering.moveInput(1.0D, 0.0D, 0.0F);
+        assertEquals(0.0F, m.forward(), EPS);
+        assertEquals(1.0F, m.strafe(), EPS);
+    }
+
+    @Test
+    void moveInputFollowsBodyYaw() {
+        // yaw -90 面朝 +X：往 +X 走是前进，往 +Z 走是侧移
+        Steering.MoveInput forward = Steering.moveInput(1.0D, 0.0D, -90.0F);
+        assertEquals(1.0F, forward.forward(), EPS);
+        assertEquals(0.0F, forward.strafe(), EPS);
+
+        Steering.MoveInput side = Steering.moveInput(0.0D, 1.0D, -90.0F);
+        assertEquals(0.0F, side.forward(), EPS);
+        assertEquals(-1.0F, side.strafe(), EPS);
+    }
+
+    @Test
+    void moveInputNormalisesMagnitude() {
+        Steering.MoveInput m = Steering.moveInput(0.0D, 37.0D, 0.0F);
+        assertEquals(1.0F, Math.hypot(m.forward(), m.strafe()), EPS);
+    }
+
+    @Test
+    void moveInputReturnsZeroForZeroDirection() {
+        assertEquals(Steering.MoveInput.ZERO, Steering.moveInput(0.0D, 0.0D, 33.0F));
+    }
+
+    /**
+     * 决定性的一条：把分解结果重新代入原版 {@code getInputVector} 的公式，必须还原出原始方向。
+     *
+     * <p>逐个手算象限只能覆盖挑好的几例，而符号弄反在某些象限仍会"看起来对"。
+     * 这里对多组朝向与方向做往返验证，等价于直接对着原版公式证明分解是其逆变换。
+     */
+    @Test
+    void moveInputRoundTripsThroughVanillaInputVector() {
+        float[] yaws = {0.0F, 45.0F, -90.0F, 137.0F, -179.0F, 90.0F};
+        double[][] dirs = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}, {3, 4}, {-2, 7}, {5, -1}};
+        for (float yaw : yaws) {
+            for (double[] dir : dirs) {
+                Steering.MoveInput m = Steering.moveInput(dir[0], dir[1], yaw);
+                double rad = Math.toRadians(yaw);
+                double sin = Math.sin(rad);
+                double cos = Math.cos(rad);
+                // 原版：vx = xxa·cosθ − zza·sinθ，vz = zza·cosθ + xxa·sinθ
+                double vx = m.strafe() * cos - m.forward() * sin;
+                double vz = m.forward() * cos + m.strafe() * sin;
+                double length = Math.hypot(dir[0], dir[1]);
+                assertEquals(dir[0] / length, vx, 1.0e-4D,
+                        "yaw=" + yaw + " dir=(" + dir[0] + "," + dir[1] + ") 的 X 分量未还原");
+                assertEquals(dir[1] / length, vz, 1.0e-4D,
+                        "yaw=" + yaw + " dir=(" + dir[0] + "," + dir[1] + ") 的 Z 分量未还原");
+            }
+        }
+    }
 }

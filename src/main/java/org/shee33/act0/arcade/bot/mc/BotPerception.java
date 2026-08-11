@@ -111,4 +111,35 @@ public final class BotPerception {
                                           @Nullable Entity currentTarget) {
         return findTarget(bot, model, isEnemy, currentTarget, DEFAULT_SEARCH_RADIUS);
     }
+
+    /**
+     * 最近的敌人，<b>忽略视野锥与视线遮挡</b>。
+     *
+     * <p>这是<b>移动</b>目标，不是交火目标。士兵在看见敌人之前就该朝交战方向推进；
+     * 若连移动也要求视线，bot 在没看到人时就彻底停摆，表现为满场站桩——这正是
+     * 交火目标（{@link #findTarget}）与行军目标必须分开取的原因。开枪仍由 findTarget
+     * 的视线判定把关，故不会出现隔墙射击。
+     *
+     * <p>刻意不做 raycast：本方法每个扫描周期对每个 bot 都要跑，而"往哪个方向推进"
+     * 这个粒度的决策不需要精确到能否看见。
+     */
+    @Nullable
+    public static ServerPlayer findNearestHostile(BotPlayer bot,
+                                                 Predicate<ServerPlayer> isEnemy,
+                                                 double searchRadius) {
+        double radiusSq = searchRadius * searchRadius;
+        ServerPlayer nearest = null;
+        double nearestSq = Double.MAX_VALUE;
+        for (ServerPlayer other : bot.serverLevel().players()) {
+            if (other == bot || !other.isAlive() || other.isSpectator() || !isEnemy.test(other)) {
+                continue;
+            }
+            double distSq = other.distanceToSqr(bot);
+            if (distSq <= radiusSq && distSq < nearestSq) {
+                nearestSq = distSq;
+                nearest = other;
+            }
+        }
+        return nearest;
+    }
 }
