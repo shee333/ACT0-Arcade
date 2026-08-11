@@ -60,7 +60,7 @@ public final class BotSpawner {
 
         // 入场流程内部会自行 new 一个网络监听器，但其 send 最终都委托到本连接，
         // 因此在连接层吞包即可覆盖全部出站路径，无需 mixin 替换监听器。
-        server.getPlayerList().placeNewPlayer(new BotConnection(), bot);
+        server.getPlayerList().placeNewPlayer(BotConnection.create(), bot);
 
         // placeNewPlayer 会把玩家放到世界出生点或其存档记录的位置，此处覆盖为调用方指定的落点。
         bot.teleportTo(level, x, y, z, yaw, pitch);
