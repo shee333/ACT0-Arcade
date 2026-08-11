@@ -175,6 +175,10 @@ public final class BotWeaponController {
                     reportUnexpectedFailure("NOT_DRAW（补持枪失败，检查 bot 主手是否为 TaCZ 枪械）");
                 }
             }
+            // 抽枪动画期。它紧跟在上面补的那次 draw 之后必然出现，属正常过渡而非故障；
+            // 若不在此拦下，每个 bot 首次交火都会记一条假警报，把诊断日志的信噪比冲掉。
+            case "IS_DRAWING" -> {
+            }
             default -> reportUnexpectedFailure(result);
         }
     }
