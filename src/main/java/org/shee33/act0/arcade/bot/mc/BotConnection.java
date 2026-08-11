@@ -1,5 +1,6 @@
 package org.shee33.act0.arcade.bot.mc;
 
+import io.netty.channel.embedded.EmbeddedChannel;
 import net.minecraft.network.Connection;
 import net.minecraft.network.PacketSendListener;
 import net.minecraft.network.chat.Component;
@@ -44,9 +45,34 @@ public final class BotConnection extends Connection {
      */
     private static final SocketAddress FAKE_ADDRESS = InetSocketAddress.createUnresolved("act0.bot", 0);
 
-    public BotConnection() {
+    private BotConnection() {
         // 服务端侧接收的是 serverbound 方向，与真实玩家连接一致。
         super(PacketFlow.SERVERBOUND);
+    }
+
+    /**
+     * 建立一条挂着真实 netty 通道的假连接。
+     *
+     * <p><b>为什么必须有通道而不能让 {@code channel} 保持 null。</b>Forge 给
+     * {@code PlayerList.placeNewPlayer} 打了补丁，在入场流程中调用
+     * {@code NetworkHooks.sendMCRegistryPackets}，其内部会解引用
+     * {@code connection.channel().attr(...)} 读取 FML 握手属性。通道为 null 时直接抛
+     * {@code NullPointerException}，入场中途失败——玩家已打出"logged in"日志却没能加入玩家列表。
+     * 该异常被 Brigadier 收进 HoverEvent，控制台与日志都看不到，极难定位。
+     *
+     * <p>逐个规避这类解引用是打地鼠：Forge 与其他模组在登录路径上还有多处通道属性访问。
+     * 挂一条 {@link EmbeddedChannel} 可一次性消除整类问题——它是真实的 netty 通道，
+     * {@code attr()} 正常工作，且不占用任何系统套接字。
+     *
+     * <p>{@code EmbeddedChannel} 的构造会把本连接注册进管线并触发 {@code channelActive}，
+     * 原版 {@link Connection#channelActive} 借此把 {@code channel} 字段填好——无需反射。
+     *
+     * <p>出站包不会在通道里堆积：{@link #send} 已被覆盖为空实现，任何东西都写不进去。
+     */
+    public static BotConnection create() {
+        BotConnection connection = new BotConnection();
+        new EmbeddedChannel(connection);
+        return connection;
     }
 
     @Override
