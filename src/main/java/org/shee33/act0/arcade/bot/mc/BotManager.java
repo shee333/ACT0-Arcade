@@ -2,6 +2,7 @@ package org.shee33.act0.arcade.bot.mc;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
@@ -15,7 +16,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
  * AI 士兵的在场注册表与每 tick 驱动循环。
@@ -28,21 +31,18 @@ import java.util.UUID;
  */
 public final class BotManager {
 
-    /**
-     * 行进时每 tick 最大转向角（度）。
-     *
-     * <p>与 {@link AimModel#turnRateDegPerTick()} 刻意分开：那是交火时枪口追踪目标的速率、
-     * 属难度参数；这是行军时身体的转向速率，与强弱无关，四档共用一个值即可。
-     */
-    private static final float DEFAULT_TURN_RATE = 12.0F;
-
-    /** 抵达判定半径（格）。小于玩家碰撞箱宽度会导致到点后反复微调抖动。 */
-    private static final double DEFAULT_ARRIVE_RADIUS = 0.6D;
-
     public static final BotManager INSTANCE = new BotManager();
 
     /** 在场 bot 及其当前指令；用 LinkedHashMap 保证命令回显顺序稳定。 */
     private final Map<UUID, BotTask> tasks = new LinkedHashMap<>();
+
+    /**
+     * 敌我判定谓词。
+     *
+     * <p>默认混战——除自己以外皆为敌，便于用两个 bot 直接验证自主交火。阶段 1 接入对局后由
+     * {@code ArcadeMatch} 的阵营判定替换，感知层（{@link BotPerception}）无需改动。
+     */
+    private Predicate<ServerPlayer> hostility = player -> true;
 
     private BotManager() {
     }
@@ -148,6 +148,30 @@ public final class BotManager {
         return tasks.size();
     }
 
+    /** 开关某个 bot 的自主选目标；返回是否确有其人。 */
+    public boolean setAutoTarget(String name, boolean enabled) {
+        BotTask task = tasks.get(BotNames.uuidOf(name));
+        if (task == null) {
+            return false;
+        }
+        task.autoTarget = enabled;
+        if (!enabled) {
+            task.weapon.setTarget(null);
+        }
+        return true;
+    }
+
+    /** 某个 bot 是否开启了自主选目标。 */
+    public boolean isAutoTarget(String name) {
+        BotTask task = tasks.get(BotNames.uuidOf(name));
+        return task != null && task.autoTarget;
+    }
+
+    /** 替换敌我判定谓词；阶段 1 接入对局时由对局侧注入阵营判定。 */
+    public void setHostility(Predicate<ServerPlayer> hostility) {
+        this.hostility = Objects.requireNonNull(hostility, "hostility");
+    }
+
     /** 某个 bot 当前难度档；不在场返回 {@code null}。 */
     @Nullable
     public AimModel.Difficulty difficultyOf(String name) {
@@ -193,24 +217,7 @@ public final class BotManager {
         }
         tasks.values().removeIf(task -> isStale(server, task));
         for (BotTask task : tasks.values()) {
-            task.weapon.tick();
-
-            // 交火时由武器控制器独占朝向——士兵瞄的是敌人，不是航点。
-            // 因此此时抑制移动，bot 停下开火；"行进中侧向射击"要等导航层引入侧移后
-            // 才能把前进量与朝向解耦，现在强行做只会得到边走边打却朝着航点开枪的错误画面。
-            if (task.weapon.target() != null) {
-                BotMovementDriver.halt(task.bot);
-                continue;
-            }
-            if (task.waypoint == null) {
-                continue;
-            }
-            boolean arrived = BotMovementDriver.driveTo(task.bot,
-                    task.waypoint.x, task.waypoint.y, task.waypoint.z,
-                    DEFAULT_TURN_RATE, DEFAULT_ARRIVE_RADIUS, false);
-            if (arrived) {
-                task.waypoint = null;
-            }
+            task.tick(server, hostility);
         }
     }
 

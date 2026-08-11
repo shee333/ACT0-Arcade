@@ -1,8 +1,6 @@
 package org.shee33.act0.arcade.bot.mc;
 
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.shee33.act0.arcade.bot.AimModel;
 import org.shee33.act0.arcade.bot.AimTracker;
@@ -45,6 +43,14 @@ public final class BotWeaponController {
     @Nullable
     private Entity target;
 
+    /**
+     * 最后一次<b>确实看见</b>目标时的瞄点。
+     *
+     * <p>失去视线后瞄这里而非目标的活体位置——后者等于穿墙追踪。
+     */
+    @Nullable
+    private Vec3 lastKnownAimPoint;
+
     public BotWeaponController(BotPlayer bot, AimModel model, long seed) {
         this.bot = Objects.requireNonNull(bot, "bot");
         this.aim = new AimTracker(Objects.requireNonNull(model, "model"), seed);
@@ -59,6 +65,7 @@ public final class BotWeaponController {
     public void setTarget(@Nullable Entity target) {
         if (this.target != target) {
             aim.forgetTarget();
+            lastKnownAimPoint = null;
             // 获得新目标时必须立刻重掷偏移。偏移原本只在开火成功后重掷，而其初值为零，
             // 于是每场交火的第一枪都精确命中——正是"探头即被爆头"这种必须避免的手感。
             // 此处紧接 forgetTarget() 调用，因此掷出的是"初见目标"那个最大的误差圆内的偏移。
@@ -82,42 +89,58 @@ public final class BotWeaponController {
      * <p>必须在世界实体循环之前调用，与移动驱动同处 {@code ServerTickEvent.Phase.START}。
      */
     public void tick() {
-        if (!isTargetEngageable()) {
-            aim.tick(false);
-            if (!aim.hasTargetMemory()) {
-                target = null;
-                BotGunBridge.aim(bot, false);
-            }
+        if (!isTargetAlive()) {
+            releaseTarget();
             return;
         }
 
         Vec3 eye = bot.getEyePosition();
-        Vec3 aimPoint = aimPointOf(target);
-        double dx = aimPoint.x - eye.x;
-        double dy = aimPoint.y - eye.y;
-        double dz = aimPoint.z - eye.z;
-        double horizontal = Math.sqrt(dx * dx + dz * dz);
-
-        float idealYaw = Steering.yawToward(dx, dz);
-        float idealPitch = Steering.pitchToward(dy, horizontal);
-
+        Vec3 livePoint = aimPointOf(target);
         AimModel model = aim.model();
-        boolean inFov = model.withinFov(Steering.angleBetween(bot.getYRot(), idealYaw));
-        boolean visible = inFov && hasClearLineOfSight(eye, aimPoint);
+
+        boolean inFov = model.withinFov(
+                Steering.angleBetween(bot.getYRot(), Steering.yawToward(livePoint.x - eye.x, livePoint.z - eye.z)));
+        boolean visible = inFov && BotPerception.hasClearLineOfSight(bot, eye, livePoint);
         aim.tick(visible);
+
+        if (visible) {
+            lastKnownAimPoint = livePoint;
+        } else if (!aim.hasTargetMemory()) {
+            releaseTarget();
+            return;
+        }
+
+        // 失去视线时瞄"最后已知位置"而非活体位置。跟着看不见的目标转动就是穿墙追踪
+        // ——玩家会（正确地）判定为作弊。记忆期内保持指向最后所见处，是压制与"绕后要够快"
+        // 这一玩法赖以存在的行为；期满则由上方分支丢弃目标。
+        Vec3 aimAt = visible ? livePoint : lastKnownAimPoint;
+        if (aimAt == null) {
+            // 目标自被指定起从未被看见（例如隔墙 engage）：无从得知其位置，只等记忆期满。
+            return;
+        }
+
+        double dx = aimAt.x - eye.x;
+        double dy = aimAt.y - eye.y;
+        double dz = aimAt.z - eye.z;
+        float idealYaw = Steering.yawToward(dx, dz);
+        float idealPitch = Steering.pitchToward(dy, Math.sqrt(dx * dx + dz * dz));
 
         // 朝向朝"理想方向 + 当前误差偏移"转动：偏移只在每次射击后重掷，
         // 因此转动是平滑的，而非每 tick 抖动（后者观感像抽搐而非瞄不准）。
-        float targetYaw = idealYaw + offset.yawDegrees();
-        float targetPitch = idealPitch + offset.pitchDegrees();
         float rate = model.turnRateDegPerTick();
-        applyRotation(Steering.turnToward(bot.getYRot(), targetYaw, rate),
-                Steering.turnToward(bot.getXRot(), targetPitch, rate));
+        applyRotation(Steering.turnToward(bot.getYRot(), idealYaw + offset.yawDegrees(), rate),
+                Steering.turnToward(bot.getXRot(), idealPitch + offset.pitchDegrees(), rate));
 
         BotGunBridge.aim(bot, true);
         if (visible) {
             tryFire();
         }
+    }
+
+    private void releaseTarget() {
+        target = null;
+        lastKnownAimPoint = null;
+        BotGunBridge.aim(bot, false);
     }
 
     private void tryFire() {
@@ -145,21 +168,10 @@ public final class BotWeaponController {
                 && !BotGunBridge.isBolting(bot);
     }
 
-    private boolean isTargetEngageable() {
+    /** 目标是否还在场且可交互；<b>不含</b>可见性判定，那由每 tick 的视线检测负责。 */
+    private boolean isTargetAlive() {
         return target != null && target.isAlive() && !target.isRemoved()
                 && target.level() == bot.level();
-    }
-
-    /**
-     * 眼到瞄点之间是否无方块遮挡。
-     *
-     * <p>只判方块不判实体：队友挡住射线时依然允许开火，与真人行为一致
-     * （友伤由 {@code ArcadeMatch.shouldCancelDamage} 另行裁决）。
-     */
-    private boolean hasClearLineOfSight(Vec3 from, Vec3 to) {
-        HitResult hit = bot.level().clip(new ClipContext(
-                from, to, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, bot));
-        return hit.getType() == HitResult.Type.MISS;
     }
 
     private void applyRotation(float yaw, float pitch) {
