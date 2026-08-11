@@ -25,9 +25,16 @@ import java.util.Set;
  */
 final class RoomLobbyBotPanel {
 
-    /** 难度四档：中文展示名与指令参数按下标一一对应，数组顺序即点击循环顺序。 */
-    private static final String[] DIFFICULTY_NAMES = {"简单", "普通", "困难", "精英"};
-    private static final String[] DIFFICULTY_ARGS = {"easy", "normal", "hard", "elite"};
+    /**
+     * 难度四档：中文展示名与指令参数按下标一一对应，数组顺序即点击循环顺序。
+     *
+     * <p>这两份是 {@code AimModel.Difficulty} 的客户端副本——展示名要对上服务端经 RoomDto
+     * 下发的 {@code displayName()}，指令参数要对上 {@code ArcadeCommand} 按 {@code values()}
+     * 生成的命令字面量。副本一旦与枚举脱节就是静默故障：循环不到新档位，或发出服务端不认识
+     * 的参数而毫无反馈。故由 {@code RoomLobbyBotPanelTest} 逐项锁住三者一致。
+     */
+    static final String[] DIFFICULTY_NAMES = {"简单", "普通", "困难", "精英"};
+    static final String[] DIFFICULTY_ARGS = {"easy", "normal", "hard", "elite"};
 
     /** 难度未知（房间条目来自进行中的对局，服务端不下发难度）时的占位，不臆造默认值。 */
     private static final String DIFFICULTY_UNKNOWN = "—";
