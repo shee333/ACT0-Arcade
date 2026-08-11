@@ -73,7 +73,8 @@ final class BotTask {
             return;
         }
         if (autoTarget) {
-            locomotion.tickCombat(server, moveGoal, engaged);
+            // 交火目标与寻敌去向必须分别传入：前者决定机动，后者只在尚未交火时用于推进。
+            locomotion.tickCombat(server, weapon.target(), moveGoal);
         }
     }
 
