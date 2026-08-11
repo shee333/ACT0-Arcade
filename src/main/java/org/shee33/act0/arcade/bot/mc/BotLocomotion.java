@@ -106,28 +106,47 @@ final class BotLocomotion {
      * @param goal    移动目标（最近敌人，不要求可见）；{@code null} 表示无敵可寻
      * @param engaged 是否正在交火（有交火目标）
      */
-    void tickCombat(MinecraftServer server, @Nullable Entity goal, boolean engaged) {
-        if (goal == null || !goal.isAlive()) {
+    void tickCombat(MinecraftServer server, @Nullable Entity aimTarget, @Nullable Entity seekGoal) {
+        Entity engaging = alive(aimTarget);
+        if (engaging != null) {
+            manoeuvre(server, engaging);
+            return;
+        }
+        Entity seeking = alive(seekGoal);
+        if (seeking == null) {
             BotMovementDriver.halt(bot);
             return;
         }
-        if (!engaged) {
-            if (followPath(server, goal.position(), false) != Outcome.MOVING) {
-                BotMovementDriver.halt(bot);
-            }
-            return;
+        if (followPath(server, seeking.position(), false) != Outcome.MOVING) {
+            BotMovementDriver.halt(bot);
         }
-        double dx = goal.getX() - bot.getX();
-        double dz = goal.getZ() - bot.getZ();
+    }
+
+    /**
+     * 交火机动：姿态与方向<b>一律相对正在交火的那个目标</b>。
+     *
+     * <p>此处曾误用"最近的敌人"来算距离与侧移方向。两者未必是同一个人——最近的敌人可能
+     * 躲在墙后（不可交火），而正在对枪的是更远处那个可见的敌人。一旦错位，bot 会朝 A 开枪
+     * 却按到 B 的距离决定推进还是后撤、并绕着 B 侧移，动作与枪口完全对不上。
+     * 双 bot 场景下两者恒为同一人，因此这类错位在小规模测试里永远暴露不出来。
+     */
+    private void manoeuvre(MinecraftServer server, Entity target) {
+        double dx = target.getX() - bot.getX();
+        double dz = target.getZ() - bot.getZ();
         switch (stance.modeFor(Math.sqrt(dx * dx + dz * dz))) {
             case ADVANCE -> {
-                if (followPath(server, goal.position(), true) != Outcome.MOVING) {
+                if (followPath(server, target.position(), true) != Outcome.MOVING) {
                     BotMovementDriver.halt(bot);
                 }
             }
             case HOLD -> strafe(dx, dz);
             case RETREAT -> retreat(dx, dz);
         }
+    }
+
+    @Nullable
+    private static Entity alive(@Nullable Entity entity) {
+        return entity != null && entity.isAlive() ? entity : null;
     }
 
     /**
