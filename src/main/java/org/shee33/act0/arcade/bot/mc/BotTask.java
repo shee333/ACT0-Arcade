@@ -1,11 +1,13 @@
 package org.shee33.act0.arcade.bot.mc;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import org.shee33.act0.arcade.Act0Arcade;
 import org.shee33.act0.arcade.bot.AimModel;
+import org.shee33.act0.arcade.bot.PathCursor;
 
 import javax.annotation.Nullable;
 import java.util.function.BiPredicate;
@@ -41,6 +43,22 @@ final class BotTask {
      */
     private static final int TARGET_SCAN_INTERVAL_TICKS = 10;
 
+    /**
+     * 路径重规划间隔（tick）。
+     *
+     * <p>2 秒重算一次：原版 {@code shouldRecomputePath} 极少触发，而地形被改动或 bot 被推离后
+     * 旧路径就不再成立。间隔再短会让寻路开销显著上升，而 {@link PathCursor} 的前瞻与卡死恢复
+     * 已能吸收这个粒度内的偏差。
+     */
+    private static final int PATH_REPLAN_INTERVAL_TICKS = 40;
+
+    /**
+     * 判定卡死的无进展 tick 数。
+     *
+     * <p>1.5 秒：足够长以容纳绕过障碍时的正常贴墙滑行与起跳，又足够短以免玩家看着 bot 顶墙发呆。
+     */
+    private static final int STUCK_TICKS = 30;
+
     final BotPlayer bot;
     BotWeaponController weapon;
     AimModel.Difficulty difficulty = DEFAULT_DIFFICULTY;
@@ -56,6 +74,12 @@ final class BotTask {
 
     /** 是否自主选择交火目标；关闭时目标只能由 {@code /arcade bot engage} 指定。 */
     boolean autoTarget;
+
+    @Nullable
+    private BotNavigator navigator;
+
+    @Nullable
+    private PathCursor cursor;
 
     BotTask(BotPlayer bot) {
         this.bot = bot;
@@ -83,10 +107,74 @@ final class BotTask {
         if (waypoint == null) {
             return;
         }
-        boolean arrived = BotMovementDriver.driveTo(bot,
-                waypoint.x, waypoint.y, waypoint.z, MOVE_TURN_RATE, ARRIVE_RADIUS, false);
-        if (arrived) {
-            waypoint = null;
+        followPath(server);
+    }
+
+    /** 设定移动航点；清空既有路径以便按新目标重新规划。 */
+    void setWaypoint(@Nullable Vec3 target) {
+        this.waypoint = target;
+        clearPath();
+    }
+
+    /**
+     * 沿路径走向航点。
+     *
+     * <p>三件事必须一起做，缺一个都会让 bot 看起来是坏的：
+     * <ul>
+     *   <li><b>周期重规划</b>——原版的 {@code shouldRecomputePath} 极少触发，路径会过期；
+     *       地形被改动或 bot 被推离后，不重算就会一直走一条不再成立的路；</li>
+     *   <li><b>卡死恢复</b>——退回上一节点并立即重算。撞在几何缝隙里的 bot 若只是继续顶墙，
+     *       观感比走错路糟糕得多；</li>
+     *   <li><b>无路可走时放弃航点</b>——否则 bot 会永远朝着不可达的目标顶着障碍。</li>
+     * </ul>
+     */
+    private void followPath(MinecraftServer server) {
+        boolean due = cursor == null
+                || (server.getTickCount() + bot.getId()) % PATH_REPLAN_INTERVAL_TICKS == 0;
+        if (due) {
+            PathCursor fresh = navigator().computePath(BlockPos.containing(waypoint));
+            if (fresh == null) {
+                // 无路可走：放弃该航点，而不是原地顶着障碍反复尝试。
+                setWaypoint(null);
+                BotMovementDriver.halt(bot);
+                return;
+            }
+            cursor = fresh;
+        }
+
+        if (cursor.advance(bot.getX(), bot.getY(), bot.getZ())) {
+            setWaypoint(null);
+            BotMovementDriver.halt(bot);
+            return;
+        }
+
+        if (cursor.ticksWithoutProgress() > STUCK_TICKS) {
+            cursor.stepBack();
+            cursor = null;
+            return;
+        }
+
+        BotMovementDriver.driveTo(bot, cursor.targetX(), cursor.targetY(), cursor.targetZ(),
+                MOVE_TURN_RATE, ARRIVE_RADIUS, false);
+    }
+
+    private BotNavigator navigator() {
+        if (navigator == null) {
+            navigator = new BotNavigator(bot);
+        }
+        return navigator;
+    }
+
+    private void clearPath() {
+        cursor = null;
+    }
+
+    /** bot 撤走时释放导航资源，避免影子 Mob 随之泄漏。 */
+    void releaseNavigation() {
+        clearPath();
+        if (navigator != null) {
+            navigator.release();
+            navigator = null;
         }
     }
 

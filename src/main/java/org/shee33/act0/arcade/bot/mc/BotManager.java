@@ -71,6 +71,7 @@ public final class BotManager {
         if (task == null) {
             return false;
         }
+        task.releaseNavigation();
         BotSpawner.despawn(server, task.bot);
         return true;
     }
@@ -80,6 +81,7 @@ public final class BotManager {
         List<BotTask> all = new ArrayList<>(tasks.values());
         tasks.clear();
         for (BotTask task : all) {
+            task.releaseNavigation();
             BotSpawner.despawn(server, task.bot);
         }
         return all.size();
@@ -93,7 +95,7 @@ public final class BotManager {
         if (task == null) {
             return false;
         }
-        task.waypoint = new Vec3(x, y, z);
+        task.setWaypoint(new Vec3(x, y, z));
         return true;
     }
 
@@ -103,7 +105,7 @@ public final class BotManager {
         if (task == null) {
             return false;
         }
-        task.waypoint = null;
+        task.setWaypoint(null);
         BotMovementDriver.halt(task.bot);
         return true;
     }
