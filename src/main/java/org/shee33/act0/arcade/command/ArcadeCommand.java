@@ -21,6 +21,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.shee33.act0.arcade.Act0Arcade;
 import org.shee33.act0.arcade.arena.ArcadeArena;
+import org.shee33.act0.arcade.bot.AimModel;
 import org.shee33.act0.arcade.arena.HotZoneWandHandler;
 import org.shee33.act0.arcade.arena.SpawnPoint;
 import org.shee33.act0.arcade.economy.ArcadeEconomy;
@@ -56,6 +57,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.nio.charset.StandardCharsets;
@@ -303,8 +305,21 @@ public final class ArcadeCommand {
             create.then(Commands.literal(mode)
                     .then(roomCreateArgs(mode)));
         }
+        LiteralArgumentBuilder<CommandSourceStack> botDifficulty = Commands.literal("difficulty");
+        for (AimModel.Difficulty tier : AimModel.Difficulty.values()) {
+            botDifficulty.then(Commands.literal(tier.name().toLowerCase(Locale.ROOT))
+                    .executes(ctx -> roomBotDifficulty(ctx, tier)));
+        }
+        LiteralArgumentBuilder<CommandSourceStack> bot = Commands.literal("bot")
+                .then(Commands.literal("add")
+                        .executes(ctx -> roomBotAdd(ctx, 1))
+                        .then(Commands.argument("count", IntegerArgumentType.integer(1, 32))
+                                .executes(ctx -> roomBotAdd(ctx, IntegerArgumentType.getInteger(ctx, "count")))))
+                .then(Commands.literal("remove").executes(ArcadeCommand::roomBotRemove))
+                .then(botDifficulty);
         return Commands.literal("room")
                 .then(create)
+                .then(bot)
                                 .then(Commands.literal("size")
                                     .then(Commands.argument("players", IntegerArgumentType.integer(2, 32))
                                         .executes(ctx -> roomResize(ctx, null)))
@@ -454,6 +469,37 @@ public final class ArcadeCommand {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
         MinecraftServer server = ctx.getSource().getServer();
         String feedback = services().rooms().chooseTeam(server, player, team);
+        ctx.getSource().sendSuccess(() -> Component.literal(feedback), false);
+        ArcadeNetwork.broadcastRoomList(server);
+        return 1;
+    }
+
+    private static int roomBotAdd(CommandContext<CommandSourceStack> ctx, int count) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        MinecraftServer server = ctx.getSource().getServer();
+        boolean privileged = ctx.getSource().hasPermission(2);
+        String feedback = services().rooms().addBot(server, player, count, privileged);
+        ctx.getSource().sendSuccess(() -> Component.literal(feedback), false);
+        ArcadeNetwork.broadcastRoomList(server);
+        return 1;
+    }
+
+    private static int roomBotRemove(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        MinecraftServer server = ctx.getSource().getServer();
+        boolean privileged = ctx.getSource().hasPermission(2);
+        String feedback = services().rooms().removeBot(server, player, privileged);
+        ctx.getSource().sendSuccess(() -> Component.literal(feedback), false);
+        ArcadeNetwork.broadcastRoomList(server);
+        return 1;
+    }
+
+    private static int roomBotDifficulty(CommandContext<CommandSourceStack> ctx, AimModel.Difficulty tier)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        MinecraftServer server = ctx.getSource().getServer();
+        boolean privileged = ctx.getSource().hasPermission(2);
+        String feedback = services().rooms().setBotDifficulty(server, player, tier, privileged);
         ctx.getSource().sendSuccess(() -> Component.literal(feedback), false);
         ArcadeNetwork.broadcastRoomList(server);
         return 1;

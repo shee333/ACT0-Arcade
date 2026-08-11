@@ -25,7 +25,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 /**
  * 对局管理器：持有所有进行中的 {@link ArcadeMatch}，把 Forge 事件（死亡、服务器刻）路由给对应对局，
@@ -39,7 +39,7 @@ public final class MatchManager {
     /** 玩家 → 所在对局 id，便于 O(1) 路由死亡事件。离线/退出后立即移除，不再保留席位。 */
     private final Map<UUID, String> matchByPlayer = new ConcurrentHashMap<>();
     /** 对局结束回调（用于回收对应房间）；可为 {@code null}。 */
-    private Consumer<String> endListener;
+    private BiConsumer<MinecraftServer, String> endListener;
 
     /** 登记一个已创建好的对局，开始接收事件驱动。 */
     public void register(ArcadeMatch match, Collection<UUID> participants) {
@@ -50,7 +50,7 @@ public final class MatchManager {
     }
 
     /** 设置对局结束回调（由 {@link ArcadeServices} 装配，指向 {@link RoomManager#onMatchEnded}）。 */
-    public void setEndListener(Consumer<String> endListener) {
+    public void setEndListener(BiConsumer<MinecraftServer, String> endListener) {
         this.endListener = endListener;
     }
 
@@ -206,7 +206,7 @@ public final class MatchManager {
                 matchByPlayer.values().removeIf(mid -> mid.equals(match.matchId()));
                 it.remove();
                 if (endListener != null) {
-                    endListener.accept(match.matchId());
+                    endListener.accept(event.getServer(), match.matchId());
                 }
             }
         }

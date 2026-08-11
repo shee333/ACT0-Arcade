@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.shee33.act0.arcade.bot.AimModel;
 import org.shee33.act0.arcade.mode.MatchOptions;
 import org.shee33.act0.arcade.mode.RandomWeaponMode;
 
@@ -46,6 +47,15 @@ public final class ArcadeRoom {
     private final Set<UUID> members = new LinkedHashSet<>();
     /** 团队模式选边偏好：0=蓝队，1=红队。 */
     private final Map<UUID, Integer> preferredTeams = new LinkedHashMap<>();
+    /**
+     * 成员中属于 AI 士兵的那一部分（{@link #members} 的子集，保持加入顺序即为踢人优先级）。
+     *
+     * <p>bot 是伪造连接的真 {@code ServerPlayer}，在 {@link #members} 里与真人无从区分，
+     * 而"真人加入时优先踢 bot 让位"与"房间解散时撤走 bot"都必须能区分，故单独记一份。
+     */
+    private final Set<UUID> bots = new LinkedHashSet<>();
+    /** 本房间 bot 的统一难度档；由房主在大厅内切换，不随全局默认值变动。 */
+    private AimModel.Difficulty botDifficulty = AimModel.Difficulty.NORMAL;
     private State state = State.WAITING;
     /** 进行中对局的 id（仅 IN_PROGRESS 态有效）。 */
     private String matchId;
@@ -175,7 +185,45 @@ public final class ArcadeRoom {
 
     boolean removeMember(UUID id) {
         preferredTeams.remove(id);
+        bots.remove(id);
         return members.remove(id);
+    }
+
+    /** 以 AI 士兵身份加入；除登记进 {@link #bots} 外与真人成员完全一致。 */
+    boolean addBotMember(UUID id) {
+        if (!addMember(id)) {
+            return false;
+        }
+        bots.add(id);
+        return true;
+    }
+
+    /** bot 成员视图（只读副本，保持加入顺序）。 */
+    public Set<UUID> botIds() {
+        return new LinkedHashSet<>(bots);
+    }
+
+    public boolean isBot(UUID id) {
+        return bots.contains(id);
+    }
+
+    public int botCount() {
+        return bots.size();
+    }
+
+    /** 真人成员数；房主必然在内，故恒 {@code >= 1}。 */
+    public int humanCount() {
+        return members.size() - bots.size();
+    }
+
+    public AimModel.Difficulty botDifficulty() {
+        return botDifficulty;
+    }
+
+    void setBotDifficulty(AimModel.Difficulty difficulty) {
+        if (difficulty != null) {
+            this.botDifficulty = difficulty;
+        }
     }
 
     public Integer preferredTeam(UUID id) {

@@ -6,6 +6,7 @@ import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import org.shee33.act0.arcade.bot.AimModel;
 import org.shee33.act0.arcade.mode.MatchOptions;
 import org.shee33.act0.arcade.mode.MatchSettings;
 import org.shee33.act0.arcade.mode.RandomWeaponMode;
@@ -17,8 +18,10 @@ import org.shee33.act0.arcade.storage.ArenaRegistry;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -33,6 +36,13 @@ public final class RoomManager {
     private final Map<String, ArcadeRoom> rooms = new LinkedHashMap<>();
     /** 玩家 → 所在房间 id，保证一名玩家只在一个房间。 */
     private final Map<UUID, String> roomOf = new LinkedHashMap<>();
+    /**
+     * 对局 id → 该局的 bot，供对局结束后撤走。
+     *
+     * <p>不能只靠房间来清理：固定人数模式的房间在开局那一刻就被回收，等对局结束时
+     * {@link #onMatchEnded} 已找不到房间，bot 会以假玩家的形态永久滞留在服务器里。
+     */
+    private final Map<String, Set<UUID>> matchBots = new LinkedHashMap<>();
 
     private final ArcadeServices services;
     private int counter;
@@ -236,6 +246,95 @@ public final class RoomManager {
         return "§a已选择 " + (normalized == 0 ? "§9蓝队" : "§c红队");
     }
 
+    // ---------------- bot 席位 ----------------
+
+    /** 房主在大厅添加 AI 士兵。 */
+    public String addBot(MinecraftServer server, ServerPlayer player, int count, boolean privileged) {
+        BotSeatAccess access = accessBotSeats(player, privileged);
+        if (access.error() != null) {
+            return access.error();
+        }
+        ArcadeRoom room = access.room();
+        int before = room.botCount();
+        String result = RoomBotSeats.add(server, room, Math.max(1, count));
+        if (room.botCount() != before) {
+            notifyRoom(server, room, "§7房间已加入 AI 士兵 §8(" + room.size() + "/" + room.capacity() + ")");
+        }
+        return result;
+    }
+
+    /** 房主撤走一名 AI 士兵（后进先出）。 */
+    public String removeBot(MinecraftServer server, ServerPlayer player, boolean privileged) {
+        BotSeatAccess access = accessBotSeats(player, privileged);
+        if (access.error() != null) {
+            return access.error();
+        }
+        ArcadeRoom room = access.room();
+        int before = room.botCount();
+        String result = RoomBotSeats.remove(server, room);
+        if (room.botCount() != before) {
+            notifyRoom(server, room, "§7房间撤走一名 AI 士兵 §8(" + room.size() + "/" + room.capacity() + ")");
+        }
+        return result;
+    }
+
+    /** 房主切换本房间的 AI 难度。 */
+    public String setBotDifficulty(MinecraftServer server, ServerPlayer player,
+                                   AimModel.Difficulty difficulty, boolean privileged) {
+        BotSeatAccess access = accessBotSeats(player, privileged);
+        if (access.error() != null) {
+            return access.error();
+        }
+        ArcadeRoom room = access.room();
+        RoomBotSeats.applyDifficulty(server, room, difficulty);
+        notifyRoom(server, room, "§7AI 难度 → §e" + difficulty.displayName());
+        return "§a已设置 AI 难度为 §e" + difficulty.displayName();
+    }
+
+    /** {@link #accessBotSeats} 的结果：房间与错误原因恒有且仅有一个非 {@code null}。 */
+    private record BotSeatAccess(ArcadeRoom room, String error) {
+    }
+
+    private BotSeatAccess accessBotSeats(ServerPlayer player, boolean privileged) {
+        ArcadeRoom room = rooms.get(roomOf.get(player.getUUID()));
+        if (room == null) {
+            return new BotSeatAccess(null, "§c你当前不在任何房间。");
+        }
+        if (!player.getUUID().equals(room.hostId()) && !privileged) {
+            return new BotSeatAccess(null, "§c只有房主或管理员可以调整 AI 士兵。");
+        }
+        if (room.state() != ArcadeRoom.State.WAITING) {
+            return new BotSeatAccess(null, "§c对局已开始，无法调整 AI 士兵。");
+        }
+        return new BotSeatAccess(room, null);
+    }
+
+    /** 踢掉一个 bot 为真人腾席位，并同步对局清理账本。 */
+    private boolean releaseBotSeat(MinecraftServer server, ArcadeRoom room, ArcadeMatch match) {
+        UUID kicked = RoomBotSeats.kickOneForHuman(server, room, match);
+        if (kicked == null) {
+            return false;
+        }
+        if (match != null) {
+            Set<UUID> tracked = matchBots.get(match.matchId());
+            if (tracked != null) {
+                tracked.remove(kicked);
+            }
+        }
+        notifyRoom(server, room, "§7一名 AI 士兵已为真人玩家让位。");
+        return true;
+    }
+
+    /** 开局成功后把 bot 登记到对局账本，并开启其战斗意图。 */
+    private void registerMatchBots(MinecraftServer server, ArcadeRoom room, ArcadeMatch match) {
+        Set<UUID> bots = room.botIds();
+        if (bots.isEmpty()) {
+            return;
+        }
+        matchBots.put(match.matchId(), new LinkedHashSet<>(bots));
+        RoomBotSeats.enableCombat(server, bots, room.botDifficulty());
+    }
+
     /** 由房间构建完整可配置项。 */
     private static MatchOptions optionsOf(ArcadeRoom room) {
         return room.options();
@@ -292,15 +391,15 @@ public final class RoomManager {
         if (room.contains(id)) {
             return "§e你已在该房间中 §7(" + room.size() + "/" + room.capacity() + ")";
         }
-        if (room.isFull()) {
-            return "§c房间已满。";
-        }
-        // 进行中的弹性房间：中途补人
+        // 进行中的弹性房间：中途补人（满员时由 joinInProgress 内部踢 bot 让位）
         if (room.state() == ArcadeRoom.State.IN_PROGRESS) {
             return joinInProgress(server, player, room);
         }
         if (room.state() != ArcadeRoom.State.WAITING) {
             return "§c该房间已开始。";
+        }
+        if (room.isFull() && !releaseBotSeat(server, room, null)) {
+            return "§c房间已满。";
         }
         // 若在其它房间，先离开
         String existing = roomOf.get(id);
@@ -324,8 +423,11 @@ public final class RoomManager {
         ArcadeMatch match = services.matches().get(room.matchId());
         if (match == null) {
             // 对局已结束但房间尚未回收：直接回收并拒绝
-            onMatchEnded(room.matchId());
+            onMatchEnded(server, room.matchId());
             return "§c对局已结束。";
+        }
+        if (!match.acceptsLatecomers()) {
+            releaseBotSeat(server, room, match);
         }
         if (!match.acceptsLatecomers()) {
             return "§c该对局暂不可加入（已满或即将结束）。";
@@ -388,6 +490,10 @@ public final class RoomManager {
 
         // 房主离开或房间清空 → 解散
         if (room.isEmpty() || id.equals(room.hostId())) {
+            // 仅等待期就地撤走：已开局的 bot 归 matchBots 管，此刻撤会把它们从进行中的对局里抽掉
+            if (room.state() == ArcadeRoom.State.WAITING) {
+                RoomBotSeats.despawnAll(server, room.botIds());
+            }
             for (UUID other : room.members()) {
                 roomOf.remove(other);
                 if (notify) {
@@ -442,6 +548,7 @@ public final class RoomManager {
         }
 
         ArcadeMatch match = result.match();
+        registerMatchBots(server, room, match);
         if (match.canGrow()) {
             // 弹性模式：保留房间为进行中，允许中途补人
             room.setMatchId(match.matchId());
@@ -542,9 +649,13 @@ public final class RoomManager {
     /**
      * 对局结束回调：回收对应的进行中房间，释放其成员占用。
      */
-    public void onMatchEnded(String matchId) {
+    public void onMatchEnded(MinecraftServer server, String matchId) {
         if (matchId == null) {
             return;
+        }
+        Set<UUID> bots = matchBots.remove(matchId);
+        if (bots != null) {
+            RoomBotSeats.despawnAll(server, bots);
         }
         ArcadeRoom found = null;
         for (ArcadeRoom room : rooms.values()) {

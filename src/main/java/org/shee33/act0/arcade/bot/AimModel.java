@@ -114,6 +114,16 @@ public record AimModel(
         public AimModel defaults() {
             return model;
         }
+
+        /** 面向玩家的中文档位名，供房间大厅与命令反馈使用。 */
+        public String displayName() {
+            return switch (this) {
+                case EASY -> "简单";
+                case NORMAL -> "普通";
+                case HARD -> "困难";
+                case ELITE -> "精英";
+            };
+        }
     }
 
     /**

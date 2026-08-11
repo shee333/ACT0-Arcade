@@ -44,7 +44,7 @@ public final class ArcadeNetwork {
      *
      * <p>{@code NetworkProtocolFingerprintTest} 会锁住包表指纹，漏 bump 时直接测试失败。
      */
-    private static final String PROTOCOL = "11";
+    private static final String PROTOCOL = "12";
 
     @SuppressWarnings("removal")
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
@@ -251,7 +251,9 @@ public final class ArcadeNetwork {
                                         room.contains(player.getUUID()), room.isInProgress(),
                                         match != null ? match.participantNames() : participantNames(player.getServer(), room.members()),
                                         match != null ? match.elapsedSeconds() : 0,
-                                        room.timeLimitSeconds(), room.randomWeapons(), room.options().friendlyFire()));
+                                        room.timeLimitSeconds(), room.randomWeapons(), room.options().friendlyFire(),
+                                        participantNames(player.getServer(), room.botIds()),
+                                        room.botDifficulty().displayName()));
                 }
                 for (ArcadeMatch match : Act0Arcade.services().matches().all()) {
                         if (representedMatches.contains(match.matchId())) {
@@ -263,7 +265,8 @@ public final class ArcadeNetwork {
                                         match.occupancy(), match.capacity(), match.targetText(),
                                         match.contains(player.getUUID()), true,
                                         match.participantNames(), match.elapsedSeconds(),
-                                        settings.timeLimitSeconds(), settings.randomWeapons(), settings.friendlyFire()));
+                                        settings.timeLimitSeconds(), settings.randomWeapons(), settings.friendlyFire(),
+                                        "", ""));
         }
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
                 new SyncRoomListPacket(canManage, open, arenaIds, dtos));

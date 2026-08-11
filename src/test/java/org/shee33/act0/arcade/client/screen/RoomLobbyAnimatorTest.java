@@ -82,10 +82,28 @@ class RoomLobbyAnimatorTest {
     // ============================================================
 
     @Test
-    void constructor_pressArray_hasSevenControls() {
+    void constructor_pressArray_hasTenControls() {
         RoomLobbyAnimator a = new RoomLobbyAnimator(0L);
         assertEquals(RoomLobbyAnimator.PRESS_COUNT, a.press.length);
-        assertEquals(7, a.press.length);
+        // 7 个原有控件 + AI 士兵行的撤走/添加/难度
+        assertEquals(10, a.press.length);
+    }
+
+    @Test
+    void constructor_pressIndices_areDistinctAndInRange() {
+        int[] indices = {
+                RoomLobbyAnimator.P_START, RoomLobbyAnimator.P_MINUS, RoomLobbyAnimator.P_PLUS,
+                RoomLobbyAnimator.P_LEAVE, RoomLobbyAnimator.P_BROWSER,
+                RoomLobbyAnimator.P_TEAM_BLUE, RoomLobbyAnimator.P_TEAM_RED,
+                RoomLobbyAnimator.P_BOT_REMOVE, RoomLobbyAnimator.P_BOT_ADD, RoomLobbyAnimator.P_BOT_DIFF,
+        };
+        assertEquals(RoomLobbyAnimator.PRESS_COUNT, indices.length);
+        boolean[] seen = new boolean[RoomLobbyAnimator.PRESS_COUNT];
+        for (int index : indices) {
+            assertTrue(index >= 0 && index < RoomLobbyAnimator.PRESS_COUNT, "index out of range: " + index);
+            assertFalse(seen[index], "duplicated press index: " + index);
+            seen[index] = true;
+        }
     }
 
     @Test
@@ -105,5 +123,35 @@ class RoomLobbyAnimatorTest {
         RoomLobbyAnimator a = new RoomLobbyAnimator(0L);
         assertFalse(a.teamIndicator.isRunning());
         assertFalse(a.capacityRoll.isRunning());
+    }
+
+    // ============================================================
+    // AI 士兵行：数量/难度滚轮与悬停补间
+    // ============================================================
+
+    @Test
+    void constructor_botRolls_startUnstartedAndCompleteAt190ms() {
+        RoomLobbyAnimator a = new RoomLobbyAnimator(0L);
+        assertFalse(a.botCountRoll.isRunning());
+        assertFalse(a.botDiffRoll.isRunning());
+
+        a.botCountRoll.start(0L);
+        a.botDiffRoll.start(0L);
+        assertFalse(a.botCountRoll.isDone(189L));
+        assertTrue(a.botCountRoll.isDone(190L));
+        assertTrue(a.botDiffRoll.isDone(190L));
+    }
+
+    @Test
+    void constructor_botHover_hasThreeAnimsOf140ms() {
+        RoomLobbyAnimator a = new RoomLobbyAnimator(0L);
+        assertEquals(RoomLobbyAnimator.HOVER_COUNT, a.botHover.length);
+        assertEquals(3, a.botHover.length);
+        for (MenuTween.Anim hover : a.botHover) {
+            assertFalse(hover.isRunning(), "hover tween must only start on a real pointer transition");
+            hover.start(0L);
+            assertFalse(hover.isDone(139L));
+            assertTrue(hover.isDone(140L));
+        }
     }
 }
