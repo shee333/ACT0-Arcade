@@ -76,6 +76,32 @@ public final class BotMovementDriver {
         return false;
     }
 
+    /**
+     * 朝世界方向移动一 tick，<b>不接管朝向</b>——交火时朝向归瞄准所有。
+     *
+     * <p>分解基准取 {@code getYRot()} 而非 {@code getYBodyRot()}：原版
+     * {@code Entity.moveRelative} 内部正是用 {@code getYRot()} 旋转移动输入，
+     * 取错基准会让 bot 朝着与期望呈一定夹角的方向漂走。
+     *
+     * <p>疾跑仅在以前进为主时开启：原版的疾跑速度加成本就为向前冲刺设计，
+     * 横着疾跑既不自然，也会让侧移压制的节奏快到玩家来不及反应。
+     *
+     * @param dirX 期望位移的世界 X 分量，无需归一化
+     * @param dirZ 期望位移的世界 Z 分量，无需归一化
+     */
+    public static void driveRelative(BotPlayer bot, double dirX, double dirZ, boolean sprint) {
+        Steering.MoveInput input = Steering.moveInput(dirX, dirZ, bot.getYRot());
+        if (input.equals(Steering.MoveInput.ZERO)) {
+            halt(bot);
+            return;
+        }
+        bot.setSpeed((float) bot.getAttributeValue(Attributes.MOVEMENT_SPEED));
+        bot.setSprinting(sprint && input.forward() > 0.8F);
+        bot.zza = input.forward();
+        bot.xxa = input.strafe();
+        bot.setJumping(bot.horizontalCollision && bot.onGround());
+    }
+
     /** 停止移动，但保留当前朝向。 */
     public static void halt(BotPlayer bot) {
         bot.zza = 0.0F;

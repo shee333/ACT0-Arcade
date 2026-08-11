@@ -87,4 +87,49 @@ public final class Steering {
     public static float angleBetween(float from, float to) {
         return Math.abs(wrapDegrees(to - from));
     }
+
+    /**
+     * 原版物理认得的移动意图：前进量与侧移量，各自已归一到 {@code [-1, 1]}。
+     *
+     * @param forward 前进量，正值向身体正面
+     * @param strafe  侧移量，与原版 {@code xxa} 同号
+     */
+    public record MoveInput(float forward, float strafe) {
+
+        /** 静止。 */
+        public static final MoveInput ZERO = new MoveInput(0.0F, 0.0F);
+    }
+
+    /**
+     * 把世界坐标系下的期望移动方向分解为前进量与侧移量。
+     *
+     * <p><b>这是"边瞄边动"成立的唯一前提。</b>原版把移动方向绑在身体朝向上
+     * （{@code zza} 沿正面、{@code xxa} 沿侧向），因此只要还用"转身朝向移动目标"来走路，
+     * 交火时枪口就必须跟着走，得到的是朝着航点开枪的错误画面。反过来，把朝向交给瞄准、
+     * 再把期望位移投影到当前身体朝向的正交基上，bot 就能一边把枪压在敌人身上一边横向移动
+     * ——这正是战地系列步兵交火的基本形态。
+     *
+     * <p>推导：原版 {@code getInputVector} 给出的世界速度是
+     * {@code vx = xxa·cosθ − zza·sinθ}、{@code vz = zza·cosθ + xxa·sinθ}，
+     * 即以 θ 为角的旋转作用在 {@code (xxa, zza)} 上。取其逆（旋转 −θ）便得下式。
+     *
+     * @param dirX     期望位移的世界 X 分量，无需预先归一化
+     * @param dirZ     期望位移的世界 Z 分量，无需预先归一化
+     * @param bodyYaw  当前身体偏航角（度）
+     * @return 分解后的移动意图；方向为零向量时返回 {@link MoveInput#ZERO}
+     */
+    public static MoveInput moveInput(double dirX, double dirZ, float bodyYaw) {
+        double length = Math.sqrt(dirX * dirX + dirZ * dirZ);
+        if (length <= 1.0E-6D) {
+            return MoveInput.ZERO;
+        }
+        double nx = dirX / length;
+        double nz = dirZ / length;
+        double rad = Math.toRadians(bodyYaw);
+        double sin = Math.sin(rad);
+        double cos = Math.cos(rad);
+        float strafe = (float) (cos * nx + sin * nz);
+        float forward = (float) (-sin * nx + cos * nz);
+        return new MoveInput(forward, strafe);
+    }
 }

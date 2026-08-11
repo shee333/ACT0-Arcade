@@ -1,7 +1,9 @@
 package org.shee33.act0.arcade.bot.mc;
 
+import com.mojang.logging.LogUtils;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
+import org.slf4j.Logger;
 import org.shee33.act0.arcade.bot.AimModel;
 import org.shee33.act0.arcade.bot.AimTracker;
 import org.shee33.act0.arcade.bot.Steering;
@@ -33,6 +35,8 @@ public final class BotWeaponController {
      */
     public static final double AIM_HEIGHT_RATIO = 0.85D;
 
+    private static final Logger LOGGER = LogUtils.getLogger();
+
     private static final AimTracker.AimOffset ZERO_OFFSET = new AimTracker.AimOffset(0.0F, 0.0F);
 
     private final BotPlayer bot;
@@ -50,6 +54,10 @@ public final class BotWeaponController {
      */
     @Nullable
     private Vec3 lastKnownAimPoint;
+
+    /** 上一次已上报的开火失败原因，用于去重；开火成功后清空以便问题复发时能再报一次。 */
+    @Nullable
+    private String lastReportedFailure;
 
     public BotWeaponController(BotPlayer bot, AimModel model, long seed) {
         this.bot = Objects.requireNonNull(bot, "bot");
@@ -151,15 +159,39 @@ public final class BotWeaponController {
         if (BotGunBridge.RESULT_SUCCESS.equals(result)) {
             aim.onShotFired();
             offset = aim.rollAimOffset();
+            lastReportedFailure = null;
             return;
         }
-        // 弹尽与待上膛不是错误，而是应当自动处理的正常状态；其余结果交由上层排查。
+        // 弹尽、待上膛、未持枪都不是错误，而是应当就地自愈的正常状态。
         switch (result) {
             case "NO_AMMO" -> BotGunBridge.reload(bot);
             case "NEED_BOLT" -> BotGunBridge.bolt(bot);
-            default -> {
+            // 配装发枪后没有任何人替 bot 完成 TaCZ 的"持枪就绪"，于是每一枪都是 NOT_DRAW。
+            // 在此就地补 draw 而非要求上层调用：换枪、复活重新发装备都会让 draw 失效，
+            // 由开火失败驱动重新持枪是唯一不会漏掉任何路径的做法。
+            case "NOT_DRAW" -> {
+                // 补 draw 若也失败（例如手里根本不是枪），必须上报：否则又成了静默重试。
+                if (!BotGunBridge.drawMainHand(bot)) {
+                    reportUnexpectedFailure("NOT_DRAW（补持枪失败，检查 bot 主手是否为 TaCZ 枪械）");
+                }
             }
+            default -> reportUnexpectedFailure(result);
         }
+    }
+
+    /**
+     * 记录非预期的开火失败，同一原因只报一次。
+     *
+     * <p>这里原本是空的 {@code default} 分支，于是 {@code NOT_DRAW} 被静默吞掉、bot 在对局里
+     * 一枪不发却毫无线索，只能靠人肉上客户端才发现。集成层异常不该影响主玩法，
+     * 但也不该无声无息——去重后即便每 tick 触发也只留一行。
+     */
+    private void reportUnexpectedFailure(String result) {
+        if (result.equals(lastReportedFailure)) {
+            return;
+        }
+        lastReportedFailure = result;
+        LOGGER.warn("[ACT0] bot {} 开火被 TaCZ 拒绝：{}", bot.getGameProfile().getName(), result);
     }
 
     private boolean weaponReady() {
