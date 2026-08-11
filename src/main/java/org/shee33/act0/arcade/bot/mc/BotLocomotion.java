@@ -126,8 +126,27 @@ final class BotLocomotion {
                 }
             }
             case HOLD -> strafe(dx, dz);
-            case RETREAT -> BotMovementDriver.driveRelative(bot, -dx, -dz, false);
+            case RETREAT -> retreat(dx, dz);
         }
+    }
+
+    /**
+     * 后撤：背离敌人拉开距离；退无可退时改为贴墙横移。
+     *
+     * <p>撞墙分支的价值经变异实测确认，但<b>不是</b>"防止 bot 被钉死"：去掉它之后 bot 并不会
+     * 静止，而是在姿态之间反复弹跳（实测背离方向被完全挡住时，z 轴每次采样来回 ±1 格、
+     * 并向侧面无规律漂移）。加上它之后，贴墙脱离变成沿墙面单向平滑侧滑。
+     * 换来的是动作可读性，而非"能不能动"。
+     *
+     * <p>真人在退不动时会侧身挪开；而 {@link #strafe} 的翻向本就由碰撞抢占，
+     * 因此第一侧也堵住时会自动换另一侧。
+     */
+    private void retreat(double dx, double dz) {
+        if (bot.horizontalCollision) {
+            strafe(dx, dz);
+            return;
+        }
+        BotMovementDriver.driveRelative(bot, -dx, -dz, false);
     }
 
     /**
