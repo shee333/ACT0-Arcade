@@ -18,6 +18,8 @@ import net.minecraftforge.event.entity.player.EntityItemPickupEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import org.shee33.act0.arcade.loadout.mc.LoadoutApplier;
 
+import javax.annotation.Nullable;
+
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
@@ -81,6 +83,13 @@ public final class MatchManager {
 
     public boolean isInMatch(UUID playerId) {
         return matchByPlayer.containsKey(playerId);
+    }
+
+    /** 该玩家所在的进行中对局；不在任何对局中返回 {@code null}。 */
+    @Nullable
+    public ArcadeMatch matchOf(UUID playerId) {
+        String matchId = matchByPlayer.get(playerId);
+        return matchId != null ? matches.get(matchId) : null;
     }
 
     public boolean leaveMatch(ServerPlayer player) {
