@@ -37,8 +37,49 @@ public final class BotPlayer extends ServerPlayer {
      */
     private static final int CHUNK_FOLLOW_INTERVAL_TICKS = 10;
 
+    /**
+     * 阵亡后延迟多少 tick 再服务端回血。
+     *
+     * <p>留出这几 tick 是为了让 {@code ArcadeMatch} 先完成它的记账（把阵亡者转入观察者、
+     * 评估回合是否结束）。立刻回血会让对局看到一个"没死的死人"，回合判定随之错乱。
+     *
+     * <p>上限由原版决定：{@code LivingEntity.tickDeath()} 在 {@code deathTime > 19} 时会把实体
+     * 移除，所以必须远早于 20 tick 完成回血。取 2 兼顾两侧。
+     */
+    private static final int DEATH_RECOVERY_DELAY_TICKS = 2;
+
+    private int ticksAtZeroHealth;
+
     public BotPlayer(MinecraftServer server, ServerLevel level, GameProfile profile) {
         super(server, level, profile);
+    }
+
+    /**
+     * 阵亡后由服务端直接恢复，替代 bot 无法执行的客户端复活流程。
+     *
+     * <p><b>为什么不走原版的"按重生"。</b>{@code PlayerList.respawn} 会<b>返回一个新的
+     * ServerPlayer 实例</b>并替换掉旧的——那个新实例是普通 {@code ServerPlayer}，不再是
+     * {@link BotPlayer}，于是丢掉 {@link #tick()} 里补调 {@code doTick()} 的那一刀，bot 会永久
+     * 冻结；{@code BotManager} 也会因实例不匹配而把它从注册表移除。要保住子类就得 mixin 拦截，
+     * 而本方案的全部价值就在于不引入 mixin。项目自身也早已记录过这个风险
+     * （见 {@code MatchManager} 中"避免重生换 ServerPlayer 实例导致引用失效"）。
+     *
+     * <p>因此原地回血：同一个实例、同一份引用，{@code ArcadeMatch} 的观察者与回合编排照常生效，
+     * 它只是不必再等一个永远不会到来的客户端复活请求。
+     */
+    private void recoverIfDown() {
+        if (getHealth() > 0.0F) {
+            ticksAtZeroHealth = 0;
+            return;
+        }
+        if (++ticksAtZeroHealth <= DEATH_RECOVERY_DELAY_TICKS) {
+            return;
+        }
+        ticksAtZeroHealth = 0;
+        setHealth(getMaxHealth());
+        // 一并清掉将死状态，否则 tickDeath() 会继续推进 deathTime 直至把实体移除。
+        deathTime = 0;
+        dead = false;
     }
 
     @Override
@@ -52,6 +93,7 @@ public final class BotPlayer extends ServerPlayer {
         }
 
         this.doTick();
+        recoverIfDown();
 
         if (this.tickCount % CHUNK_FOLLOW_INTERVAL_TICKS == 0) {
             this.connection.resetPosition();
