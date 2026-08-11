@@ -2565,6 +2565,17 @@ public final class ArcadeMatch {
         return sideOf.containsKey(playerId);
     }
 
+    /**
+     * 参战者所属方索引；不在本局内返回 {@code -1}。
+     *
+     * <p>供 AI 判定敌我：同局且不同方即为敌。刻意返回索引而非布尔的"是否同队"，
+     * 因为个人乱斗下每人自成一方，调用方需要能区分"同一方"与"同一局"。
+     */
+    public int sideIndexOf(UUID playerId) {
+        Integer side = sideOf.get(playerId);
+        return side != null ? side : -1;
+    }
+
     public String displayName() {
         return settings.displayName();
     }

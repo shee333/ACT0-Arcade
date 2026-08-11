@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.function.Predicate;
+import java.util.function.BiPredicate;
 
 /**
  * AI 士兵的在场注册表与每 tick 驱动循环。
@@ -37,12 +37,12 @@ public final class BotManager {
     private final Map<UUID, BotTask> tasks = new LinkedHashMap<>();
 
     /**
-     * 敌我判定谓词。
+     * 敌我判定：{@code (提问方, 候选者)}。
      *
-     * <p>默认混战——除自己以外皆为敌，便于用两个 bot 直接验证自主交火。阶段 1 接入对局后由
-     * {@code ArcadeMatch} 的阵营判定替换，感知层（{@link BotPerception}）无需改动。
+     * <p>必须接收提问方——同一个候选者对不同 bot 的敌我关系不同。默认策略见
+     * {@link BotHostility}，已同时覆盖对局内（按阵营）与对局外（混战调试），故开局时无需注入。
      */
-    private Predicate<ServerPlayer> hostility = player -> true;
+    private BiPredicate<ServerPlayer, ServerPlayer> hostility = BotHostility::isEnemy;
 
     private BotManager() {
     }
@@ -167,8 +167,8 @@ public final class BotManager {
         return task != null && task.autoTarget;
     }
 
-    /** 替换敌我判定谓词；阶段 1 接入对局时由对局侧注入阵营判定。 */
-    public void setHostility(Predicate<ServerPlayer> hostility) {
+    /** 替换敌我判定；默认已覆盖对局内外，仅在需要特殊玩法（如 bot 只打真人）时才用得上。 */
+    public void setHostility(BiPredicate<ServerPlayer, ServerPlayer> hostility) {
         this.hostility = Objects.requireNonNull(hostility, "hostility");
     }
 

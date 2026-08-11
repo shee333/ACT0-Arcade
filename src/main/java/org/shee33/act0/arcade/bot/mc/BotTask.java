@@ -8,7 +8,7 @@ import org.shee33.act0.arcade.Act0Arcade;
 import org.shee33.act0.arcade.bot.AimModel;
 
 import javax.annotation.Nullable;
-import java.util.function.Predicate;
+import java.util.function.BiPredicate;
 
 /**
  * 单个在场 AI 士兵的完整状态：躯体、武器控制器、难度档、移动航点。
@@ -67,7 +67,7 @@ final class BotTask {
      *
      * <p>次序不可调换：武器控制器会写入朝向，而移动驱动也会——交火时必须让武器的写入生效。
      */
-    void tick(MinecraftServer server, Predicate<ServerPlayer> hostility) {
+    void tick(MinecraftServer server, BiPredicate<ServerPlayer, ServerPlayer> hostility) {
         if (autoTarget) {
             scanForTarget(server, hostility);
         }
@@ -99,12 +99,14 @@ final class BotTask {
      * 的目标记忆——那正是"敌人闪进掩体后 bot 仍短暂压制、玩家绕后需要够快"这一玩法赖以存在的机制。
      * 目标的过期交由 {@link BotWeaponController} 按 {@code reacquireTicks} 判定。
      */
-    private void scanForTarget(MinecraftServer server, Predicate<ServerPlayer> hostility) {
+    private void scanForTarget(MinecraftServer server, BiPredicate<ServerPlayer, ServerPlayer> hostility) {
         if ((server.getTickCount() + bot.getId()) % TARGET_SCAN_INTERVAL_TICKS != 0) {
             return;
         }
+        // 把本 bot 绑为提问方：敌我关系取决于是谁在问，感知层只需要一个单参谓词。
         ServerPlayer found = BotPerception.findTarget(
-                bot, weapon.aimTracker().model(), hostility, weapon.target());
+                bot, weapon.aimTracker().model(), candidate -> hostility.test(bot, candidate),
+                weapon.target());
         if (found != null && found != weapon.target()) {
             weapon.setTarget(found);
         }
