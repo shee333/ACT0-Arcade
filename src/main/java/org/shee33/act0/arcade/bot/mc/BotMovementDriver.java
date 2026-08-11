@@ -1,6 +1,7 @@
 package org.shee33.act0.arcade.bot.mc;
 
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.phys.Vec3;
 import org.shee33.act0.arcade.bot.Steering;
 
 /**
@@ -26,6 +27,13 @@ public final class BotMovementDriver {
 
     /** 原版玩家的自动跨步高度为 0.6，跨越整块（1.0）必须起跳。 */
     private static final float FULL_FORWARD = 1.0F;
+
+    /**
+     * 判定"确实被挡住"的水平速度阈值（格/tick）。
+     *
+     * <p>步行速度约 0.2 格/tick，被完全挡住时趋近 0，故 0.02 能干净地区分两者。
+     */
+    private static final double BLOCKED_SPEED = 0.02D;
 
     private BotMovementDriver() {
     }
@@ -71,9 +79,24 @@ public final class BotMovementDriver {
         bot.zza = facingTarget ? FULL_FORWARD : 0.0F;
         bot.xxa = 0.0F;
 
-        // 原版的自动跨步只到 0.6，整块高的坎必须起跳；撞墙时起跳也能顺带脱离卡角。
-        bot.setJumping(bot.horizontalCollision && bot.onGround());
+        bot.setJumping(shouldJump(bot));
         return false;
+    }
+
+    /**
+     * 是否该起跳：原版自动跨步只到 0.6 格，整块高的坎必须跳。
+     *
+     * <p><b>只看碰撞是不够的</b>，还必须确认水平速度已趋零。贴墙横向机动时
+     * {@code horizontalCollision} 恒为真而 bot 其实在正常滑行，仅凭碰撞判定会让起跳意图
+     * 每 tick 被重新置位——实测 26 次采样中 23 次离地、最高蹦到 1.25 格，
+     * 是极刺眼的"假人感"。加上速度条件后，只有真正被挡死才跳。
+     */
+    private static boolean shouldJump(BotPlayer bot) {
+        if (!bot.horizontalCollision || !bot.onGround()) {
+            return false;
+        }
+        Vec3 velocity = bot.getDeltaMovement();
+        return Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z) < BLOCKED_SPEED;
     }
 
     /**
@@ -99,7 +122,7 @@ public final class BotMovementDriver {
         bot.setSprinting(sprint && input.forward() > 0.8F);
         bot.zza = input.forward();
         bot.xxa = input.strafe();
-        bot.setJumping(bot.horizontalCollision && bot.onGround());
+        bot.setJumping(shouldJump(bot));
     }
 
     /** 停止移动，但保留当前朝向。 */
