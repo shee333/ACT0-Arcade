@@ -1,0 +1,168 @@
+package org.shee33.act0.arcade.bot.mc;
+
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import org.shee33.act0.arcade.bot.BotNames;
+
+import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * AI 士兵的在场注册表与每 tick 驱动循环。
+ *
+ * <p>阶段 0 只承载"生成 / 走到某点 / 撤走"这三件事，用于验证假玩家躯体与移动驱动是否可用；
+ * 决策层（感知、目标选择、导航、瞄准）将来接在 {@link #drive} 之上，而不是塞进本类
+ * ——本类属于 Body 层，只负责让意图变成动作，不负责产生意图。
+ *
+ * <p>所有公开方法必须在服务器主线程调用。
+ */
+public final class BotManager {
+
+    /** 每 tick 最大转向角（度）。日后按难度档位分级，此处仅为阶段 0 的中庸默认值。 */
+    private static final float DEFAULT_TURN_RATE = 12.0F;
+
+    /** 抵达判定半径（格）。小于玩家碰撞箱宽度会导致到点后反复微调抖动。 */
+    private static final double DEFAULT_ARRIVE_RADIUS = 0.6D;
+
+    public static final BotManager INSTANCE = new BotManager();
+
+    /** 在场 bot 及其当前指令；用 LinkedHashMap 保证命令回显顺序稳定。 */
+    private final Map<UUID, BotTask> tasks = new LinkedHashMap<>();
+
+    private BotManager() {
+    }
+
+    // ---------------- 生命周期 ----------------
+
+    /**
+     * 生成一个 AI 士兵并纳入驱动循环。
+     *
+     * @return 生成的 bot；同名者已在场时返回 {@code null}
+     */
+    @Nullable
+    public BotPlayer spawn(MinecraftServer server, ServerLevel level, String name,
+                           double x, double y, double z, float yaw, float pitch) {
+        BotPlayer bot = BotSpawner.spawn(server, level, name, x, y, z, yaw, pitch);
+        if (bot == null) {
+            return null;
+        }
+        tasks.put(bot.getUUID(), new BotTask(bot));
+        return bot;
+    }
+
+    /** 按名字撤走一个 bot；返回是否确有其人。 */
+    public boolean despawn(MinecraftServer server, String name) {
+        BotTask task = tasks.remove(BotNames.uuidOf(name));
+        if (task == null) {
+            return false;
+        }
+        BotSpawner.despawn(server, task.bot);
+        return true;
+    }
+
+    /** 撤走全部 bot；返回撤走数量。 */
+    public int despawnAll(MinecraftServer server) {
+        List<BotTask> all = new ArrayList<>(tasks.values());
+        tasks.clear();
+        for (BotTask task : all) {
+            BotSpawner.despawn(server, task.bot);
+        }
+        return all.size();
+    }
+
+    // ---------------- 指令 ----------------
+
+    /** 命令某个 bot 走向目标点；返回是否确有其人。 */
+    public boolean walkTo(String name, double x, double y, double z) {
+        BotTask task = tasks.get(BotNames.uuidOf(name));
+        if (task == null) {
+            return false;
+        }
+        task.target = new Vec3(x, y, z);
+        return true;
+    }
+
+    /** 命令某个 bot 停下；返回是否确有其人。 */
+    public boolean stop(String name) {
+        BotTask task = tasks.get(BotNames.uuidOf(name));
+        if (task == null) {
+            return false;
+        }
+        task.target = null;
+        BotMovementDriver.halt(task.bot);
+        return true;
+    }
+
+    /** 当前在场 bot 名，按生成顺序。 */
+    public List<String> activeNames() {
+        List<String> names = new ArrayList<>(tasks.size());
+        for (BotTask task : tasks.values()) {
+            names.add(task.bot.getGameProfile().getName());
+        }
+        return names;
+    }
+
+    // ---------------- 驱动循环 ----------------
+
+    @SubscribeEvent
+    public void onServerTick(TickEvent.ServerTickEvent event) {
+        // 必须在 START 阶段：世界的实体循环随后才会推进物理，此时写入的意图才能在本 tick 生效。
+        if (event.phase != TickEvent.Phase.START) {
+            return;
+        }
+        drive(event.getServer());
+    }
+
+    @SubscribeEvent
+    public void onServerStopping(ServerStoppingEvent event) {
+        despawnAll(event.getServer());
+    }
+
+    private void drive(MinecraftServer server) {
+        if (tasks.isEmpty()) {
+            return;
+        }
+        tasks.values().removeIf(task -> isStale(server, task));
+        for (BotTask task : tasks.values()) {
+            if (task.target == null) {
+                continue;
+            }
+            boolean arrived = BotMovementDriver.driveTo(task.bot,
+                    task.target.x, task.target.y, task.target.z,
+                    DEFAULT_TURN_RATE, DEFAULT_ARRIVE_RADIUS, false);
+            if (arrived) {
+                task.target = null;
+            }
+        }
+    }
+
+    /**
+     * bot 是否已不再有效。
+     *
+     * <p>bot 可能被外部途径移除（管理员 {@code /kick}、维度卸载、异常清理）。
+     * 继续驱动一个已从世界剥离的实体会静默失效并泄漏引用，因此每 tick 做一次归属校验。
+     */
+    private static boolean isStale(MinecraftServer server, BotTask task) {
+        return task.bot.isRemoved()
+                || server.getPlayerList().getPlayer(task.bot.getUUID()) != task.bot;
+    }
+
+    /** 单个 bot 的在场状态与当前指令。 */
+    private static final class BotTask {
+        private final BotPlayer bot;
+        @Nullable
+        private Vec3 target;
+
+        private BotTask(BotPlayer bot) {
+            this.bot = bot;
+        }
+    }
+}
