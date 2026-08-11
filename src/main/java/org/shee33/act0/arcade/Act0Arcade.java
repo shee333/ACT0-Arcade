@@ -99,6 +99,7 @@ public final class Act0Arcade {
         SERVICES.reloadCatalog();
         SERVICES.reloadApparel();
         SERVICES.reloadAttachments();
+        SERVICES.reloadBotTuning();
     }
 
     @SubscribeEvent

@@ -3,6 +3,10 @@ package org.shee33.act0.arcade.bot;
 /**
  * AI 士兵的瞄准模型：难度的<b>唯一</b>来源。MC-free 纯数据 + 纯函数，可单测。
  *
+ * <p>本类的 {@link Difficulty} 枚举只提供<b>内置默认值</b>；运行时生效值取自
+ * {@link BotDifficultyRegistry}，由 {@code config/act0_arcade/bot/difficulty.json} 覆盖，
+ * 以便反复调手感时无需重编译。
+ *
  * <p><b>为什么难度必须落在瞄准而非决策上。</b>玩家对"这个 bot 强不强"的感知约九成来自枪法手感，
  * 一成来自战术走位。若靠"让弱 bot 决策更差"来降难度，得到的是<b>笨</b>（走错路、卡墙）而不是
  * <b>菜</b>（枪法差）——玩家能立刻分辨这两者，前者直接出戏。COD 系全靠这套参数造难度梯度，
@@ -101,7 +105,13 @@ public record AimModel(
                     burstMin, burstMax, burstPause, reacquire);
         }
 
-        public AimModel model() {
+        /**
+         * 本档的<b>内置默认</b>参数。
+         *
+         * <p>刻意不叫 {@code model()}：生效值一律取自 {@link BotDifficultyRegistry}（配置可覆盖），
+         * 直接读枚举会绕过配置。改名后这类误用在编译期即显形。
+         */
+        public AimModel defaults() {
             return model;
         }
     }
