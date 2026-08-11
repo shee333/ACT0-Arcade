@@ -30,22 +30,31 @@ import java.util.List;
 public final class RoomLobbyScreen extends Screen {
     private static final int W = 330;
     /**
-     * 面板高度 220 → 256（8 的倍数）：新增的 AI 士兵行需要一整条 20px 控件行加分隔线，
-     * 原高度里没有任何一处能塞进去而不压掉既有元素。底部留白仍是 10px，与改动前一致。
+     * 面板高度 220 → 240：新增的 AI 士兵行需要一整条 20px 控件行加分隔线，原高度里塞不下。
+     *
+     * <p><b>240 是硬上限，不可再增</b>：{@code Window.calculateScale} 只在
+     * {@code 高/(缩放+1) >= 240} 时才继续提升缩放，因此缩放后的 GUI 高度下限恒为 240。
+     * 1280×720 配自动缩放正好取到 240，面板一旦超过就会被上下切掉——720p 是极常见的
+     * 笔记本分辨率，切掉面板边框远比少显示两个槽位严重。布局不变式由
+     * {@code RoomLobbyBotPanelTest} 锁死。
      */
-    private static final int H = 256;
+    static final int H = 240;
     private static final int REFRESH_INTERVAL = 30;
 
     private static final int NAV_NONE = -1;
 
     /**
-     * 各行相对 {@code top} 的偏移。槽位网格 75 与队伍选择行 154 是改动前的既有值（原地保留，
-     * 免得动了既有布局），新增的 AI 士兵分隔线 176 与控件行 192 严格落在 8px 网格上。
+     * 各行相对 {@code top} 的偏移，全部落在 8px 网格上。
+     *
+     * <p>队伍选择行从改动前的 154 上移到 136：{@link #H} 被 240 的 GUI 高度下限卡死后，
+     * 槽位网格、队伍行、AI 士兵行、底部控件行四者必须共享同一段纵向预算，容不下原来的间距。
+     * 代价是团队模式的可见槽位从 3 行降到 2 行（4 格），仍足够覆盖 2v2 与 4 人团队房的满员
+     * 情形，超出部分由既有的"…还有 N 个槽位"承接。
      */
-    private static final int SLOT_TOP_DY = 75;
-    private static final int TEAM_ROW_DY = 154;
-    private static final int BOT_DIVIDER_DY = 176;
-    private static final int BOT_ROW_DY = 192;
+    static final int SLOT_TOP_DY = 75;
+    static final int TEAM_ROW_DY = 136;
+    static final int BOT_DIVIDER_DY = 168;
+    static final int BOT_ROW_DY = 176;
 
     private int left;
     private int top;
