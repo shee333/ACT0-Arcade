@@ -69,7 +69,8 @@ public final class BotWeaponCommand {
                 .then(Commands.literal("difficulty")
                         .then(botArg()
                                 .then(Commands.argument("tier", StringArgumentType.word()).suggests(DIFFICULTIES)
-                                        .executes(BotWeaponCommand::setDifficulty))));
+                                        .executes(BotWeaponCommand::setDifficulty))))
+                .then(Commands.literal("reload").executes(BotWeaponCommand::reloadTuning));
     }
 
     private static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, String> botArg() {
@@ -165,11 +166,46 @@ public final class BotWeaponCommand {
         if (!BotManager.INSTANCE.setDifficulty(name, difficulty)) {
             return BotCommand.notFound(ctx, name);
         }
-        AimModel model = difficulty.model();
+        AimModel model = Act0Arcade.services().botDifficulty().get(difficulty);
         ctx.getSource().sendSuccess(() -> Component.literal(String.format(
-                "§7%s §a难度 → §e%s §8(反应 %d tick，收敛误差 %.2f°，30 格偏移 %.2f 格)",
-                name, difficulty, model.reactionTicks(), model.errorSettledDegrees(),
+                "§7%s §a难度 → §e%s%s §8(反应 %d tick，收敛误差 %.2f°，30 格偏移 %.2f 格)",
+                name, difficulty,
+                Act0Arcade.services().botDifficulty().isOverridden(difficulty) ? " §6(已被配置覆盖)" : "",
+                model.reactionTicks(), model.errorSettledDegrees(),
                 AimModel.lateralOffsetBlocks(model.errorSettledDegrees(), 30.0D))), true);
+        return 1;
+    }
+
+    /**
+     * 重载 {@code config/act0_arcade/bot/difficulty.json} 并立即作用到在场 bot。
+     *
+     * <p>回显各档"30 格偏移"而非原始角度：调手感时真正要看的是"这个距离上能不能打中"
+     * （玩家碰撞箱宽 0.6 格），角度值本身不直观。
+     */
+    private static int reloadTuning(CommandContext<CommandSourceStack> ctx) {
+        ArcadeServices services = Act0Arcade.services();
+        int loaded = services.reloadBotTuning();
+        if (loaded < 0) {
+            ctx.getSource().sendFailure(Component.literal("§c难度配置加载失败，详见服务器日志。"));
+            return 0;
+        }
+        int refreshed = BotManager.INSTANCE.refreshDifficulties();
+
+        StringBuilder summary = new StringBuilder();
+        for (AimModel.Difficulty tier : AimModel.Difficulty.values()) {
+            AimModel m = services.botDifficulty().get(tier);
+            summary.append(String.format("\n §7%-6s §8反应 %2d tick，30 格偏移 %.2f 格%s",
+                    tier, m.reactionTicks(),
+                    AimModel.lateralOffsetBlocks(m.errorSettledDegrees(), 30.0D),
+                    services.botDifficulty().isOverridden(tier) ? " §6(覆盖)" : ""));
+        }
+        List<String> violations = services.botDifficulty().monotonicityViolations();
+        String warn = violations.isEmpty() ? ""
+                : "\n §e单调性告警 " + violations.size() + " 条（详见日志）：更高难度并非全维度更强";
+
+        ctx.getSource().sendSuccess(() -> Component.literal(
+                "§a难度配置已重载（覆盖 §e" + loaded + " §a档，刷新 §e" + refreshed
+                        + " §a个在场 bot）" + summary + warn), true);
         return 1;
     }
 }

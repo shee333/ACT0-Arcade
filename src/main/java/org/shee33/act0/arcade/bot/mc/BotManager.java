@@ -39,9 +39,6 @@ public final class BotManager {
     /** 抵达判定半径（格）。小于玩家碰撞箱宽度会导致到点后反复微调抖动。 */
     private static final double DEFAULT_ARRIVE_RADIUS = 0.6D;
 
-    /** 新生成 bot 的默认难度档。 */
-    private static final AimModel.Difficulty DEFAULT_DIFFICULTY = AimModel.Difficulty.NORMAL;
-
     public static final BotManager INSTANCE = new BotManager();
 
     /** 在场 bot 及其当前指令；用 LinkedHashMap 保证命令回显顺序稳定。 */
@@ -132,11 +129,23 @@ public final class BotManager {
         if (task == null) {
             return false;
         }
-        Entity current = task.weapon.target();
-        task.weapon = new BotWeaponController(task.bot, difficulty.model(), task.bot.getUUID().hashCode());
-        task.weapon.setTarget(current);
-        task.difficulty = difficulty;
+        task.rebuildWeapon(difficulty);
         return true;
+    }
+
+    /**
+     * 用当前配置里的生效参数重建全部在场 bot 的武器控制器，保持各自档位与交火目标。
+     *
+     * <p>难度参数重载后必须调用，否则已在场的 bot 仍用旧参数——调参循环会在"改了 JSON
+     * 却看不到变化"这一步断掉，而快速迭代正是把参数做成配置的全部理由。
+     *
+     * @return 受影响的 bot 数
+     */
+    public int refreshDifficulties() {
+        for (BotTask task : tasks.values()) {
+            task.rebuildWeapon(task.difficulty);
+        }
+        return tasks.size();
     }
 
     /** 某个 bot 当前难度档；不在场返回 {@code null}。 */
@@ -216,20 +225,4 @@ public final class BotManager {
                 || server.getPlayerList().getPlayer(task.bot.getUUID()) != task.bot;
     }
 
-    /** 单个 bot 的在场状态与当前指令。 */
-    private static final class BotTask {
-        private final BotPlayer bot;
-        private BotWeaponController weapon;
-        private AimModel.Difficulty difficulty = DEFAULT_DIFFICULTY;
-        @Nullable
-        private Vec3 waypoint;
-
-        private BotTask(BotPlayer bot) {
-            this.bot = bot;
-            // 用 UUID 派生随机种子：bot 身份稳定（见 BotNames），故其点射与瞄准抖动模式
-            // 跨重启可复现，便于对着同一个 bot 反复排查手感问题。
-            this.weapon = new BotWeaponController(bot, DEFAULT_DIFFICULTY.model(),
-                    bot.getUUID().hashCode());
-        }
-    }
 }

@@ -15,7 +15,7 @@ class AimTest {
     private static final float EPS = 1.0e-3F;
 
     private static AimModel model() {
-        return AimModel.Difficulty.NORMAL.model();
+        return AimModel.Difficulty.NORMAL.defaults();
     }
 
     // ---------------- AimModel 校验 ----------------
@@ -105,7 +105,7 @@ class AimTest {
     }
 
     private static double offsetAt30(AimModel.Difficulty difficulty) {
-        return AimModel.lateralOffsetBlocks(difficulty.model().errorSettledDegrees(), 30.0D);
+        return AimModel.lateralOffsetBlocks(difficulty.defaults().errorSettledDegrees(), 30.0D);
     }
 
     // ---------------- 难度单调性（设计不变量）----------------
@@ -116,8 +116,8 @@ class AimTest {
                 AimModel.Difficulty.EASY, AimModel.Difficulty.NORMAL,
                 AimModel.Difficulty.HARD, AimModel.Difficulty.ELITE};
         for (int i = 1; i < order.length; i++) {
-            AimModel lo = order[i - 1].model();
-            AimModel hi = order[i].model();
+            AimModel lo = order[i - 1].defaults();
+            AimModel hi = order[i].defaults();
             String pair = order[i - 1] + "→" + order[i];
             assertTrue(hi.reactionTicks() < lo.reactionTicks(), pair + " 反应应更快");
             assertTrue(hi.turnRateDegPerTick() > lo.turnRateDegPerTick(), pair + " 转向应更快");
