@@ -33,7 +33,7 @@ class NetworkProtocolFingerprintTest {
     private static final Path SOURCE = NETWORK_DIR.resolve("ArcadeNetwork.java");
 
     /** 改动包表或任何包的 payload 结构后，请连同 PROTOCOL 一起更新此处。 */
-    private static final String EXPECTED_PROTOCOL = "11";
+    private static final String EXPECTED_PROTOCOL = "12";
 
     /** 包表指纹（index:ClassName:DIRECTION 逐行拼接后的 SHA-256）。 */
     private static final String EXPECTED_FINGERPRINT =
@@ -41,7 +41,7 @@ class NetworkProtocolFingerprintTest {
 
     /** 线格式指纹（network 包下每个文件的 buf.writeXxx / 嵌套 encode 调用序列）。 */
     private static final String EXPECTED_WIRE_FORMAT =
-            "9ab134eb22c92bb8e8cc5e42563a21336975ea55abcb3e69ca3aae3b7b22d6d4";
+            "64d0554f5dd49b53f02269c922b05e12f2204724a4c199e40fab58bbdb1918c1";
 
     @Test
     void packetTableMatchesFingerprint() throws IOException {

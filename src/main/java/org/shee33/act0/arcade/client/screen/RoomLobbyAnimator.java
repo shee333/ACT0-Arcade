@@ -2,7 +2,7 @@ package org.shee33.act0.arcade.client.screen;
 
 /**
  * 「房间大厅」界面的动画状态聚合：12 槽位开场对角级联 + 队伍切换滑动指示器 +
- * 人数滚轮 + 全部可点击控件共享的按压回弹反馈。与 {@link CreateRoomAnimator} 同款骨架
+ * 人数/AI 士兵数量/AI 难度滚轮 + AI 士兵行的对称悬停补间 + 全部可点击控件共享的按压回弹反馈。与 {@link CreateRoomAnimator} 同款骨架
  * （构造时铺好 {@link MenuTween.Anim} 数组，{@link RoomLobbyScreen} 逐帧采样），
  * 但规模小得多——大厅只有一屏静态布局，无需 §3/§4/§5 完整分区级联。
  *
@@ -24,7 +24,7 @@ final class RoomLobbyAnimator {
     /** 对角线错峰间隔：每级 (row+col) 增加 40ms 延迟。 */
     private static final long SLOT_STAGGER_MS = 40L;
 
-    // 按压回弹数组索引（对应 press[]，共 7 个可按压控件）
+    // 按压回弹数组索引（对应 press[]，共 10 个可按压控件）
     static final int P_START = 0;
     static final int P_MINUS = 1;
     static final int P_PLUS = 2;
@@ -32,7 +32,16 @@ final class RoomLobbyAnimator {
     static final int P_BROWSER = 4;
     static final int P_TEAM_BLUE = 5;
     static final int P_TEAM_RED = 6;
-    static final int PRESS_COUNT = 7;
+    static final int P_BOT_REMOVE = 7;
+    static final int P_BOT_ADD = 8;
+    static final int P_BOT_DIFF = 9;
+    static final int PRESS_COUNT = 10;
+
+    // 悬停进度数组索引（对应 botHover[]，仅 AI 士兵行的三个控件做了对称悬停补间）
+    static final int H_BOT_REMOVE = 0;
+    static final int H_BOT_ADD = 1;
+    static final int H_BOT_DIFF = 2;
+    static final int HOVER_COUNT = 3;
 
     /** 12 槽位的开场对角级联，每槽 200ms outCubic + 对角线错峰延迟。 */
     final MenuTween.Anim[] slotCascade;
@@ -42,6 +51,12 @@ final class RoomLobbyAnimator {
     final MenuTween.Anim capacityRoll;
     /** 所有可点击控件共享的按压回弹反馈：220ms outBack（经 {@link MenuChrome#pressScale} 消费）。 */
     final MenuTween.Anim[] press;
+    /** AI 士兵数量滚轮：190ms outCubic，与 {@link #capacityRoll} 同参数。 */
+    final MenuTween.Anim botCountRoll;
+    /** AI 难度档位滚轮：190ms outCubic，四档循环切换时按方向滑动。 */
+    final MenuTween.Anim botDiffRoll;
+    /** AI 士兵行控件的悬停进度：140ms outCubic，与 {@code CreateRoomAnimator.hoverProgress} 同参数。 */
+    final MenuTween.Anim[] botHover;
 
     RoomLobbyAnimator(long nowMs) {
         slotCascade = new MenuTween.Anim[SLOT_COUNT];
@@ -50,10 +65,16 @@ final class RoomLobbyAnimator {
         }
         teamIndicator = new MenuTween.Anim(220L, 0L);
         capacityRoll = new MenuTween.Anim(190L, 0L);
+        botCountRoll = new MenuTween.Anim(190L, 0L);
+        botDiffRoll = new MenuTween.Anim(190L, 0L);
 
         press = new MenuTween.Anim[PRESS_COUNT];
         for (int i = 0; i < press.length; i++) {
             press[i] = new MenuTween.Anim(220L, 0L);
+        }
+        botHover = new MenuTween.Anim[HOVER_COUNT];
+        for (int i = 0; i < botHover.length; i++) {
+            botHover[i] = new MenuTween.Anim(140L, 0L);
         }
 
         // 开场即铺满 12 槽的对角级联；其余动效按用户交互在具体操作时再单独 start()。

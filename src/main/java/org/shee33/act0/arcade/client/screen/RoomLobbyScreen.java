@@ -23,13 +23,29 @@ import java.util.List;
  * （见 {@link RoomLobbyAnimator} 类头注释）、队伍切换唯一滑动指示器、全部可点击控件的
  * 按压回弹反馈 + UI 点击音效。次级导航（退出/浏览器）延迟到按压回弹播完才真正跳转，
  * 理由与 {@code CreateRoomScreen} 的 {@code pendingNav} 机制一致——不然玩家看不到反馈。
+ *
+ * <p>AI 士兵席位的可视化与三个房主控件（撤走/添加/难度循环）拆在
+ * {@link RoomLobbyBotPanel}；本类只负责调用它并在点击时发指令。
  */
 public final class RoomLobbyScreen extends Screen {
     private static final int W = 330;
-    private static final int H = 220;
+    /**
+     * 面板高度 220 → 256（8 的倍数）：新增的 AI 士兵行需要一整条 20px 控件行加分隔线，
+     * 原高度里没有任何一处能塞进去而不压掉既有元素。底部留白仍是 10px，与改动前一致。
+     */
+    private static final int H = 256;
     private static final int REFRESH_INTERVAL = 30;
 
     private static final int NAV_NONE = -1;
+
+    /**
+     * 各行相对 {@code top} 的偏移。槽位网格 75 与队伍选择行 154 是改动前的既有值（原地保留，
+     * 免得动了既有布局），新增的 AI 士兵分隔线 176 与控件行 192 严格落在 8px 网格上。
+     */
+    private static final int SLOT_TOP_DY = 75;
+    private static final int TEAM_ROW_DY = 154;
+    private static final int BOT_DIVIDER_DY = 176;
+    private static final int BOT_ROW_DY = 192;
 
     private int left;
     private int top;
@@ -57,6 +73,8 @@ public final class RoomLobbyScreen extends Screen {
     private int selectedTeam;
     private int teamIndicatorFromX;
     private int teamIndicatorToX;
+
+    private final RoomLobbyBotPanel botPanel = new RoomLobbyBotPanel();
 
     public RoomLobbyScreen() {
         super(Component.literal("房间大厅"));
@@ -140,7 +158,11 @@ public final class RoomLobbyScreen extends Screen {
                 room.capacity() <= 0 ? 0f : room.size() / (float) room.capacity(), FlatTheme.SUCCESS);
 
         updateCapacityRoll(room, now);
+        // 必须先采样 bot 名单：槽位绘制要靠它区分 AI 与真人。
+        botPanel.update(room, now, anim);
         renderSlots(gg, room, mouseX, mouseY, now);
+        botPanel.render(gg, font, room, isHost(room), mouseX, mouseY, now, anim,
+                left, top, W, BOT_DIVIDER_DY, BOT_ROW_DY);
         renderControls(gg, room, mouseX, mouseY, now);
         super.render(gg, mouseX, mouseY, partialTick);
     }
@@ -160,8 +182,11 @@ public final class RoomLobbyScreen extends Screen {
         int cols = RoomLobbyAnimator.SLOT_COLS;
         int slotW = (W - 34) / cols;
         int slotH = 18;
-        int startY = top + 75;
-        int count = Math.min(Math.max(room.capacity(), names.size()), RoomLobbyAnimator.SLOT_COUNT);
+        int startY = top + SLOT_TOP_DY;
+        boolean teamRow = supportsTeamChoice(room);
+        int rows = RoomLobbyBotPanel.visibleSlotRows(SLOT_TOP_DY, slotH + 4,
+                teamRow ? TEAM_ROW_DY : BOT_DIVIDER_DY, RoomLobbyAnimator.SLOT_COUNT / cols);
+        int count = Math.min(Math.max(room.capacity(), names.size()), rows * cols);
         for (int i = 0; i < count; i++) {
             int col = i % cols;
             int row = i / cols;
@@ -170,15 +195,26 @@ public final class RoomLobbyScreen extends Screen {
             float e = anim.slotCascade[i].easedT(now, MenuTween.Ease.OUT_CUBIC);
             int yOffset = Math.round(4 * (1 - e));
             boolean filled = i < names.size();
-            drawSlotCard(gg, x, y + yOffset, slotW, slotH, filled, e);
-            String text = filled ? "§a● §f" + trim(names.get(i), slotW - 18) : "§8空位 " + (i + 1);
+            boolean bot = filled && botPanel.isBot(names.get(i));
+            // bot 槽位不吃高亮描边：把"这一格是活人"的强调色留给真人，是最省噪音的一层区分。
+            drawSlotCard(gg, x, y + yOffset, slotW, slotH, filled && !bot, e);
+            String text = filled
+                    ? (bot ? RoomLobbyBotPanel.BOT_PREFIX : RoomLobbyBotPanel.HUMAN_PREFIX)
+                            + trim(names.get(i), slotW - (bot ? 34 : 18))
+                    : "§8空位 " + (i + 1);
             gg.drawString(font, text, x + 5, y + yOffset + 5,
                     FlatTheme.withAlpha(filled ? FlatTheme.TEXT : FlatTheme.TEXT_DIM, e), false);
+            if (bot) {
+                gg.drawString(font, RoomLobbyBotPanel.BOT_TAG,
+                        x + slotW - 5 - font.width(RoomLobbyBotPanel.BOT_TAG), y + yOffset + 5,
+                        FlatTheme.withAlpha(FlatTheme.TEXT_DIM, e), false);
+            }
         }
         if (room.capacity() > count) {
-            gg.drawString(font, "§8… 还有 " + (room.capacity() - count) + " 个槽位", left + 14, top + 145, FlatTheme.TEXT_DIM, false);
+            gg.drawString(font, "§8… 还有 " + (room.capacity() - count) + " 个槽位", left + 14,
+                    startY + rows * (slotH + 4) + 4, FlatTheme.TEXT_DIM, false);
         }
-        if (supportsTeamChoice(room)) {
+        if (teamRow) {
             renderTeamRow(gg, mouseX, mouseY, now);
         }
     }
@@ -311,6 +347,23 @@ public final class RoomLobbyScreen extends Screen {
                 MenuChrome.drawGhostButton(gg, font, browserX, browserY, browserW, browserH, "浏览器", browserHovered, true, 1f));
     }
 
+    /**
+     * AI 士兵行三个控件的共用落点：可用则按压回弹 + 点击音效 + 发指令 + 请求刷新。
+     *
+     * <p>不可用（非房主 / 没有 bot 可撤 / 席位已满 / 对局已开始）时完全静默，一帧动画都不播——
+     * "抖了一下但数值没变"比毫无反应更让玩家困惑，这是项目动效规范里的边界静默要求。
+     */
+    private boolean onBotAction(boolean enabled, int pressIndex, String command, long now) {
+        if (!enabled) {
+            return false;
+        }
+        anim.press[pressIndex].start(now);
+        minecraft.player.connection.sendCommand(command);
+        requestRefresh();
+        playClick();
+        return true;
+    }
+
     /** 手动命中检测取代原版 Button 后丢失的点击音效反馈；边界静默的调整不经过这里。 */
     private void playClick() {
         if (minecraft != null) {
@@ -354,6 +407,19 @@ public final class RoomLobbyScreen extends Screen {
             requestRefresh();
             playClick();
             return true;
+        }
+        if (botPanel.hitRemove(mouseX, mouseY)) {
+            return onBotAction(botPanel.canRemove(room, host),
+                    RoomLobbyAnimator.P_BOT_REMOVE, "arcade room bot remove", now);
+        }
+        if (botPanel.hitAdd(mouseX, mouseY)) {
+            return onBotAction(botPanel.canAdd(room, host),
+                    RoomLobbyAnimator.P_BOT_ADD, "arcade room bot add", now);
+        }
+        if (botPanel.hitDifficulty(mouseX, mouseY)) {
+            return onBotAction(botPanel.canSetDifficulty(room, host),
+                    RoomLobbyAnimator.P_BOT_DIFF,
+                    "arcade room bot difficulty " + botPanel.nextDifficultyArg(), now);
         }
         if (supportsTeamChoice(room) && MenuChrome.inRect(mouseX, mouseY, blueX, teamY, teamW, teamH)) {
             onTeamSelect(1, blueX);

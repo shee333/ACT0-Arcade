@@ -29,18 +29,21 @@ public final class RoomDto {
     private final int timeLimitSeconds;
     private final boolean randomWeapons;
     private final boolean friendlyFire;
+    private final String botNames;
+    private final String botDifficulty;
 
     public RoomDto(String roomId, String modeName, String arenaId, String hostName,
                    int size, int capacity, String targetText, boolean youAreMember,
                    boolean inProgress) {
         this(roomId, "", modeName, arenaId, hostName, size, capacity, targetText, youAreMember,
-                inProgress, "", 0, 0, false, false);
+                inProgress, "", 0, 0, false, false, "", "");
     }
 
     public RoomDto(String roomId, String modeId, String modeName, String arenaId, String hostName,
                    int size, int capacity, String targetText, boolean youAreMember,
                    boolean inProgress, String playersText, int elapsedSeconds,
-                   int timeLimitSeconds, boolean randomWeapons, boolean friendlyFire) {
+                   int timeLimitSeconds, boolean randomWeapons, boolean friendlyFire,
+                   String botNames, String botDifficulty) {
         this.roomId = roomId;
         this.modeId = modeId != null ? modeId : "";
         this.modeName = modeName;
@@ -56,6 +59,8 @@ public final class RoomDto {
         this.timeLimitSeconds = Math.max(0, timeLimitSeconds);
         this.randomWeapons = randomWeapons;
         this.friendlyFire = friendlyFire;
+        this.botNames = botNames != null ? botNames : "";
+        this.botDifficulty = botDifficulty != null ? botDifficulty : "";
     }
 
     public String roomId() {
@@ -120,6 +125,16 @@ public final class RoomDto {
         return friendlyFire;
     }
 
+    /** 本房间 AI 士兵的名字，逗号分隔；空串表示没有 bot。 */
+    public String botNames() {
+        return botNames;
+    }
+
+    /** AI 难度的中文展示名；空串表示该条目不是可配置 bot 的房间。 */
+    public String botDifficulty() {
+        return botDifficulty;
+    }
+
     public boolean isFull() {
         return size >= capacity;
     }
@@ -140,6 +155,8 @@ public final class RoomDto {
         buf.writeVarInt(timeLimitSeconds);
         buf.writeBoolean(randomWeapons);
         buf.writeBoolean(friendlyFire);
+        buf.writeUtf(botNames);
+        buf.writeUtf(botDifficulty);
     }
 
     public static RoomDto decode(FriendlyByteBuf buf) {
@@ -147,6 +164,7 @@ public final class RoomDto {
                 buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf(),
                 buf.readVarInt(), buf.readVarInt(), buf.readUtf(), buf.readBoolean(),
                 buf.readBoolean(), buf.readUtf(), buf.readVarInt(),
-                buf.readVarInt(), buf.readBoolean(), buf.readBoolean());
+                buf.readVarInt(), buf.readBoolean(), buf.readBoolean(),
+                buf.readUtf(), buf.readUtf());
     }
 }
