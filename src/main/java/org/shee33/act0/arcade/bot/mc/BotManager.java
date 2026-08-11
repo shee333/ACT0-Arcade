@@ -101,6 +101,13 @@ public final class BotManager {
         return true;
     }
 
+    /** 按名字取在场 bot；不在场返回 {@code null}。 */
+    @Nullable
+    public BotPlayer find(String name) {
+        BotTask task = tasks.get(BotNames.uuidOf(name));
+        return task != null ? task.bot : null;
+    }
+
     /** 当前在场 bot 名，按生成顺序。 */
     public List<String> activeNames() {
         List<String> names = new ArrayList<>(tasks.size());
