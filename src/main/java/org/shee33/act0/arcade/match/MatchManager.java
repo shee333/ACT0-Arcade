@@ -20,8 +20,10 @@ import org.shee33.act0.arcade.loadout.mc.LoadoutApplier;
 
 import javax.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -167,21 +169,28 @@ public final class MatchManager {
         return matches.size();
     }
 
-    /** 清理所有已加载世界中的街机弹药补给箱。 */
+    /**
+     * 清理所有已加载世界中的街机弹药补给箱。
+     *
+     * <p><b>必须先收集再移除。</b>{@code getAllEntities()} 返回世界实体映射的活视图，
+     * 在循环体内 discard 会重排其底层数组并让迭代越界，与
+     * {@link ArcadeMatch#cleanupAmmoCrates()} 修掉的是同一个崩溃
+     * （{@code ArrayIndexOutOfBoundsException}）。此处按物品类型筛选、手上没有 UUID，
+     * 因此只能先把命中的实体收进列表，遍历结束后再统一移除。
+     */
     public int cleanupAmmoCrates(MinecraftServer server) {
-        int removed = 0;
+        List<ItemEntity> crates = new ArrayList<>();
         for (ServerLevel level : server.getAllLevels()) {
             for (Entity entity : level.getAllEntities()) {
-                if (entity == null) {
-                    continue;
-                }
                 if (entity instanceof ItemEntity item && isAmmoCrate(item.getItem())) {
-                    item.discard();
-                    removed++;
+                    crates.add(item);
                 }
             }
         }
-        return removed;
+        for (ItemEntity crate : crates) {
+            crate.discard();
+        }
+        return crates.size();
     }
 
     /** 中止并移除全部对局（如服务器停止）。 */

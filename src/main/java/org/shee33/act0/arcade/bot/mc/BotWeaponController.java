@@ -206,10 +206,25 @@ public final class BotWeaponController {
                 && !BotGunBridge.isBolting(bot);
     }
 
-    /** 目标是否还在场且可交互；<b>不含</b>可见性判定，那由每 tick 的视线检测负责。 */
+    /**
+     * 脱锁距离（格）。
+     *
+     * <p>比获取半径 {@value BotPerception#DEFAULT_SEARCH_RADIUS} 略宽，留出迟滞：
+     * 目标在边界附近来回时不会反复锁定又丢失，那会让 bot 的动作看起来像在抽搐。
+     */
+    private static final double DROP_RANGE = BotPerception.DEFAULT_SEARCH_RADIUS * 1.125D;
+
+    /**
+     * 目标是否仍是合法交火对象；<b>不含</b>可见性判定，那由每 tick 的视线检测负责。
+     *
+     * <p><b>距离检查不可省。</b>获取目标时有 64 格上限，但此前一旦锁定就再不检查距离，
+     * 只查存活与视线——空旷地形上几百格外的射线检测照样通过，于是 bot 会永远锁着那个人
+     * 一路直线走过去，既不巡逻也不扫视。实测中它就这样走到了 370 格外仍在追。
+     */
     private boolean isTargetAlive() {
         return target != null && target.isAlive() && !target.isRemoved()
-                && target.level() == bot.level();
+                && target.level() == bot.level()
+                && target.distanceToSqr(bot) <= DROP_RANGE * DROP_RANGE;
     }
 
     private void applyRotation(float yaw, float pitch) {

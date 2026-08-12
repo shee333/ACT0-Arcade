@@ -1043,17 +1043,27 @@ public final class ArcadeMatch {
         phase = MatchPhase.ENDED;
     }
 
+    /**
+     * 撤走本局投放的弹药补给箱。
+     *
+     * <p><b>不得遍历 {@code getAllEntities()} 再在循环体内 discard。</b>那个方法返回的是世界
+     * 实体映射的活视图（fastutil 的 {@code Int2ObjectLinkedOpenHashMap}），移除实体会重排其
+     * 底层数组，使正在进行的迭代越界。线上崩溃即由此而来：
+     * {@code ArrayIndexOutOfBoundsException: Index 38 out of bounds for length 33}。
+     * 弹药箱少时数组不重排便侥幸不炸，bot 填满对局后每局掉落的箱子成倍增加，必然触发。
+     *
+     * <p>改为按已记录的 UUID 直接取实体：既避开遍历，复杂度也从"全世界实体数"降到"箱子数"。
+     */
     private void cleanupAmmoCrates() {
         if (ammoCrates.isEmpty()) {
             return;
         }
-        for (ServerLevel level : server.getAllLevels()) {
-            for (Entity entity : level.getAllEntities()) {
-                if (entity == null) {
-                    continue;
-                }
-                if (ammoCrates.contains(entity.getUUID())) {
-                    entity.discard();
+        for (UUID crateId : ammoCrates) {
+            for (ServerLevel level : server.getAllLevels()) {
+                Entity crate = level.getEntity(crateId);
+                if (crate != null) {
+                    crate.discard();
+                    break;
                 }
             }
         }
