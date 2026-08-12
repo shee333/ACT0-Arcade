@@ -1,11 +1,11 @@
 package org.shee33.act0.arcade.bot.mc;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import org.shee33.act0.arcade.bot.CombatStance;
-import org.shee33.act0.arcade.bot.PathCursor;
+import org.shee33.act0.arcade.bot.MarchTactics;
+import org.shee33.act0.arcade.bot.Steering;
 
 import javax.annotation.Nullable;
 
@@ -21,41 +21,10 @@ import javax.annotation.Nullable;
  */
 final class BotLocomotion {
 
-    /**
-     * 行进时每 tick 最大转向角（度）。
-     *
-     * <p>与瞄准的转向速率刻意分开：那是交火时枪口追踪目标的速率、属难度参数；
-     * 这是行军时身体的转向速率，与强弱无关，四档共用一个值即可。
-     */
-    private static final float MOVE_TURN_RATE = 12.0F;
-
-    /** 抵达判定半径（格）。小于玩家碰撞箱宽度会导致到点后反复微调抖动。 */
-    private static final double ARRIVE_RADIUS = 0.6D;
-
-    /**
-     * 路径重规划间隔（tick）。
-     *
-     * <p>2 秒重算一次：原版 {@code shouldRecomputePath} 极少触发，而追击活动目标时
-     * 目标每时每刻都在移动。间隔再短会让寻路开销显著上升，而 {@link PathCursor} 的前瞻
-     * 与卡死恢复已能吸收这个粒度内的偏差。
-     */
-    private static final int PATH_REPLAN_INTERVAL_TICKS = 40;
-
-    /**
-     * 判定卡死的无进展 tick 数。
-     *
-     * <p>1.5 秒：足够长以容纳绕过障碍时的正常贴墙滑行与起跳，又足够短以免玩家看着 bot 顶墙发呆。
-     */
-    private static final int STUCK_TICKS = 30;
-
     private final BotPlayer bot;
     private final CombatStance stance = new CombatStance();
-
-    @Nullable
-    private BotNavigator navigator;
-
-    @Nullable
-    private PathCursor cursor;
+    private final BotPatrol patrol;
+    private final BotPathFollower path;
 
     /**
      * 手动航点。
@@ -67,12 +36,14 @@ final class BotLocomotion {
 
     BotLocomotion(BotPlayer bot) {
         this.bot = bot;
+        this.patrol = new BotPatrol(bot);
+        this.path = new BotPathFollower(bot);
     }
 
     /** 设定手动航点；清空既有路径以便按新目标重新规划。 */
     void setWaypoint(@Nullable Vec3 target) {
         this.waypoint = target;
-        this.cursor = null;
+        path.reset();
     }
 
     @Nullable
@@ -89,8 +60,8 @@ final class BotLocomotion {
         if (waypoint == null) {
             return;
         }
-        Outcome outcome = followPath(server, waypoint, aimOwnsFacing);
-        if (outcome != Outcome.MOVING) {
+        BotPathFollower.Outcome outcome = path.follow(server, waypoint, aimOwnsFacing, false);
+        if (outcome != BotPathFollower.Outcome.MOVING) {
             // 抵达与无路可走都应放弃航点，而不是原地顶着障碍反复尝试。
             setWaypoint(null);
             BotMovementDriver.halt(bot);
@@ -113,13 +84,56 @@ final class BotLocomotion {
             return;
         }
         Entity seeking = alive(seekGoal);
-        if (seeking == null) {
+        if (seeking != null) {
+            if (marchTo(server, seeking.position()) != BotPathFollower.Outcome.MOVING) {
+                BotMovementDriver.halt(bot);
+            }
+        } else {
+            patrol(server);
+        }
+        applyScan(server);
+    }
+
+    /**
+     * 朝一个静止坐标行军：远距离疾跑，朝向仍归位移层（未交火，枪不需要压在谁身上）。
+     *
+     * <p>疾跑门槛见 {@link MarchTactics#SPRINT_MIN_DISTANCE}——此处恒以"未交火"询问，
+     * 因为本方法只在没有交火目标的分支被调用。
+     */
+    private BotPathFollower.Outcome marchTo(MinecraftServer server, Vec3 destination) {
+        double dx = destination.x - bot.getX();
+        double dz = destination.z - bot.getZ();
+        boolean sprint = MarchTactics.shouldSprint(false, Math.sqrt(dx * dx + dz * dz));
+        return path.follow(server, destination, false, sprint);
+    }
+
+    /** 搜索半径内一个敌人都没有时的巡逻；无处可去（不在对局中）则停下。 */
+    private void patrol(MinecraftServer server) {
+        Vec3 target = patrol.destination(server);
+        if (target == null) {
             BotMovementDriver.halt(bot);
             return;
         }
-        if (followPath(server, seeking.position(), false) != Outcome.MOVING) {
+        if (marchTo(server, target) != BotPathFollower.Outcome.MOVING) {
+            // 无路可走或已抵达：换一个巡逻点，而不是抵着障碍反复重算同一条路。
+            patrol.abandon();
             BotMovementDriver.halt(bot);
         }
+    }
+
+    /**
+     * 未交火时让头部相对身体扫视，身体朝向仍归行进方向。
+     *
+     * <p>只动头不动身，是因为身体朝向决定移动方向（见
+     * {@link BotMovementDriver#driveRelative}）——摆动身体会让 bot 走蛇形。
+     * 交火时本方法不会被调用：那时朝向归瞄准独占。
+     *
+     * <p>基准取 {@code getYRot()} 而非身体朝向的读取器（这套映射未暴露后者）：本方法只在
+     * 未交火分支执行，而该分支里 {@code driveTo} 把三个朝向写成同值，两者等价。
+     */
+    private void applyScan(MinecraftServer server) {
+        float offset = MarchTactics.scanOffsetDegrees(server.getTickCount(), bot.getId());
+        bot.setYHeadRot(Steering.wrapDegrees(bot.getYRot() + offset));
     }
 
     /**
@@ -135,7 +149,7 @@ final class BotLocomotion {
         double dz = target.getZ() - bot.getZ();
         switch (stance.modeFor(Math.sqrt(dx * dx + dz * dz))) {
             case ADVANCE -> {
-                if (followPath(server, target.position(), true) != Outcome.MOVING) {
+                if (path.follow(server, target.position(), true, false) != BotPathFollower.Outcome.MOVING) {
                     BotMovementDriver.halt(bot);
                 }
             }
@@ -179,63 +193,8 @@ final class BotLocomotion {
         BotMovementDriver.driveRelative(bot, -dz * sign, dx * sign, false);
     }
 
-    private enum Outcome {
-        /** 正在沿路径前进。 */
-        MOVING,
-        /** 已抵达目标点。 */
-        ARRIVED,
-        /** 无路可走或卡死后正在重规划。 */
-        BLOCKED
-    }
-
-    /**
-     * 沿路径走向目标点一 tick。
-     *
-     * <p>三件事必须一起做，缺一个都会让 bot 看起来是坏的：周期重规划（原版的
-     * {@code shouldRecomputePath} 极少触发，追活动目标时路径立刻过期）、卡死恢复
-     * （撞在几何缝隙里只会继续顶墙）、以及无路可走时如实上报而非死抱目标。
-     */
-    private Outcome followPath(MinecraftServer server, Vec3 destination, boolean aimOwnsFacing) {
-        boolean due = cursor == null
-                || (server.getTickCount() + bot.getId()) % PATH_REPLAN_INTERVAL_TICKS == 0;
-        if (due) {
-            PathCursor fresh = navigator().computePath(BlockPos.containing(destination));
-            if (fresh == null) {
-                return Outcome.BLOCKED;
-            }
-            cursor = fresh;
-        }
-        if (cursor.advance(bot.getX(), bot.getY(), bot.getZ())) {
-            return Outcome.ARRIVED;
-        }
-        if (cursor.ticksWithoutProgress() > STUCK_TICKS) {
-            cursor.stepBack();
-            cursor = null;
-            return Outcome.BLOCKED;
-        }
-        if (aimOwnsFacing) {
-            BotMovementDriver.driveRelative(bot,
-                    cursor.targetX() - bot.getX(), cursor.targetZ() - bot.getZ(), false);
-        } else {
-            BotMovementDriver.driveTo(bot, cursor.targetX(), cursor.targetY(), cursor.targetZ(),
-                    MOVE_TURN_RATE, ARRIVE_RADIUS, false);
-        }
-        return Outcome.MOVING;
-    }
-
-    private BotNavigator navigator() {
-        if (navigator == null) {
-            navigator = new BotNavigator(bot);
-        }
-        return navigator;
-    }
-
     /** bot 撤走时释放导航资源，避免影子 Mob 随之泄漏。 */
     void release() {
-        cursor = null;
-        if (navigator != null) {
-            navigator.release();
-            navigator = null;
-        }
+        path.release();
     }
 }

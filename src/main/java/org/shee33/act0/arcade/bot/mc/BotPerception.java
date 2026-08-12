@@ -88,7 +88,9 @@ public final class BotPerception {
             if (distSq > radiusSq) {
                 continue;
             }
-            float angle = Steering.angleBetween(bot.getYRot(), Steering.yawToward(dx, dz));
+            // 用头部朝向而非身体朝向：行进中 bot 会左右扫视（见 MarchTactics），
+            // 察觉范围应跟着它实际看的方向走，否则扫视对发现敌人毫无作用。
+            float angle = Steering.angleBetween(bot.getYHeadRot(), Steering.yawToward(dx, dz));
             // 视线检测有 raycast 成本，故放在视野锥筛选之后——锥外的人无论看不看得见都不会被选中。
             boolean inFov = model.withinFov(angle);
             boolean los = inFov && hasClearLineOfSight(bot, eye, aimPoint);

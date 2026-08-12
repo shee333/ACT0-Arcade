@@ -72,8 +72,7 @@ public final class BotMovementDriver {
         bot.setXRot(Steering.turnToward(bot.getXRot(), desiredPitch, turnRate));
 
         // 速度取自移动速度属性，与真人玩家同源，保证 bot 不会莫名比玩家快或慢。
-        bot.setSpeed((float) bot.getAttributeValue(Attributes.MOVEMENT_SPEED));
-        bot.setSprinting(sprint);
+        applySpeed(bot, sprint);
 
         boolean facingTarget = Steering.angleBetween(newYaw, desiredYaw) <= FORWARD_GATE_DEGREES;
         bot.zza = facingTarget ? FULL_FORWARD : 0.0F;
@@ -118,11 +117,27 @@ public final class BotMovementDriver {
             halt(bot);
             return;
         }
-        bot.setSpeed((float) bot.getAttributeValue(Attributes.MOVEMENT_SPEED));
-        bot.setSprinting(sprint && input.forward() > 0.8F);
+        applySpeed(bot, sprint && input.forward() > 0.8F);
         bot.zza = input.forward();
         bot.xxa = input.strafe();
         bot.setJumping(shouldJump(bot));
+    }
+
+    /**
+     * 写入本 tick 的移动速度并同步疾跑状态。
+     *
+     * <p><b>次序不可颠倒，且不要自己另加速度修正器。</b>原版 {@code LivingEntity.setSprinting}
+     * 本身就会挂/摘一个 +30% 的 {@code MOVEMENT_SPEED} 瞬时修正器，因此必须先设疾跑、
+     * 再读属性，本 tick 才能取到加成值；而移动确实由该属性驱动
+     * （实测挂 +100% 修正器后速度由 3.96 精确变为 7.93 格/秒）。
+     *
+     * <p>曾在此另加一个自建 +30% 修正器，结果属性变成 0.169（1.3×1.3）、bot 快得离谱。
+     * 之所以误判为"原版不生效"，是因为当时的测量场景里 bot 一直处于交火状态、
+     * 从未走到疾跑分支。
+     */
+    private static void applySpeed(BotPlayer bot, boolean sprinting) {
+        bot.setSprinting(sprinting);
+        bot.setSpeed((float) bot.getAttributeValue(Attributes.MOVEMENT_SPEED));
     }
 
     /** 停止移动，但保留当前朝向。 */
@@ -130,7 +145,9 @@ public final class BotMovementDriver {
         bot.zza = 0.0F;
         bot.xxa = 0.0F;
         bot.setJumping(false);
-        bot.setSprinting(false);
+        // 经 applySpeed 而非直接置标志：顺带把速度按摘除加成后的属性重写一遍，
+        // 与行进分支共用同一处逻辑，不留第二条写速度的路径。
+        applySpeed(bot, false);
     }
 
     /**

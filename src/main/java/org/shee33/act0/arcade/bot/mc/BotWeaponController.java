@@ -106,8 +106,10 @@ public final class BotWeaponController {
         Vec3 livePoint = aimPointOf(target);
         AimModel model = aim.model();
 
-        boolean inFov = model.withinFov(
-                Steering.angleBetween(bot.getYRot(), Steering.yawToward(livePoint.x - eye.x, livePoint.z - eye.z)));
+        // 与 BotPerception 一致取头部朝向。交火中三个朝向被 applyRotation 写成同值，
+        // 故此处对已交火的行为无变化；差别只体现在刚发现目标的那一刻。
+        boolean inFov = model.withinFov(Steering.angleBetween(
+                bot.getYHeadRot(), Steering.yawToward(livePoint.x - eye.x, livePoint.z - eye.z)));
         boolean visible = inFov && BotPerception.hasClearLineOfSight(bot, eye, livePoint);
         aim.tick(visible);
 
