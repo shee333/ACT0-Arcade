@@ -4,6 +4,7 @@ import com.mojang.authlib.GameProfile;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
 
 /**
  * AI 士兵的躯体：一个没有客户端的真 {@link ServerPlayer}。
@@ -82,6 +83,9 @@ public final class BotPlayer extends ServerPlayer {
         dead = false;
     }
 
+    /** 本 tick 的头部扫视偏移（度）；见 {@link #applyHeadYawOffset()}。 */
+    private float headYawOffset;
+
     @Override
     public void tick() {
         super.tick();
@@ -99,5 +103,32 @@ public final class BotPlayer extends ServerPlayer {
             this.connection.resetPosition();
             this.serverLevel().getChunkSource().move(this);
         }
+
+        applyHeadYawOffset();
+    }
+
+    /**
+     * 施加本 tick 的头部扫视偏移，随后清零。
+     *
+     * <p><b>必须放在 {@code super.tick()} 之后。</b>原版的实体 tick 会把玩家的头部朝向重新对齐
+     * 到身体，因此在 tick 开始阶段（{@code ServerTickEvent.Phase.START}，即 bot 驱动循环所在处）
+     * 写入的头部朝向会被完全抹掉——实测头身夹角恒为 0.0°，扫视毫无作用。
+     *
+     * <p>用"每 tick 消费一次"的语义而非常驻字段：没有设置偏移的那些 tick 自动回到
+     * 头随身体，不会因为某处忘记清零而让 bot 一直歪着头。
+     */
+    private void applyHeadYawOffset() {
+        if (headYawOffset != 0.0F) {
+            setYHeadRot(Mth.wrapDegrees(getYRot() + headYawOffset));
+            headYawOffset = 0.0F;
+        }
+    }
+
+    /**
+     * 设定本 tick 的头部相对身体偏移（度）。由位移层在未交火时写入以实现行进扫视；
+     * 交火时不写，头部即回到与身体（也就是枪口）一致。
+     */
+    public void setHeadYawOffset(float degrees) {
+        this.headYawOffset = degrees;
     }
 }

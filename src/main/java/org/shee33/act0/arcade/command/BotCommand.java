@@ -13,10 +13,12 @@ import net.minecraft.commands.arguments.coordinates.Vec3Argument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.phys.Vec3;
 import org.shee33.act0.arcade.arena.ArcadeArena;
 import org.shee33.act0.arcade.arena.SpawnPoint;
 import org.shee33.act0.arcade.bot.BotNames;
+import org.shee33.act0.arcade.bot.Steering;
 import org.shee33.act0.arcade.bot.mc.BotManager;
 import org.shee33.act0.arcade.bot.mc.BotPlayer;
 import org.shee33.act0.arcade.storage.ArenaRegistry;
@@ -74,6 +76,9 @@ public final class BotCommand {
                         .then(Commands.argument("name", StringArgumentType.word()).suggests(ACTIVE_BOTS)
                                 .executes(BotCommand::stop)))
                 .then(Commands.literal("list").executes(BotCommand::list))
+                .then(Commands.literal("info")
+                        .then(Commands.argument("name", StringArgumentType.string())
+                                .executes(BotCommand::info)))
                 .then(Commands.literal("clear").executes(BotCommand::clear))
                 .then(Commands.literal("testarena")
                         .then(Commands.argument("id", StringArgumentType.string())
@@ -194,6 +199,30 @@ public final class BotCommand {
         ctx.getSource().sendSuccess(() -> Component.literal(
                 "§a在场 AI 士兵 §e" + names.size() + " §a名：§7" + String.join("§8, §7", names)), false);
         return names.size();
+    }
+
+    /**
+     * 打印单个 bot 的实时姿态，供排查"写进去的值是否被原版覆盖"这类问题。
+     *
+     * <p>存在的理由是一次真实教训：疾跑连续三次假设落空，根因是移动速度只能靠间接测速推断，
+     * 看不到实际生效值。头部朝向同样无法经 {@code /data get} 读取（玩家 NBT 里没有该字段），
+     * 而它正是行进扫视是否生效的唯一判据——{@code LivingEntity.aiStep} 里的 tickHeadTurn
+     * 会对头身夹角做钳制，可能把每 tick 写入的扫视偏移抹掉。
+     */
+    private static int info(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        BotPlayer bot = BotManager.INSTANCE.find(name);
+        if (bot == null) {
+            return notFound(ctx, name);
+        }
+        float body = bot.getYRot();
+        float head = bot.getYHeadRot();
+        float delta = Steering.wrapDegrees(head - body);
+        double speed = bot.getAttributeValue(Attributes.MOVEMENT_SPEED);
+        ctx.getSource().sendSuccess(() -> Component.literal(String.format(
+                "§7%s §8| §7身体 §f%.1f° §8| §7头部 §f%.1f° §8| §7头身夹角 §e%.1f° §8| §7疾跑 %s §8| §7速度 §f%.4f",
+                name, body, head, delta, bot.isSprinting() ? "§a是" : "§8否", speed)), false);
+        return 1;
     }
 
     private static int clear(CommandContext<CommandSourceStack> ctx) {

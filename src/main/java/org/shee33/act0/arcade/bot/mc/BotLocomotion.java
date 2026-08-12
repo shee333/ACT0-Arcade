@@ -5,7 +5,6 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import org.shee33.act0.arcade.bot.CombatStance;
 import org.shee33.act0.arcade.bot.MarchTactics;
-import org.shee33.act0.arcade.bot.Steering;
 
 import javax.annotation.Nullable;
 
@@ -128,12 +127,12 @@ final class BotLocomotion {
      * {@link BotMovementDriver#driveRelative}）——摆动身体会让 bot 走蛇形。
      * 交火时本方法不会被调用：那时朝向归瞄准独占。
      *
-     * <p>基准取 {@code getYRot()} 而非身体朝向的读取器（这套映射未暴露后者）：本方法只在
-     * 未交火分支执行，而该分支里 {@code driveTo} 把三个朝向写成同值，两者等价。
+     * <p><b>只登记偏移量，不直接写头部朝向。</b>本方法运行在 tick 的开始阶段，而随后的原版
+     * 实体 tick 会把玩家头部重新对齐到身体——实测直接写 {@code setYHeadRot} 后头身夹角
+     * 恒为 0.0°，扫视完全无效。真正的施加点在 {@link BotPlayer#tick()} 末尾。
      */
     private void applyScan(MinecraftServer server) {
-        float offset = MarchTactics.scanOffsetDegrees(server.getTickCount(), bot.getId());
-        bot.setYHeadRot(Steering.wrapDegrees(bot.getYRot() + offset));
+        bot.setHeadYawOffset(MarchTactics.scanOffsetDegrees(server.getTickCount(), bot.getId()));
     }
 
     /**
