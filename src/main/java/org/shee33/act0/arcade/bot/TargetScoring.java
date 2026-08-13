@@ -42,12 +42,25 @@ public final class TargetScoring {
      * @param angleFromFacing  与 bot 当前朝向的夹角绝对值（度）
      * @param hasLineOfSight   眼到目标之间是否无遮挡
      * @param isCurrentTarget  是否为当前正在交火的目标
+     * @param extraBonus       调用方施加的额外权重（当前用于集火，见 {@link SquadTactics}），
+     *                         与 {@code stickiness} 同量纲，负值按 0 处理
      */
     public record Candidate(UUID id,
                             double distance,
                             float angleFromFacing,
                             boolean hasLineOfSight,
-                            boolean isCurrentTarget) {
+                            boolean isCurrentTarget,
+                            float extraBonus) {
+
+        public Candidate {
+            extraBonus = Math.max(0.0F, extraBonus);
+        }
+
+        /** 无额外权重的候选。 */
+        public Candidate(UUID id, double distance, float angleFromFacing,
+                         boolean hasLineOfSight, boolean isCurrentTarget) {
+            this(id, distance, angleFromFacing, hasLineOfSight, isCurrentTarget, 0.0F);
+        }
     }
 
     /**
@@ -63,8 +76,12 @@ public final class TargetScoring {
     /**
      * 威胁得分，越高越优先。不可交火者返回 {@code 0}。
      *
-     * <p>构成：距离衰减为主，视野中心度为辅，再对当前目标施加黏滞加成。
+     * <p>构成：距离衰减为主，视野中心度为辅，再叠加两项同量纲的权重——当前目标的黏滞加成，
+     * 以及调用方给出的 {@link Candidate#extraBonus}（集火）。
      * 中心度参与打分的理由是——已经大致对着的人更可能是正在交火的人，切给他能减少无谓转身。
+     *
+     * <p>黏滞与集火<b>相加</b>而非相乘：两者语义上是并列的偏好，相乘会让"既是当前目标又被队友集火"
+     * 的人得到远超两项之和的分，从而彻底锁死目标切换。
      */
     public static float score(Candidate candidate, AimModel model, float stickiness) {
         if (!isEngageable(candidate, model)) {
@@ -74,7 +91,9 @@ public final class TargetScoring {
         float centrality = 1.0F - Math.min(1.0F,
                 Math.abs(candidate.angleFromFacing()) / model.fovHalfAngleDegrees());
         float base = (float) proximity * ((1.0F - CENTRALITY_WEIGHT) + CENTRALITY_WEIGHT * centrality);
-        return candidate.isCurrentTarget() ? base * (1.0F + Math.max(0.0F, stickiness)) : base;
+        float weight = candidate.extraBonus()
+                + (candidate.isCurrentTarget() ? Math.max(0.0F, stickiness) : 0.0F);
+        return base * (1.0F + weight);
     }
 
     /** 取得分最高的可交火目标；无可交火者返回空。 */

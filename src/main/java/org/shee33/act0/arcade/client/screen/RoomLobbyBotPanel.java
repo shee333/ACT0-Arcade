@@ -26,15 +26,15 @@ import java.util.Set;
 final class RoomLobbyBotPanel {
 
     /**
-     * 难度四档：中文展示名与指令参数按下标一一对应，数组顺序即点击循环顺序。
+     * 难度五档：中文展示名与指令参数按下标一一对应，数组顺序即点击循环顺序。
      *
      * <p>这两份是 {@code AimModel.Difficulty} 的客户端副本——展示名要对上服务端经 RoomDto
      * 下发的 {@code displayName()}，指令参数要对上 {@code ArcadeCommand} 按 {@code values()}
      * 生成的命令字面量。副本一旦与枚举脱节就是静默故障：循环不到新档位，或发出服务端不认识
      * 的参数而毫无反馈。故由 {@code RoomLobbyBotPanelTest} 逐项锁住三者一致。
      */
-    static final String[] DIFFICULTY_NAMES = {"简单", "普通", "困难", "精英"};
-    static final String[] DIFFICULTY_ARGS = {"easy", "normal", "hard", "elite"};
+    static final String[] DIFFICULTY_NAMES = {"新手", "普通", "高级", "写实", "终极"};
+    static final String[] DIFFICULTY_ARGS = {"rookie", "normal", "advanced", "realistic", "ultimate"};
 
     /** 难度未知（房间条目来自进行中的对局，服务端不下发难度）时的占位，不臆造默认值。 */
     private static final String DIFFICULTY_UNKNOWN = "—";
@@ -139,7 +139,7 @@ final class RoomLobbyBotPanel {
         return MenuChrome.inRect(mx, my, diffX, rowY, diffW, ROW_H);
     }
 
-    /** 下一档难度的指令参数：四档向前循环，未知当前值时从「简单」的下一档起算。 */
+    /** 下一档难度的指令参数：五档向前循环，未知当前值时从「新手」的下一档起算。 */
     String nextDifficultyArg() {
         int idx = difficultyIndex(lastDiffName);
         return DIFFICULTY_ARGS[MenuChrome.wrapIndex(Math.max(0, idx), 1, DIFFICULTY_ARGS.length)];
@@ -270,7 +270,7 @@ final class RoomLobbyBotPanel {
 
     /**
      * 环形序列的滚动方向：正向距离不超过半圈算 {@code +1}，否则 {@code -1}——
-     * 这样"精英→简单"的循环回绕仍读作向前（+1），而被别人改回上一档才读作 {@code -1}。
+     * 这样"终极→新手"的循环回绕仍读作向前（+1），而被别人改回上一档才读作 {@code -1}。
      * 任一侧索引未知时默认 {@code +1}，宁可方向猜错也不能不播动画。
      */
     static int cycleDir(int from, int to, int size) {

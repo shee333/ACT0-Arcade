@@ -67,6 +67,23 @@ public final class BotPerception {
                                           Predicate<ServerPlayer> isEnemy,
                                           @Nullable Entity currentTarget,
                                           double searchRadius) {
+        return findTarget(bot, model, isEnemy, currentTarget, searchRadius, id -> 0.0F);
+    }
+
+    /**
+     * 带额外权重的目标选择：{@code bonusOf} 为每个候选给出一个与黏滞同量纲的加权，
+     * 当前用于小队集火（见 {@link org.shee33.act0.arcade.bot.SquadTactics#focusFireBonus}）。
+     *
+     * <p>权重作用在打分而非筛选上：被队友集火的人更值得打，但<b>不因此变得可以穿墙打</b>
+     * ——视线与视野锥仍是硬门槛，加权只在多个都打得到的目标之间排序。
+     */
+    @Nullable
+    public static ServerPlayer findTarget(BotPlayer bot,
+                                          AimModel model,
+                                          Predicate<ServerPlayer> isEnemy,
+                                          @Nullable Entity currentTarget,
+                                          double searchRadius,
+                                          java.util.function.Function<UUID, Float> bonusOf) {
         Vec3 eye = bot.getEyePosition();
         double radiusSq = searchRadius * searchRadius;
         UUID currentId = currentTarget != null ? currentTarget.getUUID() : null;
@@ -97,8 +114,10 @@ public final class BotPerception {
 
             UUID id = other.getUUID();
             byId.put(id, other);
+            Float bonus = bonusOf.apply(id);
             candidates.add(new TargetScoring.Candidate(
-                    id, Math.sqrt(distSq), angle, los, id.equals(currentId)));
+                    id, Math.sqrt(distSq), angle, los, id.equals(currentId),
+                    bonus == null ? 0.0F : bonus));
         }
 
         Optional<TargetScoring.Candidate> chosen = TargetScoring.select(candidates, model);

@@ -213,6 +213,9 @@ public final class BotManager {
         despawnAll(event.getServer());
     }
 
+    /** 小队情报板的清理间隔（tick）：过期项读取时已被过滤，清理只为回收条目，不必每 tick 做。 */
+    private static final int SQUAD_BOARD_PRUNE_INTERVAL_TICKS = 20;
+
     private void drive(MinecraftServer server) {
         if (tasks.isEmpty()) {
             return;
@@ -220,6 +223,26 @@ public final class BotManager {
         tasks.values().removeIf(task -> isStale(server, task));
         for (BotTask task : tasks.values()) {
             task.tick(server, hostility);
+        }
+        if (server.getTickCount() % SQUAD_BOARD_PRUNE_INTERVAL_TICKS == 0) {
+            BotSquadBoard.INSTANCE.prune(server.getTickCount());
+        }
+    }
+
+    /** 对局收尾时清掉该局的小队黑板分桶；不调用则每局都会留下一组永不再被读取的键。 */
+    public void onMatchEnded(String matchId) {
+        BotSquadBoard.INSTANCE.clearMatch(matchId);
+    }
+
+    /**
+     * bot 复活时复位战术状态；传入非 bot 的 UUID 无副作用。
+     *
+     * <p>不复位则"上一条命残血脱离中"的迟滞会跟着新生命走，满血复活的 bot 会先莫名后退几秒。
+     */
+    public void onRespawn(UUID playerId) {
+        BotTask task = tasks.get(playerId);
+        if (task != null) {
+            task.onRespawn();
         }
     }
 

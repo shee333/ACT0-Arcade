@@ -82,7 +82,7 @@ class MarchTacticsTest {
     /**
      * 扫视后仍须为身后留出死角。
      *
-     * <p>{@link AimModel} 的视野参数是<b>半角</b>（四档 ±50°~±80°），叠加扫视后的有效半角
+     * <p>{@link AimModel} 的视野参数是<b>半角</b>（五档 ±50°~±80°），叠加扫视后的有效半角
      * 若逼近 180°，bot 就成了背后也能察觉的全知体——那比原本的窄视野更伤玩法。
      * 故上限定在 120°：仍给玩家留下从侧后方接近的空间。
      */
@@ -98,7 +98,7 @@ class MarchTacticsTest {
     @Test
     void scanActuallyExtendsTheNarrowestTier() {
         // 最窄的一档必须确实被扩宽，否则扫视对察觉毫无贡献、只剩动画意义
-        AimModel.Difficulty narrowest = AimModel.Difficulty.EASY;
+        AimModel.Difficulty narrowest = AimModel.Difficulty.ROOKIE;
         float half = halfFovOf(narrowest);
         assertFalse(narrowest.defaults().withinFov(half + 1.0F), "探测到的半角有误");
         assertTrue(MarchTactics.SCAN_AMPLITUDE_DEGREES >= 10.0F,

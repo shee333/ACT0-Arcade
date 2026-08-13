@@ -113,4 +113,34 @@ class HotZoneAreaTest {
         assertFalse(a.contains("minecraft:overworld", 50, 5, 5));
         assertFalse(a.contains("minecraft:overworld", 5, 50, 5));
     }
+
+    // ---------------- 几何访问器（供 AI 寻路取落点）----------------
+
+    @Test
+    void centerIsMidpointOfEachHorizontalAxis() {
+        HotZoneArea a = new HotZoneArea("minecraft:overworld", 10, 18, -64, -56, 40, 48);
+        assertEquals(14.0D, a.centerX(), 1.0e-9D);
+        assertEquals(44.0D, a.centerZ(), 1.0e-9D);
+    }
+
+    /**
+     * {@code floorY} 必须把构造时向下扩的垂直容差加回去，否则 AI 拿到的寻路落点在地面以下 4 格，
+     * 寻路会判定不可达——bot 表现为完全不去热区。
+     */
+    @Test
+    void floorYUndoesTheVerticalMarginAddedByFromClicks() {
+        HotZoneArea a = HotZoneArea.fromClicks("minecraft:overworld", 0, -60, 0, 8, -60, 8);
+        assertEquals(-64.0D, a.minY(), 1.0e-9D);
+        assertEquals(-60.0D, a.floorY(), 1.0e-9D, "落点应回到玩家点击的那一层");
+        assertTrue(a.contains("minecraft:overworld", a.centerX(), a.floorY(), a.centerZ()),
+                "落点必须落在区域内，否则 bot 走到了也不算占点");
+    }
+
+    @Test
+    void horizontalDistanceIgnoresHeight() {
+        HotZoneArea a = new HotZoneArea("minecraft:overworld", 0, 10, 0, 10, 0, 10);
+        assertEquals(0.0D, a.horizontalDistanceTo(5, 5), 1.0e-9D);
+        assertEquals(5.0D, a.horizontalDistanceTo(10, 5), 1.0e-9D);
+        assertEquals(5.0D, a.horizontalDistanceTo(5, 0), 1.0e-9D);
+    }
 }

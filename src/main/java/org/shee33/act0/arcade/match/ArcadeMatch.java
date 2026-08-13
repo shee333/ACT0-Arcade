@@ -29,6 +29,8 @@ import org.shee33.act0.arcade.arena.ArcadeArena;
 import org.shee33.act0.arcade.arena.HotZoneArea;
 import org.shee33.act0.arcade.arena.HotZoneRotation;
 import org.shee33.act0.arcade.arena.SpawnPoint;
+import org.shee33.act0.arcade.bot.mc.BotApparelApplier;
+import org.shee33.act0.arcade.bot.mc.BotManager;
 import org.shee33.act0.arcade.bot.mc.BotSpawner;
 import org.shee33.act0.arcade.integration.MatchResultBroadcaster;
 import org.shee33.act0.arcade.loadout.Loadout;
@@ -60,6 +62,7 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import javax.annotation.Nullable;
 import java.util.function.Function;
 
 /**
@@ -450,6 +453,7 @@ public final class ArcadeMatch {
             respawn(player, sideOf.getOrDefault(id, 0));
             equip(player);
             applyGlobalHealth(player);
+            BotManager.INSTANCE.onRespawn(id);
             showTitleTo(id, "§a§l重生", "", 0, 12, 6);
             playTo(id, SoundEvents.PLAYER_LEVELUP, 1.2f);
         }
@@ -514,7 +518,7 @@ public final class ArcadeMatch {
         }
     }
 
-    private boolean isHotZoneMode() {
+    public boolean isHotZoneMode() {
         return settings.scoringMode() == ScoringMode.HOT_ZONE;
     }
 
@@ -1070,6 +1074,7 @@ public final class ArcadeMatch {
     private void finish() {
         releaseCountdownLock();
         sendFireLockToAll(false);
+        BotManager.INSTANCE.onMatchEnded(matchId);
         cleanupAmmoCrates();
         clearAllTeamHighlights();
         clearNameTagTeams();
@@ -2014,9 +2019,15 @@ public final class ArcadeMatch {
     }
 
     private void applyApparel(ServerPlayer player) {
+        var apparel = org.shee33.act0.arcade.Act0Arcade.services().apparel();
+        // bot 没有服饰选择也没有解锁记录，走随机搭配那条支线；见 BotApparelApplier 的取舍说明。
+        if (BotSpawner.isBot(player)) {
+            BotApparelApplier.applyRandom(player, apparel, applier);
+            return;
+        }
         Set<String> unlocked = unlocksProvider.apply(player.getUUID());
         applier.applyApparel(player, ArcadeApparelStore.get(server).getOrCreate(player.getUUID()),
-                org.shee33.act0.arcade.Act0Arcade.services().apparel(), unlocked);
+                apparel, unlocked);
     }
 
     /** 随机武器：按房间选择的细分随机模式临时生成配装。 */
@@ -2690,6 +2701,43 @@ public final class ArcadeMatch {
     public int sideIndexOf(UUID playerId) {
         Integer side = sideOf.get(playerId);
         return side != null ? side : -1;
+    }
+
+    /**
+     * 某一方的全部参战者（含已阵亡/待复活者）；索引越界返回空列表。
+     *
+     * <p>供 AI 做小队协同：{@link #sideIndexOf} 只能逐个回答"他是不是敌人"，做集火、散开、
+     * 角色分配都需要能<b>枚举队友</b>。返回不可变副本而非内部集合视图——调用方是每 tick 遍历的
+     * AI 层，把内部集合暴露出去等于把"边遍历边有人阵亡退场"变成一个并发修改隐患。
+     */
+    public List<UUID> playersOnSide(int sideIndex) {
+        if (sideIndex < 0 || sideIndex >= sides.size()) {
+            return List.of();
+        }
+        return List.copyOf(sides.get(sideIndex));
+    }
+
+    /** 当前生效的热区；非热区模式或未配置热区时为 {@code null}。 */
+    @Nullable
+    public HotZoneArea activeHotZone() {
+        if (!isHotZoneMode() || hotZoneRotation == null) {
+            return null;
+        }
+        return arena.hotZone(hotZoneRotation.activeIndex());
+    }
+
+    /**
+     * 即将启用的热区；仅在迁移预告窗口内非空，语义与下发给客户端的预告线框一致。
+     *
+     * <p>AI 据此在迁移前提前转移——玩家看得到白色预告框就会提前走，bot 若等到迁移瞬间才动身
+     * 就永远比玩家慢一个身位，热区会变成"玩家白拿分"。
+     */
+    @Nullable
+    public HotZoneArea upcomingHotZone() {
+        if (!isHotZoneMode() || hotZoneRotation == null || !hotZoneRotation.warning()) {
+            return null;
+        }
+        return arena.hotZone(hotZoneRotation.nextIndex());
     }
 
     public String displayName() {

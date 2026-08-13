@@ -45,11 +45,12 @@ class RoomLobbyBotPanelTest {
     // ============================================================
 
     @Test
-    void difficultyIndex_mapsFourTiersInOrder() {
-        assertEquals(0, RoomLobbyBotPanel.difficultyIndex("简单"));
+    void difficultyIndex_mapsFiveTiersInOrder() {
+        assertEquals(0, RoomLobbyBotPanel.difficultyIndex("新手"));
         assertEquals(1, RoomLobbyBotPanel.difficultyIndex("普通"));
-        assertEquals(2, RoomLobbyBotPanel.difficultyIndex("困难"));
-        assertEquals(3, RoomLobbyBotPanel.difficultyIndex("精英"));
+        assertEquals(2, RoomLobbyBotPanel.difficultyIndex("高级"));
+        assertEquals(3, RoomLobbyBotPanel.difficultyIndex("写实"));
+        assertEquals(4, RoomLobbyBotPanel.difficultyIndex("终极"));
     }
 
     @Test
@@ -75,7 +76,7 @@ class RoomLobbyBotPanelTest {
 
     @Test
     void cycleDir_wrapAroundFromLastToFirst_stillReadsForward() {
-        // 精英(3) → 简单(0) 是点击循环的回绕，必须仍读作向前，否则滚轮会倒着滑
+        // 终极(4) → 新手(0) 是点击循环的回绕，必须仍读作向前，否则滚轮会倒着滑
         assertEquals(1, RoomLobbyBotPanel.cycleDir(3, 0, 4));
     }
 

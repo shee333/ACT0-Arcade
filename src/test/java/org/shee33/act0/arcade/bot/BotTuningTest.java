@@ -61,9 +61,9 @@ class BotTuningTest {
     @Test
     void monotonicityViolationsAreReportedNotThrown() {
         BotDifficultyRegistry registry = new BotDifficultyRegistry();
-        // 把 ELITE 的反应调得比 HARD 还慢，故意打破单调性
-        AimModel elite = AimModel.Difficulty.ELITE.defaults();
-        registry.put(AimModel.Difficulty.ELITE, withReactionTicks(elite, 99));
+        // 把 ULTIMATE 的反应调得比 ADVANCED 还慢，故意打破单调性
+        AimModel elite = AimModel.Difficulty.ULTIMATE.defaults();
+        registry.put(AimModel.Difficulty.ULTIMATE, withReactionTicks(elite, 99));
 
         List<String> violations = registry.monotonicityViolations();
         assertFalse(violations.isEmpty(), "应报告违反项");
@@ -83,7 +83,7 @@ class BotTuningTest {
         Path file = dir.resolve(BotTuningIO.DIFFICULTY_FILE);
         assertTrue(Files.exists(file));
 
-        // 模板是内置默认值的完整快照，因此再次加载应把四档全部读回且与默认值一致
+        // 模板是内置默认值的完整快照，因此再次加载应把五档全部读回且与默认值一致
         BotTuningIO.LoadResult second = BotTuningIO.loadInto(registry, dir);
         assertFalse(second.seeded());
         assertEquals(AimModel.Difficulty.values().length, second.loaded());
@@ -111,13 +111,13 @@ class BotTuningTest {
 
     @Test
     void otherTiersUntouchedWhenOnlyOneIsOverridden(@TempDir Path dir) throws IOException {
-        write(dir, "{ \"tiers\": { \"EASY\": { \"reactionTicks\": 20 } } }");
+        write(dir, "{ \"tiers\": { \"ROOKIE\": { \"reactionTicks\": 20 } } }");
         BotDifficultyRegistry registry = new BotDifficultyRegistry();
         BotTuningIO.loadInto(registry, dir);
 
-        assertTrue(registry.isOverridden(AimModel.Difficulty.EASY));
-        assertFalse(registry.isOverridden(AimModel.Difficulty.HARD));
-        assertEquals(AimModel.Difficulty.HARD.defaults(), registry.get(AimModel.Difficulty.HARD));
+        assertTrue(registry.isOverridden(AimModel.Difficulty.ROOKIE));
+        assertFalse(registry.isOverridden(AimModel.Difficulty.ADVANCED));
+        assertEquals(AimModel.Difficulty.ADVANCED.defaults(), registry.get(AimModel.Difficulty.ADVANCED));
     }
 
     @Test
@@ -136,14 +136,14 @@ class BotTuningTest {
         // turnRateDegPerTick 必须 > 0，AimModel 的构造器会拒绝
         write(dir, "{ \"tiers\": {"
                 + " \"NORMAL\": { \"turnRateDegPerTick\": 0 },"
-                + " \"HARD\": { \"reactionTicks\": 4 } } }");
+                + " \"ADVANCED\": { \"reactionTicks\": 4 } } }");
         BotDifficultyRegistry registry = new BotDifficultyRegistry();
         BotTuningIO.LoadResult result = BotTuningIO.loadInto(registry, dir);
 
-        assertEquals(1, result.loaded(), "只有 HARD 应加载成功");
+        assertEquals(1, result.loaded(), "只有 ADVANCED 应加载成功");
         assertFalse(result.problems().isEmpty());
         assertEquals(NORMAL.defaults(), registry.get(NORMAL), "非法档应回退默认值");
-        assertEquals(4, registry.get(AimModel.Difficulty.HARD).reactionTicks(),
+        assertEquals(4, registry.get(AimModel.Difficulty.ADVANCED).reactionTicks(),
                 "同文件中的合法档不应受影响");
     }
 

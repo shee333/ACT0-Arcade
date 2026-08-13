@@ -6,8 +6,10 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import org.shee33.act0.arcade.Act0Arcade;
 import org.shee33.act0.arcade.bot.AimModel;
+import org.shee33.act0.arcade.bot.SquadTactics;
 
 import javax.annotation.Nullable;
+import java.util.UUID;
 import java.util.function.BiPredicate;
 
 /**
@@ -38,6 +40,16 @@ final class BotTask {
     boolean autoTarget;
 
     private final BotLocomotion locomotion;
+    private final BotTactics tactics;
+
+    /**
+     * 本 tick 的对局快照，由 {@link #tick} 在最前面重建。
+     *
+     * <p>刻意每 tick 重建而不是长期持有：bot 可能在对局外存在、可能中途被换局，快照化让
+     * "不在对局中"退化成一个 {@code null} 分支。重建成本是一次 map 查找与一次小列表拷贝。
+     */
+    @Nullable
+    private BotMatchContext context;
 
     /**
      * 自主移动的去向：最近的敌人，<b>不要求可见</b>。
@@ -52,6 +64,7 @@ final class BotTask {
         this.bot = bot;
         this.weapon = newWeapon(bot, DEFAULT_DIFFICULTY);
         this.locomotion = new BotLocomotion(bot);
+        this.tactics = new BotTactics(bot);
     }
 
     /**
@@ -61,11 +74,14 @@ final class BotTask {
      * 从而改用侧移分解而非转身行走。
      */
     void tick(MinecraftServer server, BiPredicate<ServerPlayer, ServerPlayer> hostility) {
+        context = BotMatchContext.of(bot);
+        tactics.tick(context);
         if (autoTarget) {
             rescan(server, hostility);
         }
         weapon.tick();
         boolean engaged = weapon.target() != null;
+        publishToSquad(server);
 
         // 手动航点优先：调试指令下的 walk 必须能压过自主战斗移动，否则无法定点验证移动行为。
         if (locomotion.waypoint() != null) {
@@ -74,8 +90,35 @@ final class BotTask {
         }
         if (autoTarget) {
             // 交火目标与寻敌去向必须分别传入：前者决定机动，后者只在尚未交火时用于推进。
-            locomotion.tickCombat(server, weapon.target(), moveGoal);
+            locomotion.tickCombat(server, weapon.target(), moveGoal, context, tactics);
         }
+    }
+
+    /**
+     * 把本 bot 的交火目标与目视接触写到小队黑板上，供队友做集火与情报共享。
+     *
+     * <p><b>只报告自己确实看得见的目标。</b>交火目标由 {@code BotPerception} 的视线判定产生，
+     * 因此写进情报板的坐标一定来自一次真实目视——不会出现"隔墙也在给队友报点"。坐标还会被
+     * {@code SquadIntel} 量化到 8 格网格，所以队友拿到的是方位而非精确位置。
+     */
+    private void publishToSquad(MinecraftServer server) {
+        if (context == null) {
+            return;
+        }
+        String matchId = context.match().matchId();
+        int side = context.sideIndex();
+        Entity target = weapon.target();
+        BotSquadBoard.INSTANCE.reportEngagement(matchId, side, bot.getUUID(),
+                target != null ? target.getUUID() : null);
+        if (target != null) {
+            BotSquadBoard.INSTANCE.reportSighting(matchId, side, target.getUUID(),
+                    target.getX(), target.getY(), target.getZ(), server.getTickCount());
+        }
+    }
+
+    /** 复活时复位撤退迟滞，避免上一条命的残血状态跟着新生命走。 */
+    void onRespawn() {
+        tactics.onRespawn();
     }
 
     /** 设定移动航点。 */
@@ -105,12 +148,26 @@ final class BotTask {
         // 把本 bot 绑为提问方：敌我关系取决于是谁在问，感知层只需要一个单参谓词。
         ServerPlayer found = BotPerception.findTarget(
                 bot, weapon.aimTracker().model(), candidate -> hostility.test(bot, candidate),
-                weapon.target());
+                weapon.target(), BotPerception.DEFAULT_SEARCH_RADIUS, this::focusFireBonus);
         if (found != null && found != weapon.target()) {
             weapon.setTarget(found);
         }
         moveGoal = BotPerception.findNearestHostile(
                 bot, candidate -> hostility.test(bot, candidate), BotPerception.DEFAULT_SEARCH_RADIUS);
+    }
+
+    /**
+     * 某个候选目标的集火加成：已有<b>别的</b>队友在打他时给一份额外权重。
+     *
+     * <p>对局外的裸 bot 没有队友概念，恒返回 0。
+     */
+    private float focusFireBonus(UUID candidateId) {
+        if (context == null) {
+            return 0.0F;
+        }
+        boolean engaged = BotSquadBoard.INSTANCE.teammateEngaging(
+                context.match().matchId(), context.sideIndex(), bot.getUUID(), candidateId);
+        return SquadTactics.focusFireBonus(engaged);
     }
 
     /**

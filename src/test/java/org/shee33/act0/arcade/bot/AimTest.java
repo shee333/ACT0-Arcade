@@ -99,9 +99,9 @@ class AimTest {
     @Test
     void documentedPerDifficultyOffsetsAreAccurate() {
         // 各档 javadoc 里写明的"30 格上偏移"必须与实际解算一致，否则调参依据是错的。
-        assertEquals(1.57D, offsetAt30(AimModel.Difficulty.EASY), 0.01D);
+        assertEquals(1.57D, offsetAt30(AimModel.Difficulty.ROOKIE), 0.01D);
         assertEquals(0.79D, offsetAt30(AimModel.Difficulty.NORMAL), 0.01D);
-        assertEquals(0.37D, offsetAt30(AimModel.Difficulty.HARD), 0.01D);
+        assertEquals(0.37D, offsetAt30(AimModel.Difficulty.ADVANCED), 0.01D);
     }
 
     private static double offsetAt30(AimModel.Difficulty difficulty) {
@@ -111,10 +111,47 @@ class AimTest {
     // ---------------- 难度单调性（设计不变量）----------------
 
     @Test
+    void escalationLadderExcludesOnlyRealistic() {
+        assertEquals(
+                java.util.List.of(AimModel.Difficulty.ROOKIE, AimModel.Difficulty.NORMAL,
+                        AimModel.Difficulty.ADVANCED, AimModel.Difficulty.ULTIMATE),
+                java.util.Arrays.stream(AimModel.Difficulty.values())
+                        .filter(AimModel.Difficulty::onEscalationLadder).toList(),
+                "主阶梯应为四档纯递增，写实档是唯一的旁支");
+    }
+
+    /**
+     * 写实档的设计意图锁：<b>枪法向终极靠、感知反而弱于高级</b>。
+     *
+     * <p>这条断言存在的唯一目的是防止后人把写实档"修正"成纯递增的一档——视野 ±60° 小于高级的
+     * ±70°、记忆 24 tick 短于高级的 40 tick，单看数字很像手误，实际是这一档的全部立意所在
+     * （可被战术击败，但难以对枪击败）。
+     */
+    @Test
+    void realisticTierTradesPerceptionForGunplay() {
+        AimModel realistic = AimModel.Difficulty.REALISTIC.defaults();
+        AimModel advanced = AimModel.Difficulty.ADVANCED.defaults();
+        AimModel ultimate = AimModel.Difficulty.ULTIMATE.defaults();
+
+        assertTrue(realistic.fovHalfAngleDegrees() < advanced.fovHalfAngleDegrees(),
+                "写实档视野必须窄于高级档——可被绕侧是本档立意");
+        assertTrue(realistic.reacquireTicks() < advanced.reacquireTicks(),
+                "写实档目标记忆必须短于高级档——会跟丢是本档立意");
+
+        assertTrue(realistic.errorSettledDegrees() < advanced.errorSettledDegrees()
+                        && realistic.errorSettledDegrees() > ultimate.errorSettledDegrees(),
+                "写实档枪法应落在高级与终极之间");
+        assertTrue(realistic.reactionTicks() < advanced.reactionTicks()
+                        && realistic.reactionTicks() > ultimate.reactionTicks(),
+                "写实档反应应落在高级与终极之间");
+        assertFalse(realistic.errorSettledDegrees() <= 0.0F, "枪法再好也不得为零误差");
+    }
+
+    @Test
     void higherDifficultyIsStrictlyBetterInEveryDimension() {
-        AimModel.Difficulty[] order = {
-                AimModel.Difficulty.EASY, AimModel.Difficulty.NORMAL,
-                AimModel.Difficulty.HARD, AimModel.Difficulty.ELITE};
+        AimModel.Difficulty[] order = java.util.Arrays.stream(AimModel.Difficulty.values())
+                .filter(AimModel.Difficulty::onEscalationLadder)
+                .toArray(AimModel.Difficulty[]::new);
         for (int i = 1; i < order.length; i++) {
             AimModel lo = order[i - 1].defaults();
             AimModel hi = order[i].defaults();

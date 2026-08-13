@@ -88,6 +88,32 @@ public final class HotZoneArea {
         return maxZ;
     }
 
+    public double centerX() {
+        return (minX + maxX) / 2.0D;
+    }
+
+    public double centerZ() {
+        return (minZ + maxZ) / 2.0D;
+    }
+
+    /**
+     * 可站立的地面高度估计。
+     *
+     * <p>{@link #minY} 是管理员点击的最低点再向下扩了 {@link #VERTICAL_MARGIN}，所以把这段容差加回去
+     * 才是"脚踩的那一层"。AI 需要一个能作为寻路终点的 Y——直接用 {@code minY} 会得到地面以下 4 格，
+     * 寻路会判定不可达。
+     */
+    public double floorY() {
+        return minY + VERTICAL_MARGIN;
+    }
+
+    /** 到区域中心的水平距离（格）。 */
+    public double horizontalDistanceTo(double x, double z) {
+        double dx = x - centerX();
+        double dz = z - centerZ();
+        return Math.sqrt(dx * dx + dz * dz);
+    }
+
     /**
      * AABB 包含判定：先比对维度，再逐轴判断（边界取闭区间）。纯函数，供 {@code ArcadeMatch}
      * 直接调用，不必起服务器即可单测。
