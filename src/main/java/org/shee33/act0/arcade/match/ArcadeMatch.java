@@ -27,6 +27,7 @@ import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.Team;
 import org.shee33.act0.arcade.arena.ArcadeArena;
 import org.shee33.act0.arcade.arena.HotZoneArea;
+import org.shee33.act0.arcade.arena.HotZoneRotation;
 import org.shee33.act0.arcade.arena.SpawnPoint;
 import org.shee33.act0.arcade.bot.mc.BotSpawner;
 import org.shee33.act0.arcade.integration.MatchResultBroadcaster;
@@ -185,6 +186,7 @@ public final class ArcadeMatch {
     private long startedTick;
     private boolean draw = false;
     private final Map<UUID, ServerBossEvent> personalBossBars = new HashMap<>();
+    private HotZoneRotation hotZoneRotation;
 
     public ArcadeMatch(String matchId,
                        MatchSettings settings,
@@ -255,22 +257,49 @@ public final class ArcadeMatch {
         if (settings.timeLimitSeconds() > 0) {
             matchClockTicks = settings.timeLimitSeconds() * 20;
         }
-        broadcastHotZoneAreaToParticipants();
+        startHotZoneRotation();
         updateSidebar();
         startRound();
     }
 
-    /** 热区模式开局时把固定矩形区域下发给全体参战玩家，供客户端存入 {@code ClientHotZoneState}。 */
-    private void broadcastHotZoneAreaToParticipants() {
-        if (!isHotZoneMode() || arena.hotZone() == null) {
+    /**
+     * 热区模式开局：建立轮换状态机并把首个热区下发给全体参战玩家。单个热区的存在时长取自
+     * {@link ArcadeGlobalSettings}（{@code /arcade settings hotZoneDuration} 可改），只预设了一个
+     * 热区时状态机不轮换，行为与引入轮换之前一致。
+     */
+    private void startHotZoneRotation() {
+        if (!isHotZoneMode() || !arena.hasHotZones()) {
             return;
         }
+        hotZoneRotation = new HotZoneRotation(arena.hotZones().size(),
+                ArcadeGlobalSettings.get(server).hotZoneDurationTicks());
+        broadcastHotZoneToParticipants();
+    }
+
+    private void broadcastHotZoneToParticipants() {
         for (UUID id : sideOf.keySet()) {
             ServerPlayer player = player(id);
             if (player != null) {
-                ArcadeNetwork.sendHotZoneArea(player, arena.hotZone());
+                sendHotZoneTo(player);
             }
         }
+    }
+
+    /**
+     * 给单个玩家下发当前激活热区，以及仅在预告窗口内才附带的下一个热区。中途加入/重连也走这里，
+     * 因此在预告窗口中段进场的玩家同样能立刻看到白色预告线框，不必等下一轮。
+     */
+    private void sendHotZoneTo(ServerPlayer player) {
+        if (!isHotZoneMode() || hotZoneRotation == null) {
+            return;
+        }
+        HotZoneArea active = arena.hotZone(hotZoneRotation.activeIndex());
+        if (active == null) {
+            return;
+        }
+        HotZoneArea next = hotZoneRotation.warning()
+                ? arena.hotZone(hotZoneRotation.nextIndex()) : null;
+        ArcadeNetwork.sendHotZoneArea(player, active, next);
     }
 
     /**
@@ -490,18 +519,60 @@ public final class ArcadeMatch {
     }
 
     /**
-     * 热区计分：一张地图仅一个固定矩形区域（{@link ArcadeArena#hotZone()}），不再轮转。
-     * 每秒（20 tick）判定一次唯一控制方并按 {@link MatchSettings#hotZoneScorePerSecond()} 加分。
+     * 热区主循环：每 tick 推进轮换状态机（迁移与预告都由它判定），每秒判定一次唯一控制方并加分。
+     *
+     * <p>只在 {@link MatchPhase#COMBAT} 里推进，因此回合间歇/倒计时期间热区计时自然冻结——玩家不会
+     * 在无法交火的阶段白白损失热区时间。
      */
     private void tickHotZone() {
-        if (!isHotZoneMode() || phase != MatchPhase.COMBAT) {
+        if (!isHotZoneMode() || phase != MatchPhase.COMBAT || hotZoneRotation == null) {
             return;
         }
-        HotZoneArea zone = arena.hotZone();
+        switch (hotZoneRotation.tick()) {
+            case WARNING_STARTED -> broadcastHotZoneToParticipants();
+            case MIGRATED -> onHotZoneMigrated();
+            case NONE -> {
+            }
+        }
+        // 倒计时播报对齐轮换自身的剩余 tick（而非服务器 tick 计数），保证 5/4/3/2/1 各播报一次
+        if (hotZoneRotation.warning() && hotZoneRotation.remainingTicks() % 20 == 0) {
+            announceMigrationCountdown();
+        }
+        if (server.getTickCount() % 4L == 0L) {
+            updateBossBar();
+        }
+        if (server.getTickCount() % 20L == 0L) {
+            scoreHotZone();
+        }
+    }
+
+    /** 迁移完成：重发激活区（顺带清掉客户端的预告线框）并给全体一次醒目反馈。 */
+    private void onHotZoneMigrated() {
+        broadcastHotZoneToParticipants();
+        String message = "§6§l热区已迁移 §7· §f第 " + (hotZoneRotation.activeIndex() + 1)
+                + "§7/§f" + hotZoneRotation.zoneCount() + " 区";
+        for (UUID id : sideOf.keySet()) {
+            actionBar(id, message);
+        }
+        playToAll(SoundEvents.NOTE_BLOCK_PLING.value(), 0.8f);
+    }
+
+    private void announceMigrationCountdown() {
+        int secs = hotZoneRotation.remainingSeconds();
+        String hint = secs >= 5 ? " §7· 白色线框为下一个热区" : "";
+        String message = "§6热区将在 §e" + secs + " §6秒后迁移" + hint;
+        for (UUID id : sideOf.keySet()) {
+            actionBar(id, message);
+        }
+        if (secs <= 3) {
+            playToAll(SoundEvents.NOTE_BLOCK_HAT.value(), 1.0f + (3 - secs) * 0.2f);
+        }
+    }
+
+    /** 每秒计分：判定当前激活热区的唯一控制方并按 {@link MatchSettings#hotZoneScorePerSecond()} 加分。 */
+    private void scoreHotZone() {
+        HotZoneArea zone = arena.hotZone(hotZoneRotation.activeIndex());
         if (zone == null) {
-            return;
-        }
-        if (server.getTickCount() % 20L != 0L) {
             return;
         }
         int controllingSide = hotZoneController(zone);
@@ -509,11 +580,12 @@ public final class ArcadeMatch {
             updateSidebar();
             return;
         }
+        int perSecond = settings.hotZoneScorePerSecond();
         int total = 0;
-        for (int i = 0; i < settings.hotZoneScorePerSecond(); i++) {
+        for (int i = 0; i < perSecond; i++) {
             total = score.addPoint(sideId(controllingSide));
         }
-        actionBarSide(controllingSide, "§6热区占领 §7+1 §8(" + total + "/" + score.pointsToWin() + ")");
+        actionBarSide(controllingSide, "§6热区占领 §7+" + perSecond + " §8(" + total + "/" + score.pointsToWin() + ")");
         updateBossBar();
         updateSidebar();
         if (score.isReached()) {
@@ -1177,9 +1249,7 @@ public final class ArcadeMatch {
         disconnected.remove(id);
         addBossBarPlayer(player);
         sidebar.showTo(player);
-        if (isHotZoneMode() && arena.hotZone() != null) {
-            ArcadeNetwork.sendHotZoneArea(player, arena.hotZone());
-        }
+        sendHotZoneTo(player);
         int side = sideOf.getOrDefault(id, 0);
         if (phase == MatchPhase.COMBAT || phase == MatchPhase.COUNTDOWN) {
             exitSpectator(player);
@@ -1230,9 +1300,7 @@ public final class ArcadeMatch {
         setupNameTagTeams();
         addBossBarPlayer(player);
         sidebar.showTo(player);
-        if (isHotZoneMode() && arena.hotZone() != null) {
-            ArcadeNetwork.sendHotZoneArea(player, arena.hotZone());
-        }
+        sendHotZoneTo(player);
         if (phase == MatchPhase.COMBAT || phase == MatchPhase.COUNTDOWN) {
             enterAdventureMode(player);
             clearJumpCharge(id);
@@ -2343,6 +2411,9 @@ public final class ArcadeMatch {
                 bossBar.setProgress(clamp01((float) timer.remainingTicks() / phaseTotalTicks));
             }
             case COMBAT -> {
+                if (updateHotZoneBossBar()) {
+                    return;
+                }
                 bossBar.setName(Component.literal("§a" + roundLabel() + " §7| " + scoreLine()));
                 bossBar.setColor(BossEvent.BossBarColor.GREEN);
                 bossBar.setProgress(clamp01((float) leadingScore() / Math.max(1, score.pointsToWin())));
@@ -2350,6 +2421,28 @@ public final class ArcadeMatch {
             default -> {
             }
         }
+    }
+
+    /**
+     * 热区轮换模式下把 Boss 血条改成"当前热区剩余时间"：进度条随剩余时间排空，标题仍带比分，
+     * 比分的达标进度另有计分板呈现，因此不算丢信息。预告窗口内整条转黄（按 FlatTheme 的警告色偏好
+     * 用黄而非红）。
+     *
+     * @return 是否已由本方法接管血条；非热区模式或只预设了单个固定热区时返回 {@code false}，
+     *         走原本按比分填充的血条
+     */
+    private boolean updateHotZoneBossBar() {
+        if (hotZoneRotation == null || !hotZoneRotation.rotates()) {
+            return false;
+        }
+        boolean warning = hotZoneRotation.warning();
+        String zoneLabel = "热区 " + (hotZoneRotation.activeIndex() + 1) + "§7/§f" + hotZoneRotation.zoneCount();
+        String timeLabel = (warning ? "§e迁移倒计时 " : "§f剩余 ") + hotZoneRotation.remainingSeconds() + "s";
+        bossBar.setName(Component.literal(
+                (warning ? "§e" : "§6") + zoneLabel + " §7| " + timeLabel + " §7| " + scoreLine()));
+        bossBar.setColor(warning ? BossEvent.BossBarColor.YELLOW : BossEvent.BossBarColor.GREEN);
+        bossBar.setProgress(hotZoneRotation.progress());
+        return true;
     }
 
     private boolean usesPersonalBossBars() {

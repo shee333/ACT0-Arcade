@@ -44,7 +44,7 @@ public final class ArcadeNetwork {
      *
      * <p>{@code NetworkProtocolFingerprintTest} 会锁住包表指纹，漏 bump 时直接测试失败。
      */
-    private static final String PROTOCOL = "12";
+    private static final String PROTOCOL = "13";
 
     @SuppressWarnings("removal")
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
@@ -155,9 +155,18 @@ public final class ArcadeNetwork {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new DeathCamPacket(active, killerName));
     }
 
-    /** 向玩家下发热区矩形边界，供客户端存入 {@code ClientHotZoneState} 供后续渲染读取。 */
+    /** 向玩家下发单个热区矩形边界（管理员框选确认时用），不带迁移预告。 */
     public static void sendHotZoneArea(ServerPlayer player, HotZoneArea area) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new HotZoneAreaPacket(area));
+        sendHotZoneArea(player, area, null);
+    }
+
+    /**
+     * 向玩家下发当前生效的热区，外加一个可选的迁移预告区。
+     *
+     * @param next 即将启用的热区；{@code null} 表示当前不在预告窗口内，客户端应清除预告线框
+     */
+    public static void sendHotZoneArea(ServerPlayer player, HotZoneArea area, HotZoneArea next) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new HotZoneAreaPacket(area, next));
     }
 
     /**

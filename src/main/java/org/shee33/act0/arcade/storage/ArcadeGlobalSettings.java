@@ -7,6 +7,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.level.saveddata.SavedData;
+import org.shee33.act0.arcade.arena.HotZoneRotation;
 
 /**
  * ACT0-Arcade 全局玩法设置，基于存档持久化。
@@ -18,12 +19,15 @@ public final class ArcadeGlobalSettings extends SavedData {
     private static final String DATA_NAME = "act0_arcade_global_settings";
     private static final String KEY_HEALTH = "globalHealth";
     private static final String KEY_BREATH_DELAY = "breathHealDelayTicks";
+    private static final String KEY_HOT_ZONE_DURATION = "hotZoneDurationTicks";
 
     public static final double DEFAULT_MAX_HEALTH = 20.0;
     public static final int DEFAULT_BREATH_HEAL_DELAY_TICKS = 5 * 20;
+    public static final int DEFAULT_HOT_ZONE_DURATION_TICKS = 25 * 20;
 
     private double globalHealth = DEFAULT_MAX_HEALTH;
     private int breathHealDelayTicks = DEFAULT_BREATH_HEAL_DELAY_TICKS;
+    private int hotZoneDurationTicks = DEFAULT_HOT_ZONE_DURATION_TICKS;
 
     public ArcadeGlobalSettings() {
     }
@@ -49,6 +53,16 @@ public final class ArcadeGlobalSettings extends SavedData {
 
     public void setBreathHealDelaySeconds(double seconds) {
         breathHealDelayTicks = Math.max(0, (int) Math.round(seconds * 20.0));
+        setDirty();
+    }
+
+    /** 热区模式下单个热区的存在时长（tick），轮换到下一个热区的间隔。 */
+    public int hotZoneDurationTicks() {
+        return HotZoneRotation.clampDuration(hotZoneDurationTicks);
+    }
+
+    public void setHotZoneDurationSeconds(int seconds) {
+        hotZoneDurationTicks = HotZoneRotation.clampDuration(seconds * 20);
         setDirty();
     }
 
@@ -79,6 +93,7 @@ public final class ArcadeGlobalSettings extends SavedData {
     public CompoundTag save(CompoundTag tag) {
         tag.putDouble(KEY_HEALTH, globalHealth);
         tag.putInt(KEY_BREATH_DELAY, breathHealDelayTicks);
+        tag.putInt(KEY_HOT_ZONE_DURATION, hotZoneDurationTicks);
         return tag;
     }
 
@@ -89,6 +104,9 @@ public final class ArcadeGlobalSettings extends SavedData {
         }
         if (tag.contains(KEY_BREATH_DELAY)) {
             settings.breathHealDelayTicks = Math.max(0, tag.getInt(KEY_BREATH_DELAY));
+        }
+        if (tag.contains(KEY_HOT_ZONE_DURATION)) {
+            settings.hotZoneDurationTicks = HotZoneRotation.clampDuration(tag.getInt(KEY_HOT_ZONE_DURATION));
         }
         return settings;
     }

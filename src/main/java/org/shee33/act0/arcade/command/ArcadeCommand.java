@@ -22,6 +22,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 import org.shee33.act0.arcade.Act0Arcade;
 import org.shee33.act0.arcade.arena.ArcadeArena;
 import org.shee33.act0.arcade.bot.AimModel;
+import org.shee33.act0.arcade.arena.HotZoneRotation;
 import org.shee33.act0.arcade.arena.HotZoneWandHandler;
 import org.shee33.act0.arcade.arena.SpawnPoint;
 import org.shee33.act0.arcade.economy.ArcadeEconomy;
@@ -230,7 +231,25 @@ public final class ArcadeCommand {
                         .executes(ArcadeCommand::settingsHealth)))
             .then(Commands.literal("regenDelay")
                 .then(Commands.argument("seconds", DoubleArgumentType.doubleArg(0.0, 60.0))
-                    .executes(ArcadeCommand::settingsRegenDelay)));
+                    .executes(ArcadeCommand::settingsRegenDelay)))
+            .then(Commands.literal("hotZoneDuration")
+                .then(Commands.argument("seconds", IntegerArgumentType.integer(
+                        HotZoneRotation.MIN_DURATION_TICKS / 20, HotZoneRotation.MAX_DURATION_TICKS / 20))
+                    .executes(ArcadeCommand::settingsHotZoneDuration)));
+        }
+
+        /**
+         * 设置热区模式下单个热区的存在时长。下限来自 {@link HotZoneRotation#MIN_DURATION_TICKS}——必须
+         * 长于 5 秒的迁移预告窗口，否则热区从出生就在倒计时。改动对正在进行的对局无效，下一局生效。
+         */
+        private static int settingsHotZoneDuration(CommandContext<CommandSourceStack> ctx) {
+        int seconds = IntegerArgumentType.getInteger(ctx, "seconds");
+        ArcadeGlobalSettings settings = ArcadeGlobalSettings.get(ctx.getSource().getServer());
+        settings.setHotZoneDurationSeconds(seconds);
+        ctx.getSource().sendSuccess(() -> Component.literal(
+            "§a热区存在时长已设为 §e" + seconds + " 秒 §7(迁移前 "
+                + HotZoneRotation.WARNING_TICKS / 20 + " 秒开始预告；对正在进行的对局无效)"), true);
+        return 1;
         }
 
         private static int settingsHealth(CommandContext<CommandSourceStack> ctx) {
@@ -557,6 +576,9 @@ public final class ArcadeCommand {
                 .then(Commands.literal("hotzonewand")
                         .then(Commands.argument("id", StringArgumentType.string()).suggests(ARENA_IDS)
                                 .executes(ArcadeCommand::arenaHotZoneWand)))
+                .then(Commands.literal("hotzoneclear")
+                        .then(Commands.argument("id", StringArgumentType.string()).suggests(ARENA_IDS)
+                                .executes(ArcadeCommand::arenaHotZoneClear)))
                 .then(Commands.literal("list")
                         .executes(ArcadeCommand::arenaList))
                 .then(Commands.literal("info")
@@ -592,7 +614,7 @@ public final class ArcadeCommand {
             return 0;
         }
         ArcadeArena old = existing.get();
-        ArcadeArena.Builder builder = new ArcadeArena.Builder(id).returnSpawn(spawnAt(player)).hotZone(old.hotZone());
+        ArcadeArena.Builder builder = new ArcadeArena.Builder(id).returnSpawn(spawnAt(player)).hotZones(old.hotZones());
         old.sideSpawns().forEach(builder::addSideSpawn);
         old.randomSpawns().forEach(builder::addRandomSpawn);
         ArcadeArena updated = builder.build();
@@ -612,7 +634,7 @@ public final class ArcadeCommand {
             return 0;
         }
         ArcadeArena old = existing.get();
-        ArcadeArena.Builder builder = new ArcadeArena.Builder(id).returnSpawn(old.returnSpawn()).hotZone(old.hotZone());
+        ArcadeArena.Builder builder = new ArcadeArena.Builder(id).returnSpawn(old.returnSpawn()).hotZones(old.hotZones());
         old.sideSpawns().forEach(builder::addSideSpawn);
         old.randomSpawns().forEach(builder::addRandomSpawn);
         builder.addSideSpawn(spawnAt(player));
@@ -637,7 +659,7 @@ public final class ArcadeCommand {
             return 0;
         }
         ArcadeArena old = existing.get();
-        ArcadeArena.Builder builder = new ArcadeArena.Builder(id).returnSpawn(old.returnSpawn()).hotZone(old.hotZone());
+        ArcadeArena.Builder builder = new ArcadeArena.Builder(id).returnSpawn(old.returnSpawn()).hotZones(old.hotZones());
         old.sideSpawns().forEach(builder::addSideSpawn);
         old.randomSpawns().forEach(builder::addRandomSpawn);
         builder.addRandomSpawn(spawnAt(player));
@@ -664,7 +686,28 @@ public final class ArcadeCommand {
         HotZoneWandHandler.INSTANCE.beginEditing(player.getUUID(), id);
         player.getInventory().add(HotZoneWandHandler.createWand());
         ctx.getSource().sendSuccess(() -> Component.literal(
-                "§a已发放热区框选道具 §7(竞技场 §e" + id + "§7)§a，左键点击一个方块记录角1，右键点击另一个方块记录角2。"), true);
+                "§a已发放热区框选道具 §7(竞技场 §e" + id + "§7)§a，左键点击一个方块记录角1，右键点击另一个方块记录角2。"
+                + " §7每次框选追加一个热区，重复执行本命令可预设多个热区并在对局中按序轮换。"), true);
+        return 1;
+    }
+
+    /** 清空某竞技场的全部预设热区：框选道具只追加不覆盖，重设热区布局必须先走这里。 */
+    private static int arenaHotZoneClear(CommandContext<CommandSourceStack> ctx) {
+        String id = StringArgumentType.getString(ctx, "id");
+        ArenaRegistry registry = ArenaRegistry.get(ctx.getSource().getServer());
+        Optional<ArcadeArena> existing = registry.find(id);
+        if (existing.isEmpty()) {
+            ctx.getSource().sendFailure(Component.literal("竞技场不存在：" + id));
+            return 0;
+        }
+        ArcadeArena old = existing.get();
+        int removed = old.hotZones().size();
+        ArcadeArena.Builder builder = new ArcadeArena.Builder(id).returnSpawn(old.returnSpawn());
+        old.sideSpawns().forEach(builder::addSideSpawn);
+        old.randomSpawns().forEach(builder::addRandomSpawn);
+        registry.put(builder.build());
+        ctx.getSource().sendSuccess(() -> Component.literal(
+                "§a已清空 §e" + id + " §a的全部热区 §7(" + removed + " 个)"), true);
         return 1;
     }
 
@@ -688,12 +731,16 @@ public final class ArcadeCommand {
         }
         ArcadeArena a = arena.get();
         String ret = a.hasReturnSpawn() ? a.returnSpawn().toString() : "§c未设置";
-        String hotZone = a.hotZone() != null ? a.hotZone().toString() : "§c未设置";
         ctx.getSource().sendSuccess(() -> Component.literal(
                 "§e" + id + "§f：阵营出生点 " + a.sideSpawns().size()
                 + "，个人乱斗复活点 " + a.randomSpawns().size()
                 + "，返回点 " + ret
-                + "，热区 " + hotZone), false);
+                + "，热区 " + (a.hasHotZones() ? a.hotZones().size() + " 个（按序轮换）" : "§c未设置")), false);
+        for (int i = 0; i < a.hotZones().size(); i++) {
+            final int index = i + 1;
+            final String zone = a.hotZones().get(i).toString();
+            ctx.getSource().sendSuccess(() -> Component.literal("  §7#" + index + " §f" + zone), false);
+        }
         return 1;
     }
 

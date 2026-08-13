@@ -19,7 +19,14 @@ public final class ArenaCodec {
     private static final String KEY_SIDE_SPAWNS = "sideSpawns";
     private static final String KEY_RANDOM_SPAWNS = "randomSpawns";
     private static final String KEY_RETURN = "returnSpawn";
-    private static final String KEY_HOT_ZONE = "hotZone";
+    private static final String KEY_HOT_ZONES = "hotZones";
+
+    /**
+     * 轮换功能之前的单热区键名。只读不写：老存档里每个竞技场最多存一个 {@code hotZone} 复合标签，
+     * 读取时折叠成单元素列表，写回时统一走 {@link #KEY_HOT_ZONES}，因此老存档只要被保存过一次就
+     * 自动完成迁移，不需要单独的迁移流程。
+     */
+    private static final String KEY_LEGACY_HOT_ZONE = "hotZone";
 
     private static final String KEY_DIM = "dim";
     private static final String KEY_X = "x";
@@ -67,8 +74,8 @@ public final class ArenaCodec {
         if (arena.hasReturnSpawn()) {
             tag.put(KEY_RETURN, writeSpawn(arena.returnSpawn()));
         }
-        if (arena.hotZone() != null) {
-            tag.put(KEY_HOT_ZONE, writeHotZone(arena.hotZone()));
+        if (arena.hasHotZones()) {
+            tag.put(KEY_HOT_ZONES, writeHotZoneList(arena.hotZones()));
         }
         return tag;
     }
@@ -78,8 +85,30 @@ public final class ArenaCodec {
         List<SpawnPoint> sideSpawns = readSpawnList(tag.getList(KEY_SIDE_SPAWNS, Tag.TAG_COMPOUND));
         List<SpawnPoint> randomSpawns = readSpawnList(tag.getList(KEY_RANDOM_SPAWNS, Tag.TAG_COMPOUND));
         SpawnPoint returnSpawn = tag.contains(KEY_RETURN, Tag.TAG_COMPOUND) ? readSpawn(tag.getCompound(KEY_RETURN)) : null;
-        HotZoneArea hotZone = tag.contains(KEY_HOT_ZONE, Tag.TAG_COMPOUND) ? readHotZone(tag.getCompound(KEY_HOT_ZONE)) : null;
-        return new ArcadeArena(id, sideSpawns, randomSpawns, returnSpawn, hotZone);
+        return new ArcadeArena(id, sideSpawns, randomSpawns, returnSpawn, readHotZones(tag));
+    }
+
+    private static List<HotZoneArea> readHotZones(CompoundTag tag) {
+        if (tag.contains(KEY_HOT_ZONES, Tag.TAG_LIST)) {
+            ListTag list = tag.getList(KEY_HOT_ZONES, Tag.TAG_COMPOUND);
+            List<HotZoneArea> zones = new ArrayList<>();
+            for (int i = 0; i < list.size(); i++) {
+                zones.add(readHotZone(list.getCompound(i)));
+            }
+            return zones;
+        }
+        if (tag.contains(KEY_LEGACY_HOT_ZONE, Tag.TAG_COMPOUND)) {
+            return List.of(readHotZone(tag.getCompound(KEY_LEGACY_HOT_ZONE)));
+        }
+        return List.of();
+    }
+
+    private static ListTag writeHotZoneList(List<HotZoneArea> zones) {
+        ListTag list = new ListTag();
+        for (HotZoneArea zone : zones) {
+            list.add(writeHotZone(zone));
+        }
+        return list;
     }
 
     public static CompoundTag writeHotZone(HotZoneArea zone) {

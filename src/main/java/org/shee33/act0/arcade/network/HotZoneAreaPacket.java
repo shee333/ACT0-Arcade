@@ -10,54 +10,61 @@ import org.shee33.act0.arcade.client.ClientHotZoneState;
 import java.util.function.Supplier;
 
 /**
- * S→C：把服务端确定的热区矩形边界下发给客户端，写入 {@link ClientHotZoneState} 供后续的
- * 边界可视化任务读取。在管理员用热区框选道具确定区域时、以及热区模式对局开始/中途加入时下发。
+ * S→C：把服务端当前生效的热区矩形边界下发给客户端，写入 {@link ClientHotZoneState} 供世界空间
+ * 线框渲染读取。在管理员用热区框选道具确定区域时、热区模式对局开始/中途加入时，以及每次热区
+ * 轮换与轮换预告时下发。
+ *
+ * <p>同时携带一个可选的"下一个热区"：只在迁移预告窗口内非空，客户端据此把即将启用的区域也画出来
+ * （见 {@code ClientHotZoneOverlay}）。预告结束/完成迁移时服务端会重发一个不带下一区的包，因此
+ * 客户端不需要自己给预告计时——服务端是唯一时间源。
  */
 public final class HotZoneAreaPacket {
 
-    private final String dimension;
-    private final double minX;
-    private final double maxX;
-    private final double minY;
-    private final double maxY;
-    private final double minZ;
-    private final double maxZ;
+    private final HotZoneArea active;
+    private final HotZoneArea next;
 
-    public HotZoneAreaPacket(HotZoneArea area) {
-        this(area.dimension(), area.minX(), area.maxX(), area.minY(), area.maxY(), area.minZ(), area.maxZ());
+    public HotZoneAreaPacket(HotZoneArea active) {
+        this(active, null);
     }
 
-    public HotZoneAreaPacket(String dimension, double minX, double maxX, double minY, double maxY,
-                             double minZ, double maxZ) {
-        this.dimension = dimension;
-        this.minX = minX;
-        this.maxX = maxX;
-        this.minY = minY;
-        this.maxY = maxY;
-        this.minZ = minZ;
-        this.maxZ = maxZ;
+    public HotZoneAreaPacket(HotZoneArea active, HotZoneArea next) {
+        this.active = active;
+        this.next = next;
     }
 
     public static void encode(HotZoneAreaPacket msg, FriendlyByteBuf buf) {
-        buf.writeUtf(msg.dimension);
-        buf.writeDouble(msg.minX);
-        buf.writeDouble(msg.maxX);
-        buf.writeDouble(msg.minY);
-        buf.writeDouble(msg.maxY);
-        buf.writeDouble(msg.minZ);
-        buf.writeDouble(msg.maxZ);
+        writeArea(buf, msg.active);
+        buf.writeBoolean(msg.next != null);
+        if (msg.next != null) {
+            writeArea(buf, msg.next);
+        }
     }
 
     public static HotZoneAreaPacket decode(FriendlyByteBuf buf) {
-        return new HotZoneAreaPacket(buf.readUtf(), buf.readDouble(), buf.readDouble(),
+        HotZoneArea active = readArea(buf);
+        HotZoneArea next = buf.readBoolean() ? readArea(buf) : null;
+        return new HotZoneAreaPacket(active, next);
+    }
+
+    private static void writeArea(FriendlyByteBuf buf, HotZoneArea area) {
+        buf.writeUtf(area.dimension());
+        buf.writeDouble(area.minX());
+        buf.writeDouble(area.maxX());
+        buf.writeDouble(area.minY());
+        buf.writeDouble(area.maxY());
+        buf.writeDouble(area.minZ());
+        buf.writeDouble(area.maxZ());
+    }
+
+    private static HotZoneArea readArea(FriendlyByteBuf buf) {
+        return new HotZoneArea(buf.readUtf(), buf.readDouble(), buf.readDouble(),
                 buf.readDouble(), buf.readDouble(), buf.readDouble(), buf.readDouble());
     }
 
     public static void handle(HotZoneAreaPacket msg, Supplier<NetworkEvent.Context> ctx) {
         NetworkEvent.Context context = ctx.get();
         context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
-                () -> () -> ClientHotZoneState.set(msg.dimension, msg.minX, msg.maxX,
-                        msg.minY, msg.maxY, msg.minZ, msg.maxZ)));
+                () -> () -> ClientHotZoneState.set(msg.active, msg.next)));
         context.setPacketHandled(true);
     }
 }

@@ -14,8 +14,9 @@ import java.util.Objects;
  * <ul>
  *   <li>决斗/团队：每方一个固定出生点（{@code sideSpawns.get(sideIndex)}）。</li>
  *   <li>个人乱斗：使用 {@link #randomSpawns} 手动候选池取点。</li>
- *   <li>热区模式：使用 {@link #hotZone} 这一个固定矩形区域（可为 {@code null} 表示未设置），
- *       与 {@link #randomSpawns} 完全独立，不再复用、不再轮转。</li>
+ *   <li>热区模式：使用 {@link #hotZones} 这一组管理员手动框选的矩形区域（可为空表示未设置），
+ *       与 {@link #randomSpawns} 完全独立，不复用出生点。只预设一个即为全程固定热区；预设多个则
+ *       由 {@link HotZoneRotation} 在对局中按固定时长顺序轮换，同一时刻只有一个热区生效。</li>
  * </ul>
  */
 public final class ArcadeArena {
@@ -24,25 +25,25 @@ public final class ArcadeArena {
     private final List<SpawnPoint> sideSpawns;
     private final List<SpawnPoint> randomSpawns;
     private final SpawnPoint returnSpawn;
-    private final HotZoneArea hotZone;
+    private final List<HotZoneArea> hotZones;
 
     public ArcadeArena(String arenaId,
                        List<SpawnPoint> sideSpawns,
                        List<SpawnPoint> randomSpawns,
                        SpawnPoint returnSpawn) {
-        this(arenaId, sideSpawns, randomSpawns, returnSpawn, null);
+        this(arenaId, sideSpawns, randomSpawns, returnSpawn, List.of());
     }
 
     public ArcadeArena(String arenaId,
                        List<SpawnPoint> sideSpawns,
                        List<SpawnPoint> randomSpawns,
                        SpawnPoint returnSpawn,
-                       HotZoneArea hotZone) {
+                       List<HotZoneArea> hotZones) {
         this.arenaId = Objects.requireNonNull(arenaId, "arenaId");
         this.sideSpawns = List.copyOf(Objects.requireNonNull(sideSpawns, "sideSpawns"));
         this.randomSpawns = randomSpawns == null ? List.of() : List.copyOf(randomSpawns);
         this.returnSpawn = returnSpawn;
-        this.hotZone = hotZone;
+        this.hotZones = hotZones == null ? List.of() : List.copyOf(hotZones);
     }
 
     public String arenaId() {
@@ -75,9 +76,24 @@ public final class ArcadeArena {
         return returnSpawn != null;
     }
 
-    /** 热区模式使用的固定矩形区域；{@code null} 表示尚未设置。 */
-    public HotZoneArea hotZone() {
-        return hotZone;
+    /** 热区模式的预设区域列表，按管理员框选顺序排列，也就是对局中的轮换顺序；可能为空。 */
+    public List<HotZoneArea> hotZones() {
+        return Collections.unmodifiableList(hotZones);
+    }
+
+    public boolean hasHotZones() {
+        return !hotZones.isEmpty();
+    }
+
+    /**
+     * 按索引取热区，索引越界时按热区数量取模回绕——{@link HotZoneRotation} 的索引本就在
+     * {@code [0, size)} 内，这里的取模只是防御性兜底。热区列表为空时返回 {@code null}。
+     */
+    public HotZoneArea hotZone(int index) {
+        if (hotZones.isEmpty()) {
+            return null;
+        }
+        return hotZones.get(Math.floorMod(index, hotZones.size()));
     }
 
     /**
@@ -136,7 +152,7 @@ public final class ArcadeArena {
         private final List<SpawnPoint> sideSpawns = new ArrayList<>();
         private final List<SpawnPoint> randomSpawns = new ArrayList<>();
         private SpawnPoint returnSpawn;
-        private HotZoneArea hotZone;
+        private final List<HotZoneArea> hotZones = new ArrayList<>();
 
         public Builder(String arenaId) {
             this.arenaId = arenaId;
@@ -157,13 +173,23 @@ public final class ArcadeArena {
             return this;
         }
 
-        public Builder hotZone(HotZoneArea hotZone) {
-            this.hotZone = hotZone;
+        public Builder addHotZone(HotZoneArea hotZone) {
+            if (hotZone != null) {
+                this.hotZones.add(hotZone);
+            }
+            return this;
+        }
+
+        public Builder hotZones(List<HotZoneArea> zones) {
+            this.hotZones.clear();
+            if (zones != null) {
+                zones.forEach(this::addHotZone);
+            }
             return this;
         }
 
         public ArcadeArena build() {
-            return new ArcadeArena(arenaId, sideSpawns, randomSpawns, returnSpawn, hotZone);
+            return new ArcadeArena(arenaId, sideSpawns, randomSpawns, returnSpawn, hotZones);
         }
     }
 }

@@ -264,7 +264,7 @@ public final class MatchLauncher {
             return Result.fail("个人乱斗复活点不足：需要至少 " + players.size()
                     + " 个，当前 " + arena.randomSpawns().size() + " 个。");
         }
-        if ("hot_zone".equals(mode) && arena.hotZone() == null) {
+        if ("hot_zone".equals(mode) && !arena.hasHotZones()) {
             return Result.fail("该战场未配置热区（请管理员用 /arcade arena hotzonewand 设置）。");
         }
 

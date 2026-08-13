@@ -19,7 +19,12 @@ import java.util.UUID;
 /**
  * 热区框选道具：管理员执行 {@code /arcade arena hotzonewand <id>} 后手持一件带标记 NBT 的骨头，
  * 左键点方块记录角 1、右键点方块记录角 2，两角都记录后自动 min/max 归一化生成 {@link HotZoneArea}
- * 并写回该竞技场——取代旧版"热区点复用 {@code randomSpawns} + 索引轮转"的机制。
+ * 并<strong>追加</strong>到该竞技场的热区列表末尾。
+ *
+ * <p>每次执行命令 + 两次点击只产生一个热区，反复执行即可预设多个热区，列表顺序就是对局中的轮换
+ * 顺序（见 {@link HotZoneRotation}）。追加而非覆盖意味着没有"改掉第 N 个热区"的操作——要重设只能
+ * 用 {@code /arcade arena hotzoneclear <id>} 全部清空后重新框选，这对一次性的地图布置足够，也避免
+ * 引入"按索引编辑"的交互复杂度。
  *
  * <p>复用 {@link Items#BONE}（骨头在正常对局中几乎不会被当作道具使用）+ 显示名 + NBT 标记来识别
  * "这是热区框选工具"，不必为此注册全新 Item 类。会话状态（玩家 → 正在编辑哪个竞技场、两次点击
@@ -135,13 +140,19 @@ public final class HotZoneWandHandler {
         ArcadeArena old = existing.get();
         ArcadeArena.Builder builder = new ArcadeArena.Builder(arenaId)
                 .returnSpawn(old.returnSpawn())
-                .hotZone(area);
+                .hotZones(old.hotZones())
+                .addHotZone(area);
         old.sideSpawns().forEach(builder::addSideSpawn);
         old.randomSpawns().forEach(builder::addRandomSpawn);
-        registry.put(builder.build());
+        ArcadeArena updated = builder.build();
+        registry.put(updated);
 
-        player.sendSystemMessage(Component.literal("§a已为 §e" + arenaId + " §a设置热区：§f("
-                + round(area.minX()) + "~" + round(area.maxX()) + ", " + round(area.minZ()) + "~" + round(area.maxZ()) + ")"));
+        int index = updated.hotZones().size();
+        player.sendSystemMessage(Component.literal("§a已为 §e" + arenaId + " §a添加热区 §e#" + index + "§a：§f("
+                + round(area.minX()) + "~" + round(area.maxX()) + ", " + round(area.minZ()) + "~" + round(area.maxZ()) + ")"
+                + (index == 1
+                        ? " §7再框选更多热区即可在对局中按时长轮换。"
+                        : " §7对局中将按框选顺序轮换。")));
         ArcadeNetwork.sendHotZoneArea(player, area);
     }
 
